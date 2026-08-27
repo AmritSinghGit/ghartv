@@ -20,7 +20,8 @@ for file in "$BUILD" "$MANIFEST" "$JAVA/MainActivity.java" "$JAVA/LoginActivity.
   "$JAVA/PlayerActivity.java" "$JAVA/JioApiClient.java" "$JAVA/ChannelRepository.java" \
   "$JAVA/UpdateManager.java" "$ROOT/.ghartv-owner-state.json" "$ROOT/OPERON_PROJECT.md" \
   "$ROOT/PRIVACY.md" "$ROOT/SECURITY.md" "$ROOT/docs/index.html" "$ROOT/update/latest.json" \
-  "$ROOT/.github/workflows/android.yml" "$ROOT/LICENSE" "$ROOT/PHYSICAL_TV_FEEDBACK_v0.5.2.md"
+  "$ROOT/.github/workflows/android.yml" "$ROOT/LICENSE" "$ROOT/PHYSICAL_TV_FEEDBACK_v0.5.2.md" \
+  "$ROOT/GHARTV_V052_TEST_AND_PUBLISH.command"
 do require_file "$file"; done
 
 require_text "$BUILD" 'versionCode = 9'
@@ -35,7 +36,6 @@ require_text "$MANIFEST" 'android:usesCleartextTraffic="false"'
 require_text "$MANIFEST" 'android:allowBackup="false"'
 require_text "$MANIFEST" '.LoginActivity'
 require_text "$MANIFEST" '.PlayerActivity'
-
 require_text "$JAVA/PlayerActivity.java" 'scheduleHideGuidePanel'
 require_text "$JAVA/PlayerActivity.java" 'guideProgress'
 require_text "$JAVA/PlayerActivity.java" 'Next channel'
@@ -86,8 +86,13 @@ assert state['current_candidate']=='0.5.2-tv-feedback' and state['version_code']
 manifest=json.loads((root/'RELEASE_MANIFEST.json').read_text())
 assert manifest['versionName']=='0.5.2-tv-feedback' and manifest['versionCode']==9
 update=json.loads((root/'update/latest.json').read_text())
-assert update['versionCode']==9 and update['versionName']=='0.5.2-tv-feedback'
-assert update['sha256']=='PENDING_RELEASE_BUILD_SHA256' or re.fullmatch(r'[0-9a-f]{64}',update['sha256'])
+assert update['versionCode'] in (8,9)
+if update['versionCode']==8:
+    assert update['versionName']=='0.5.1-tv-test'
+    assert re.fullmatch(r'[0-9a-f]{64}',update['sha256'])
+else:
+    assert update['versionName']=='0.5.2-tv-feedback'
+    assert update['sha256']=='PENDING_RELEASE_BUILD_SHA256' or re.fullmatch(r'[0-9a-f]{64}',update['sha256'])
 for path in (root/'android-tv/app/src/main/java').rglob('*.java'):
     text=path.read_text(); clean=[]; i=0; mode='code'
     while i<len(text):
