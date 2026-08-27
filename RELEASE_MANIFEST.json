@@ -1,0 +1,24 @@
+{
+  "product": "GharTV Jio Live",
+  "release": "v0.5.1",
+  "versionName": "0.5.1-tv-test",
+  "versionCode": 8,
+  "applicationId": "in.ghartv.nova",
+  "minSdk": 26,
+  "targetSdk": 35,
+  "compileSdk": 36,
+  "laneId": "ghartv",
+  "operonEntityType": "project",
+  "repository": "AmritSinghGit/ghartv",
+  "installPage": "https://amritsinghgit.github.io/ghartv/",
+  "directApk": "https://github.com/AmritSinghGit/ghartv/releases/latest/download/GharTV-Jio-Live.apk",
+  "continuation": "in-place from ~/Downloads/GharTV_Nova_v0.4.2",
+  "architecture": "Leanback-only native Android TV; Jio OTP/catalogue/EPG/playback; Media3 HLS/DASH/Widevine",
+  "buildToolchain": {
+    "androidGradlePlugin": "8.10.1",
+    "gradle": "8.11.1",
+    "jdk": "17",
+    "media3": "1.10.1"
+  },
+  "ownerState": "TV TEST CANDIDATE — NOT YET ACCEPTED"
+}

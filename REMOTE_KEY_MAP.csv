@@ -1,0 +1,11 @@
+remote_input,action
+Arrow keys,Move focus through the JioTV guide
+OK / Enter,Watch the focused Jio channel or play/pause
+Hold OK,Toggle favourite on a guide card
+0–9,Tune directly to a Jio channel number
+Channel Up,Play the next Jio channel
+Channel Down,Play the previous Jio channel
+GUIDE / TV / DVR,Return to the GharTV guide
+INFO,Show or hide Now/Next information
+MENU / SETTINGS,Open Jio account controls
+Back,Dismiss an overlay or return

@@ -1,0 +1,17 @@
+GHARTV JIO LIVE v0.5.1 — TV TEST CANDIDATE
+
+Current local source status:
+- continuation path: ~/Downloads/GharTV_Nova_v0.4.2
+- package: in.ghartv.nova
+- lane: ghartv
+- entity type: Operon project, not tenant
+- version: 0.5.1-tv-test / code 8
+- native Leanback login, guide and player: present
+- Jio OTP/catalogue/EPG/playback paths: present
+- Media3 HLS/DASH/Widevine path: present
+- release updater and SHA-256 verification: present
+- YouTube/free-web/provider/M3U paths: absent
+
+The publisher command performs the definitive JDK 17 / Android SDK 36 release build on Amrit's Mac, signs it with the persistent GharTV key, installs it on the existing Google TV AVD, publishes the public GitHub repository and release, enables the install page and writes the existing ghartv continuity receipt.
+
+Owner acceptance remains pending physical Hisense E6N login, remote, HLS, Widevine and 30-minute playback tests.

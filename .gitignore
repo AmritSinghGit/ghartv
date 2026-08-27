@@ -1,0 +1,39 @@
+# Android / Gradle
+.gradle/
+**/.gradle/
+**/build/
+local.properties
+.idea/
+*.iml
+captures/
+.externalNativeBuild/
+.cxx/
+
+# Signing and credentials — never commit
+*.jks
+*.keystore
+*.p12
+*.pem
+*.key
+.env
+.env.*
+signing.env
+secrets.properties
+
+# Generated release binaries
+release/*.apk
+release/*.aab
+release/*.sha256
+
+# macOS / editors
+.DS_Store
+*.swp
+*.swo
+
+# Local evidence and receipts
+SOURCE_VALIDATION.json
+*.log
+*.sanitized.log
+*.before-*
+.backups/
+PUBLISHED_URLS.txt

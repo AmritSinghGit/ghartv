@@ -1,0 +1,8 @@
+{
+  "versionCode": 8,
+  "versionName": "0.5.1-tv-test",
+  "apkUrl": "https://github.com/AmritSinghGit/ghartv/releases/latest/download/GharTV-Jio-Live.apk",
+  "sha256": "eebb5388894c471b08f77c63d579d15413f4d95e11bee85fab469d30675612de",
+  "notes": "First physical-TV test candidate: polished Jio OTP, live guide, number tuning, remote controls and direct playback.",
+  "publishedAt": "2026-08-27T15:30:44.614726+00:00"
+}

@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="description" content="Install GharTV Jio Live, a remote-first live television client for Android TV and Google TV.">
+  <meta name="robots" content="index,follow">
+  <title>GharTV · Jio Live — TV Test Candidate</title>
+  <style>
+    :root{color-scheme:dark;--bg:#02070d;--panel:#081c2a;--panel2:#0d3547;--text:#f7fcff;--muted:#97b4c5;--cyan:#53e4ff;--mint:#73f5c2}
+    *{box-sizing:border-box} body{margin:0;min-height:100vh;font-family:Inter,system-ui,-apple-system,Segoe UI,sans-serif;background:radial-gradient(circle at 20% 10%,#0d4857 0,transparent 32%),radial-gradient(circle at 80% 0,#16314e 0,transparent 34%),var(--bg);color:var(--text)}
+    main{width:min(1080px,92vw);margin:auto;padding:64px 0 80px}.top{display:flex;align-items:center;gap:14px}.brand{font-weight:900;letter-spacing:.16em;font-size:22px}.badge{border:1px solid rgba(115,245,194,.7);background:rgba(115,245,194,.12);color:var(--mint);padding:7px 13px;border-radius:999px;font-size:12px;font-weight:800;letter-spacing:.08em}
+    .hero{margin-top:26px;padding:clamp(28px,5vw,62px);border-radius:34px;background:linear-gradient(135deg,rgba(8,28,42,.96),rgba(13,53,71,.94));border:1px solid rgba(83,228,255,.35);box-shadow:0 30px 80px rgba(0,0,0,.42)}
+    h1{font-size:clamp(38px,7vw,78px);line-height:.98;margin:0;max-width:850px;letter-spacing:-.04em}.lead{font-size:clamp(17px,2.2vw,23px);line-height:1.55;color:var(--muted);max-width:830px;margin:26px 0 0}
+    .actions{display:flex;flex-wrap:wrap;gap:14px;margin-top:34px}a.button{display:inline-flex;align-items:center;justify-content:center;text-decoration:none;font-weight:900;border-radius:18px;padding:17px 24px;min-height:58px}.primary{background:linear-gradient(135deg,#0f575d,#18908b);color:white;border:1px solid var(--mint)}.secondary{background:#0a1e2c;color:var(--text);border:1px solid rgba(83,228,255,.42)}
+    .version{margin-top:18px;color:var(--cyan);font-weight:800}.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:16px;margin-top:24px}.card{background:rgba(8,28,42,.82);border:1px solid rgba(255,255,255,.09);border-radius:24px;padding:23px}.card h2{margin:0 0 10px;font-size:20px}.card p,.card li{color:var(--muted);line-height:1.55}.steps{counter-reset:step;padding:0;list-style:none}.steps li{counter-increment:step;position:relative;padding-left:48px;margin:16px 0}.steps li:before{content:counter(step);position:absolute;left:0;top:-2px;width:32px;height:32px;border-radius:12px;display:grid;place-items:center;background:rgba(83,228,255,.15);border:1px solid var(--cyan);color:var(--cyan);font-weight:900}
+    code{word-break:break-all;color:var(--mint)}footer{margin-top:34px;color:#708d9f;font-size:13px;line-height:1.6}@media(max-width:600px){main{padding-top:28px}.hero{border-radius:24px}.actions a{width:100%}}
+  </style>
+</head>
+<body><main>
+  <div class="top"><div class="brand">GHAR TV</div><div class="badge">JIO LIVE</div></div>
+  <section class="hero">
+    <h1>Live television, built for your remote.</h1>
+    <p class="lead">Connect your Jio mobile number and OTP inside GharTV. Get a proper full-screen channel guide, number tuning, Channel Up/Down, Now &amp; Next and direct live playback — without YouTube shortcuts or provider wrappers.</p>
+    <div class="actions">
+      <a class="button primary" href="https://github.com/AmritSinghGit/ghartv/releases/latest/download/GharTV-Jio-Live.apk">Download latest GharTV APK</a>
+      <a class="button secondary" href="https://github.com/AmritSinghGit/ghartv/releases/latest">Release details</a>
+      <a class="button secondary" href="https://github.com/AmritSinghGit/ghartv">View source</a>
+    </div>
+    <div class="version">Current TV test candidate: v0.5.1</div>
+  </section>
+  <div class="grid">
+    <section class="card"><h2>Install on Google TV</h2><ol class="steps"><li>Install <strong>Downloader by AFTVnews</strong> from the TV Play Store.</li><li>Enter <code>amritsinghgit.github.io/ghartv</code>.</li><li>Choose the download button and allow Downloader to install unknown apps when Android asks.</li><li>Install GharTV, then turn that permission off again.</li></ol></section>
+    <section class="card"><h2>First connection</h2><ol class="steps"><li>Open GharTV.</li><li>Enter the 10-digit Jio mobile number.</li><li>Enter the OTP received from Jio.</li><li>The live guide opens and loads channels available to that account.</li></ol></section>
+    <section class="card"><h2>TV controls</h2><p><strong>Arrows</strong> move focus. <strong>OK</strong> watches. Number keys tune directly. <strong>CH ±</strong> switches channels. <strong>GUIDE</strong> returns home. <strong>INFO</strong> shows Now and Next.</p></section>
+    <section class="card"><h2>Important</h2><p>This is an unofficial household test client. It uses the connected account's entitlements and does not unlock subscriptions, bypass DRM or include a repackaged JioTV APK. Availability is controlled by Jio and channel providers.</p></section>
+  </div>
+  <footer>Package <code>in.ghartv.nova</code> · Project lane <code>ghartv</code> · This public page contains no account data, OTP or session information.</footer>
+</main></body></html>
