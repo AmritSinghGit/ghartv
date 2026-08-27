@@ -10,5 +10,8 @@ public final class PlaybackInfo {
     public JSONObject licenseHeaders = new JSONObject();
     public boolean drm;
     public boolean subscriptionRequired;
+    public boolean unavailable;
+    public boolean authRequired;
+    public int responseCode;
     public String message = "";
 }

@@ -97,14 +97,14 @@ public final class ChannelAdapter extends RecyclerView.Adapter<ChannelAdapter.Ho
         Channel channel = channels.get(position);
         holder.number.setText((favourites.contains(channel.number) ? "★ " : "") + channel.displayNumber());
         holder.name.setText(channel.name);
-        holder.meta.setText("LIVE  •  " + channel.language + "  •  " + channel.category);
+        holder.meta.setText(channel.accessLabel() + "  •  " + channel.language + "  •  " + channel.category);
         if (channel.logoUrl.isEmpty()) {
             holder.logo.setImageDrawable(null);
             holder.logo.setContentDescription(channel.name);
         } else {
             Glide.with(holder.logo).load(channel.logoUrl).fitCenter().into(holder.logo);
         }
-        holder.itemView.setContentDescription(channel.displayNumber() + " " + channel.name + ", live channel");
+        holder.itemView.setContentDescription(channel.displayNumber() + " " + channel.name + ", " + channel.accessLabel().toLowerCase() + " channel");
         holder.itemView.setOnClickListener(view -> listener.onPlay(channel));
         holder.itemView.setOnLongClickListener(view -> {
             listener.onFavourite(channel);

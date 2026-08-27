@@ -5,10 +5,10 @@
   "project_path": "~/Downloads/GharTV_Nova_v0.4.2",
   "package_id": "in.ghartv.nova",
   "repository": "AmritSinghGit/ghartv",
-  "current_candidate": "0.5.1-tv-test",
-  "version_code": 8,
-  "owner_decision": "PUBLISH AS PHYSICAL-TV TEST CANDIDATE; OWNER ACCEPTANCE PENDING",
+  "current_candidate": "0.5.2-tv-feedback",
+  "version_code": 9,
+  "owner_decision": "PHYSICAL-TV FEEDBACK CORRECTION CANDIDATE; OWNER ACCEPTANCE PENDING",
   "authoritative_scope": "ordinary JioTV account login, catalogue, EPG and live playback only",
   "continuity_rule": "Same project, ghartv lane, package identity, main branch and signing key; no duplicate lane/worktree/database",
-  "next_action": "Install v0.5.1 on the Hisense E6N, capture exact feedback, then publish v0.5.2 to the same repository"
+  "next_action": "Build and test v0.5.2 on the existing emulator, publish to the same main branch and release, then update the Hisense app and verify the player guide, scoped CH+/-, subscription grouping, Next-channel recovery and HTTP 403 handling"
 }

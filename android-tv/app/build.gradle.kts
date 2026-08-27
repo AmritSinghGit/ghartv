@@ -21,8 +21,8 @@ android {
         applicationId = "in.ghartv.nova"
         minSdk = 26
         targetSdk = 35
-        versionCode = 8
-        versionName = "0.5.1-tv-test"
+        versionCode = 9
+        versionName = "0.5.2-tv-feedback"
     }
 
     buildFeatures {

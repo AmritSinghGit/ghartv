@@ -10,10 +10,10 @@ import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.HashSet;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.TimeUnit;
@@ -130,9 +130,7 @@ public final class JioApiClient {
     public JioSession refreshSession(JioSession session) throws Exception {
         JioSession refreshed = refreshAuthToken(session);
         if (refreshed.isValid()) return refreshed;
-        if (refreshSsoToken(refreshed)) {
-            refreshed = refreshAuthToken(refreshed);
-        }
+        if (refreshSsoToken(refreshed)) refreshed = refreshAuthToken(refreshed);
         return refreshed;
     }
 
@@ -216,10 +214,10 @@ public final class JioApiClient {
         int nextAvailable = 1;
         for (JSONObject raw : merged.values()) {
             if (!raw.optString("channelIdForRedirect", "").isEmpty()) continue;
-            Channel c = new Channel();
-            c.id = raw.optString("channel_id", raw.optString("channelId", ""));
-            if (c.id.isEmpty()) continue;
-            c.name = raw.optString("channel_name", raw.optString("channelName", "Unknown channel"));
+            Channel channel = new Channel();
+            channel.id = raw.optString("channel_id", raw.optString("channelId", ""));
+            if (channel.id.isEmpty()) continue;
+            channel.name = raw.optString("channel_name", raw.optString("channelName", "Unknown channel"));
             int order = raw.optInt("channel_order", raw.optInt("channelOrder", -1));
             int requested = order >= 0 ? order + 1 : nextAvailable;
             if (requested <= 0 || requested > AppConfig.MAX_CHANNEL_NUMBER || usedNumbers.contains(requested)) {
@@ -227,21 +225,27 @@ public final class JioApiClient {
                 requested = nextAvailable;
             }
             if (requested <= 0 || requested > AppConfig.MAX_CHANNEL_NUMBER) break;
-            c.number = requested;
+            channel.number = requested;
             usedNumbers.add(requested);
             nextAvailable = Math.max(nextAvailable, requested + 1);
 
             String categoryId = stringValue(raw, "channelCategoryId", "channel_category_id", "-1");
             String languageId = stringValue(raw, "channelLanguageId", "channel_language_id", "6");
-            c.languageId = languageId;
-            c.category = categories.getOrDefault(categoryId,
+            channel.languageId = languageId;
+            channel.category = categories.getOrDefault(categoryId,
                     raw.optString("channelCategoryName", raw.optString("categoryName", "Other")));
-            c.language = languages.getOrDefault(languageId,
+            channel.language = languages.getOrDefault(languageId,
                     raw.optString("channelLanguageName", raw.optString("languageName", "Other")));
             String logo = raw.optString("logoUrl", "");
-            c.logoUrl = logo.startsWith("http") ? logo : AppConfig.LOGO_BASE + logo;
-            c.catchupAvailable = raw.optBoolean("isCatchupAvailable", false);
-            channels.add(c);
+            channel.logoUrl = logo.startsWith("http") ? logo : AppConfig.LOGO_BASE + logo;
+            channel.catchupAvailable = raw.optBoolean("isCatchupAvailable", false);
+            channel.businessType = raw.optString("business_type", raw.optString("businessType", ""));
+            channel.requiresSubscription = "premium".equalsIgnoreCase(channel.businessType.trim());
+            if (channel.requiresSubscription) {
+                channel.accessState = Channel.ACCESS_SUBSCRIPTION;
+                channel.accessMessage = "This channel may require a separate JioTV subscription.";
+            }
+            channels.add(channel);
         }
         return channels;
     }
@@ -261,7 +265,12 @@ public final class JioApiClient {
         JioSession session = JioSession.load(context);
         if (!session.isPresent()) throw new IOException("Sign in to JioTV first");
         if (!session.isValid()) session = refreshSession(session);
-        if (!session.isPresent()) throw new IOException("The JioTV session has expired. Sign in again.");
+        if (!session.isValid()) {
+            PlaybackInfo info = new PlaybackInfo();
+            info.authRequired = true;
+            info.message = "The JioTV session has expired. Reconnect the account once.";
+            return info;
+        }
         return fetchJioPlayback(channel, session, true);
     }
 
@@ -273,34 +282,61 @@ public final class JioApiClient {
                 .build();
         Request request = new Request.Builder().url(AppConfig.PLAYBACK).headers(headers).post(form).build();
         try (Response response = client.newCall(request).execute()) {
+            int code = response.code();
             String raw = response.body() == null ? "" : response.body().string();
-            if ((response.code() == 401 || response.code() == 419) && retryAuth) {
-                JioSession refreshed = refreshSession(session);
-                return fetchJioPlayback(channel, refreshed, false);
+            if ((code == 401 || code == 419 || code == 403) && retryAuth) {
+                try {
+                    JioSession refreshed = refreshSession(session);
+                    return fetchJioPlayback(channel, refreshed, false);
+                } catch (Exception ignored) {
+                    // Classify the original response below instead of losing its channel-specific status.
+                }
             }
-            if (!response.isSuccessful()) throw new IOException("Jio playback API returned " + response.code());
+            if (!response.isSuccessful()) return playbackFailure(channel, code, raw);
+
             JSONObject payload = raw.isEmpty() ? new JSONObject() : new JSONObject(raw);
             PlaybackInfo info = new PlaybackInfo();
-            String hls = payload.optString("result", "");
+            info.responseCode = code;
             JSONObject mpd = payload.optJSONObject("mpd");
-            String dash = mpd == null ? "" : mpd.optString("result", "");
-            if ((hls + dash).toLowerCase().contains("paywall")) {
+            JSONObject m3u8 = payload.optJSONObject("m3u8");
+            JSONObject topBitrates = payload.optJSONObject("bitrates");
+            JSONObject mpdBitrates = mpd == null ? null : mpd.optJSONObject("bitrates");
+
+            String dash = firstNonEmpty(
+                    mpd == null ? "" : mpd.optString("result", ""),
+                    mpdBitrates == null ? "" : mpdBitrates.optString("auto", ""),
+                    mpd == null ? "" : mpd.optString("auto", ""),
+                    mpdBitrates == null ? "" : mpdBitrates.optString("high", ""));
+            String hls = firstNonEmpty(
+                    payload.optString("result", ""),
+                    m3u8 == null ? "" : m3u8.optString("auto", ""),
+                    topBitrates == null ? "" : topBitrates.optString("auto", ""),
+                    m3u8 == null ? "" : m3u8.optString("high", ""));
+
+            String responseText = (raw + " " + payload.optString("message", "")).toLowerCase();
+            if ((hls + dash).toLowerCase().contains("paywall") || looksLikeSubscription(responseText)) {
                 info.subscriptionRequired = true;
-                info.message = "This channel requires an active JioTV subscription on this account.";
+                info.message = playbackMessage(raw,
+                        "This channel requires a separate JioTV subscription on the connected account.");
                 return info;
             }
+
             info.streamUrl = dash.isEmpty() ? hls : dash;
-            if (info.streamUrl.isEmpty()) throw new IOException("Jio returned no playable stream URL");
+            if (info.streamUrl.isEmpty()) {
+                info.unavailable = true;
+                info.message = playbackMessage(raw,
+                        "Jio did not return a playable live stream for this channel.");
+                return info;
+            }
             info.mimeType = dash.isEmpty() ? "application/x-mpegURL" : "application/dash+xml";
-            info.licenseUrl = mpd == null ? "" : mpd.optString("key", "");
+            info.licenseUrl = firstNonEmpty(
+                    payload.optString("keyUrl", ""),
+                    mpd == null ? "" : mpd.optString("key", ""));
             info.drm = !info.licenseUrl.isEmpty();
             info.streamHeaders = toJson(headers);
             info.streamHeaders.put("User-Agent", PLAYER_USER_AGENT);
             String cookie = signedCookie(info.streamUrl);
-            if (!dash.isEmpty()) {
-                String manifestCookie = fetchManifestCookies(info.streamUrl, info.streamHeaders);
-                cookie = combineCookies(cookie, manifestCookie);
-            }
+            if (!dash.isEmpty()) cookie = combineCookies(cookie, fetchManifestCookies(info.streamUrl, info.streamHeaders));
             if (!cookie.isEmpty()) info.streamHeaders.put("Cookie", cookie);
             info.licenseHeaders = new JSONObject(info.streamHeaders.toString());
             info.licenseHeaders.put("Content-Type", "application/octet-stream");
@@ -315,28 +351,95 @@ public final class JioApiClient {
         }
     }
 
-    private Headers playbackHeaders(JioSession s, Channel channel) {
+    private PlaybackInfo playbackFailure(Channel channel, int code, String raw) {
+        PlaybackInfo info = new PlaybackInfo();
+        info.responseCode = code;
+        String detected = playbackMessage(raw, "Jio playback request failed.");
+        String combined = (raw + " " + detected).toLowerCase();
+        if (code == 401 || code == 419) {
+            info.authRequired = true;
+            info.message = "The Jio session was not accepted. Reconnect the account once and try again.";
+        } else if (channel.requiresSubscription || looksLikeSubscription(combined)) {
+            info.subscriptionRequired = true;
+            info.message = "Jio playback request failed.".equals(detected)
+                    ? "This channel requires a separate JioTV subscription on the connected account."
+                    : detected;
+        } else {
+            info.unavailable = true;
+            if (code == 403) {
+                info.message = "Jio is refusing this channel (HTTP 403). This usually means the channel or this exact feed is not currently available to JioTV mobile, rather than an internet or login problem.";
+            } else {
+                info.message = detected + " (HTTP " + code + ")";
+            }
+        }
+        return info;
+    }
+
+    private boolean looksLikeSubscription(String value) {
+        String text = value == null ? "" : value.toLowerCase();
+        return text.contains("no eligible plan")
+                || text.contains("subscription required")
+                || text.contains("subscribe")
+                || text.contains("paywall")
+                || text.contains("not entitled")
+                || text.contains("not subscribed")
+                || text.contains("premium plan");
+    }
+
+    private String playbackMessage(String raw, String fallback) {
+        if (raw == null || raw.trim().isEmpty()) return fallback;
+        try {
+            JSONObject payload = new JSONObject(raw);
+            String message = firstNonEmpty(
+                    payload.optString("message", ""),
+                    payload.optString("Message", ""),
+                    payload.optString("error", ""),
+                    payload.optString("error_description", ""));
+            if (!message.isEmpty()) return message;
+            JSONArray errors = payload.optJSONArray("errors");
+            if (errors != null && errors.length() > 0) {
+                JSONObject last = errors.optJSONObject(errors.length() - 1);
+                if (last != null) {
+                    message = firstNonEmpty(last.optString("message", ""), last.optString("description", ""));
+                    if (!message.isEmpty()) return message;
+                }
+            }
+        } catch (Exception ignored) {}
+        String trimmed = raw.trim().replaceAll("\\s+", " ");
+        if (trimmed.length() > 180) trimmed = trimmed.substring(0, 180) + "…";
+        return trimmed.isEmpty() ? fallback : trimmed;
+    }
+
+    private String firstNonEmpty(String... values) {
+        if (values == null) return "";
+        for (String value : values) {
+            if (value != null && !value.trim().isEmpty()) return value.trim();
+        }
+        return "";
+    }
+
+    private Headers playbackHeaders(JioSession session, Channel channel) {
         return new Headers.Builder()
                 .add("Appkey", "NzNiMDhlYzQyNjJm")
                 .add("Devicetype", "phone")
                 .add("Os", "android")
-                .add("Deviceid", value(s.deviceId))
+                .add("Deviceid", value(session.deviceId))
                 .add("Osversion", "13")
                 .add("Dm", "Google Pixel 5")
-                .add("Uniqueid", value(s.uniqueId.isEmpty() ? s.deviceId : s.uniqueId))
+                .add("Uniqueid", value(session.uniqueId.isEmpty() ? session.deviceId : session.uniqueId))
                 .add("Usergroup", "tvYR7NSNn7rymo3F")
                 .add("Languageid", value(channel.languageId.isEmpty() ? "6" : channel.languageId))
-                .add("Userid", value(s.userId))
+                .add("Userid", value(session.userId))
                 .add("Sid", UUID.randomUUID().toString())
-                .add("Crmid", value(s.subscriberId))
+                .add("Crmid", value(session.subscriberId))
                 .add("Isott", "false")
                 .add("Channel_id", channel.id)
                 .add("Langid", value(channel.languageId))
                 .add("Camid", "")
-                .add("ssoToken", value(s.ssoToken))
-                .add("Accesstoken", value(s.authToken))
-                .add("Subscriberid", value(s.subscriberId))
-                .add("analyticsId", value(s.deviceId))
+                .add("ssoToken", value(session.ssoToken))
+                .add("Accesstoken", value(session.authToken))
+                .add("Subscriberid", value(session.subscriberId))
+                .add("analyticsId", value(session.deviceId))
                 .add("Lbcookie", "1")
                 .add("Versioncode", "389")
                 .add("Content-Type", "application/x-www-form-urlencoded")
@@ -359,7 +462,23 @@ public final class JioApiClient {
             JSONObject item = result.optJSONObject(i);
             if (item == null) continue;
             String id = item.optString("channel_id", item.optString("channelId", ""));
-            if (!id.isEmpty()) merged.putIfAbsent(id, item);
+            if (id.isEmpty()) continue;
+            JSONObject existing = merged.get(id);
+            if (existing == null) {
+                try { merged.put(id, new JSONObject(item.toString())); }
+                catch (Exception ignored) { merged.put(id, item); }
+                continue;
+            }
+            java.util.Iterator<String> keys = item.keys();
+            while (keys.hasNext()) {
+                String key = keys.next();
+                Object current = existing.opt(key);
+                boolean missing = current == null || JSONObject.NULL.equals(current)
+                        || (current instanceof String && ((String) current).trim().isEmpty());
+                if (!missing) continue;
+                try { existing.put(key, item.opt(key)); }
+                catch (Exception ignored) {}
+            }
         }
     }
 
@@ -384,10 +503,10 @@ public final class JioApiClient {
     private String messageFrom(Response response, String fallback) throws IOException {
         String body = response.body() == null ? "" : response.body().string();
         try {
-            JSONObject o = new JSONObject(body);
-            String message = o.optString("message", "");
+            JSONObject object = new JSONObject(body);
+            String message = object.optString("message", "");
             if (!message.isEmpty()) return message;
-            JSONArray errors = o.optJSONArray("errors");
+            JSONArray errors = object.optJSONArray("errors");
             if (errors != null && errors.length() > 0) {
                 JSONObject last = errors.optJSONObject(errors.length() - 1);
                 if (last != null) return last.optString("message", fallback);
@@ -412,7 +531,6 @@ public final class JioApiClient {
         if (amp >= 0) value = value.substring(0, amp);
         return value;
     }
-
 
     private String stringValue(JSONObject object, String primary, String secondary, String fallback) {
         Object value = object.opt(primary);

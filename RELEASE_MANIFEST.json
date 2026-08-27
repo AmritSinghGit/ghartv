@@ -1,8 +1,8 @@
 {
   "product": "GharTV Jio Live",
-  "release": "v0.5.1",
-  "versionName": "0.5.1-tv-test",
-  "versionCode": 8,
+  "release": "v0.5.2",
+  "versionName": "0.5.2-tv-feedback",
+  "versionCode": 9,
   "applicationId": "in.ghartv.nova",
   "minSdk": 26,
   "targetSdk": 35,
@@ -20,5 +20,5 @@
     "jdk": "17",
     "media3": "1.10.1"
   },
-  "ownerState": "TV TEST CANDIDATE — NOT YET ACCEPTED"
+  "ownerState": "PHYSICAL TV FEEDBACK CANDIDATE — NOT YET ACCEPTED"
 }
