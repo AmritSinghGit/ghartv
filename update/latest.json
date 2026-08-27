@@ -1,8 +1,8 @@
 {
-  "versionCode": 8,
-  "versionName": "0.5.1-tv-test",
+  "versionCode": 9,
+  "versionName": "0.5.2-tv-feedback",
   "apkUrl": "https://github.com/AmritSinghGit/ghartv/releases/latest/download/GharTV-Jio-Live.apk",
-  "sha256": "eebb5388894c471b08f77c63d579d15413f4d95e11bee85fab469d30675612de",
-  "notes": "First physical-TV test candidate: polished Jio OTP, live guide, number tuning, remote controls and direct playback.",
-  "publishedAt": "2026-08-27T15:30:44.614726+00:00"
+  "sha256": "dc3d2326f5d5ef5491b57003a5850d5dce379f3451542afe1a6777b7d0d73b79",
+  "notes": "Interactive Now/Next player guide, category-scoped channel surfing, subscription/unavailable groups, Next-channel recovery and corrected Jio HTTP 403 handling.",
+  "publishedAt": "2026-08-27T19:34:18.871570+00:00"
 }
