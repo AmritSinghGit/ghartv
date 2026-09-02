@@ -1,8 +1,8 @@
 {
-  "versionCode": 9,
-  "versionName": "0.5.2-tv-feedback",
+  "versionCode": 10,
+  "versionName": "0.5.3-observability",
   "apkUrl": "https://github.com/AmritSinghGit/ghartv/releases/latest/download/GharTV-Jio-Live.apk",
-  "sha256": "dc3d2326f5d5ef5491b57003a5850d5dce379f3451542afe1a6777b7d0d73b79",
-  "notes": "Interactive Now/Next player guide, category-scoped channel surfing, subscription/unavailable groups, Next-channel recovery and corrected Jio HTTP 403 handling.",
-  "publishedAt": "2026-08-27T19:34:18.871570+00:00"
+  "sha256": "2d64fe5dac4fc03dd49b9dfe472288af5d5f2ecedd18e105f1fd3d9fe72151fc",
+  "notes": "Opt-in privacy-filtered diagnostics and error reporting, local preview/delete controls, 30-day retention and owner telemetry report. No mobile number, OTP, Jio credentials, stream URLs or successful channel viewing history are sent.",
+  "publishedAt": "2026-09-02T04:02:15.628382+00:00"
 }
