@@ -1,0 +1,9 @@
+{
+  "schema": "ghartv.telemetry.config.v1",
+  "enabled": true,
+  "endpoint": "https://ghartv-telemetry.ghartv-47d9a0.workers.dev",
+  "ingestKey": "0b9caed749efc352e0e62e4bf6f5d2d9c2b0ff1c385b2c4f41643bf1c95f0ded",
+  "privacyUrl": "https://amritsinghgit.github.io/ghartv/privacy.html",
+  "retentionDays": 30,
+  "updatedAt": "2026-09-02T04:01:44.251726+00:00"
+}

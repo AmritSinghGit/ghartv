@@ -1,0 +1,15 @@
+name = "ghartv-telemetry"
+main = "src/index.js"
+compatibility_date = "2026-08-01"
+workers_dev = true
+
+[observability]
+enabled = false
+
+[triggers]
+crons = ["17 3 * * *"]
+
+[[d1_databases]]
+binding = "DB"
+database_name = "ghartv-telemetry"
+database_id = "f8692d31-557f-4bd3-a0f6-48383664c078"

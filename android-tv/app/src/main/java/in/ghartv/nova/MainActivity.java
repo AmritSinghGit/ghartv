@@ -100,6 +100,8 @@ public final class MainActivity extends Activity implements ChannelNavigator.Lis
         navigator = new ChannelNavigator(this);
         selectedCategory = repository.lastCategory();
         setContentView(buildUi());
+        Telemetry.screen(this, "guide");
+        mainHandler.postDelayed(() -> Telemetry.maybeRequestConsent(this), 1200L);
         mainHandler.post(clockTicker);
         loadFromDisk(true);
         mainHandler.postDelayed(() -> UpdateManager.check(this, false), 2600L);
@@ -312,6 +314,7 @@ public final class MainActivity extends Activity implements ChannelNavigator.Lis
         chipAdapter = new ChipAdapter(value -> {
             selectedCategory = value;
             repository.setLastCategory(value);
+            Telemetry.event(this, "guide_filter", Telemetry.data("category", value));
             renderGuide(true);
         });
         chips.setAdapter(chipAdapter);
@@ -376,6 +379,7 @@ public final class MainActivity extends Activity implements ChannelNavigator.Lis
             routeToLogin();
             return;
         }
+        long refreshStartedAt = System.currentTimeMillis();
         catalogueBusy = true;
         guideLoading.setVisibility(View.VISIBLE);
         catalogueStatus.setText("Updating your live channel guide…");
@@ -390,6 +394,11 @@ public final class MainActivity extends Activity implements ChannelNavigator.Lis
                     allChannels = refreshed;
                     renderGuide(true);
                     updateCatalogueStatus(null);
+                    Telemetry.event(this, "catalogue_refresh", Telemetry.data(
+                            "result", "success",
+                            "manual", ownerInitiated,
+                            "duration_ms", System.currentTimeMillis() - refreshStartedAt,
+                            "channel_count", refreshed.size()));
                     if (ownerInitiated) Toast.makeText(this, "Live guide updated", Toast.LENGTH_SHORT).show();
                 });
             } catch (Exception error) {
@@ -397,7 +406,10 @@ public final class MainActivity extends Activity implements ChannelNavigator.Lis
                     catalogueBusy = false;
                     guideLoading.setVisibility(View.GONE);
                     String message = readable(error);
-                    updateCatalogueStatus(message);
+                    String reference = Telemetry.error(this, "catalogue_refresh", error, Telemetry.data(
+                            "manual", ownerInitiated,
+                            "duration_ms", System.currentTimeMillis() - refreshStartedAt));
+                    updateCatalogueStatus(message + (Telemetry.isEnabled(this) ? "  •  " + reference : ""));
                     if (allChannels.isEmpty()) {
                         emptyState.setVisibility(View.VISIBLE);
                         emptyState.setText("Your live guide could not load yet.\n\n" + message + "\n\nChoose Update guide to try again.");
@@ -516,6 +528,11 @@ public final class MainActivity extends Activity implements ChannelNavigator.Lis
             return;
         }
         repository.setLastChannel(channel.number);
+        Telemetry.event(this, "tune_request", Telemetry.data(
+                "category", channel.category,
+                "language", channel.language,
+                "guide_scope", selectedCategory,
+                "access_state", channel.accessState));
         Intent player = new Intent(this, PlayerActivity.class);
         try { player.putExtra(PlayerActivity.EXTRA_CHANNEL_JSON, channel.toJson().toString()); }
         catch (Exception error) {
@@ -546,10 +563,12 @@ public final class MainActivity extends Activity implements ChannelNavigator.Lis
                 .setView(input)
                 .setPositiveButton("Search", (dialog, which) -> {
                     searchQuery = input.getText().toString().trim();
+                    Telemetry.event(this, "guide_search", Telemetry.data("active", !searchQuery.isEmpty()));
                     renderGuide(true);
                 })
                 .setNeutralButton("Clear", (dialog, which) -> {
                     searchQuery = "";
+                    Telemetry.event(this, "guide_search", Telemetry.data("active", false));
                     renderGuide(true);
                 })
                 .setNegativeButton("Cancel", null)
@@ -561,13 +580,24 @@ public final class MainActivity extends Activity implements ChannelNavigator.Lis
         JioSession session = JioSession.load(this);
         String mobile = session.mobile;
         String masked = mobile.length() >= 4 ? "••••••" + mobile.substring(mobile.length() - 4) : "Connected";
+        String diagnostics = Telemetry.isEnabled(this) ? "on" : "off";
+        String[] actions = new String[]{
+                "Update live guide",
+                "Check for GharTV update",
+                "Diagnostics & privacy  •  " + diagnostics,
+                "Sign out of JioTV"
+        };
         new AlertDialog.Builder(this)
                 .setTitle("JioTV account")
                 .setMessage("Connected as " + masked + "\n\nGharTV " + BuildConfig.VERSION_NAME +
                         " shows and plays the live channels returned for this Jio account.")
-                .setPositiveButton("Update guide", (dialog, which) -> refreshCatalogue(true))
-                .setNegativeButton("Sign out", (dialog, which) -> confirmSignOut())
-                .setNeutralButton("Check update", (dialog, which) -> UpdateManager.check(this, true))
+                .setItems(actions, (dialog, which) -> {
+                    if (which == 0) refreshCatalogue(true);
+                    else if (which == 1) UpdateManager.check(this, true);
+                    else if (which == 2) DiagnosticsDialog.show(this);
+                    else if (which == 3) confirmSignOut();
+                })
+                .setNegativeButton("Close", null)
                 .show();
     }
 
@@ -602,6 +632,9 @@ public final class MainActivity extends Activity implements ChannelNavigator.Lis
     }
 
     private void changeChannel(int direction) {
+        Telemetry.event(this, "channel_change", Telemetry.data(
+                "direction", direction > 0 ? "next" : "previous",
+                "guide_scope", selectedCategory));
         Channel next = repository.next(allChannels, selectedChannel == null ? repository.lastChannel() : selectedChannel.number, direction);
         if (next != null) play(next);
     }

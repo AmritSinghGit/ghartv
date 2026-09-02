@@ -1,8 +1,8 @@
 {
   "product": "GharTV Jio Live",
-  "release": "v0.5.2",
-  "versionName": "0.5.2-tv-feedback",
-  "versionCode": 9,
+  "release": "v0.5.3",
+  "versionName": "0.5.3-observability",
+  "versionCode": 10,
   "applicationId": "in.ghartv.nova",
   "minSdk": 26,
   "targetSdk": 35,
@@ -13,12 +13,19 @@
   "installPage": "https://amritsinghgit.github.io/ghartv/",
   "directApk": "https://github.com/AmritSinghGit/ghartv/releases/latest/download/GharTV-Jio-Live.apk",
   "continuation": "in-place from ~/Downloads/GharTV_Nova_v0.4.2",
-  "architecture": "Leanback-only native Android TV; Jio OTP/catalogue/EPG/playback; Media3 HLS/DASH/Widevine",
+  "architecture": "Leanback-only native Android TV; Jio OTP/catalogue/EPG/playback; Media3 HLS/DASH/Widevine; opt-in first-party telemetry via Cloudflare Worker and D1",
+  "telemetry": {
+    "consent": "explicit opt-in",
+    "retentionDays": 30,
+    "endpoint": "https://ghartv-telemetry.ghartv-47d9a0.workers.dev",
+    "successfulViewingHistory": false,
+    "jioCredentialsCollected": false
+  },
   "buildToolchain": {
     "androidGradlePlugin": "8.10.1",
     "gradle": "8.11.1",
     "jdk": "17",
     "media3": "1.10.1"
   },
-  "ownerState": "PHYSICAL TV FEEDBACK CANDIDATE — NOT YET ACCEPTED"
+  "ownerState": "OBSERVABILITY UPDATE CANDIDATE \u2014 OWNER ACCEPTANCE PENDING"
 }

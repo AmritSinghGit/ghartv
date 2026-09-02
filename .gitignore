@@ -41,3 +41,9 @@ PUBLISHED_URLS.txt
 # GharTV publication safety
 
 # GharTV publication safety
+
+# Telemetry deployment local state
+telemetry/worker/node_modules/
+telemetry/worker/.wrangler/
+collector.env
+telemetry-admin*.json

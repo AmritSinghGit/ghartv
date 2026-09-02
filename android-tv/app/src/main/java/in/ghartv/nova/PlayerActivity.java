@@ -74,6 +74,14 @@ public final class PlayerActivity extends Activity implements ChannelNavigator.L
     private long lastEpgLoadedAt;
     private String panelStatus = "Starting live television…";
     private int playbackGeneration;
+    private long tuneStartedAt;
+    private long playbackReadyAt;
+    private long bufferingStartedAt;
+    private long totalBufferingMs;
+    private int bufferingCount;
+    private boolean playbackSessionReported;
+    private String playbackProtocol = "unknown";
+    private boolean playbackDrm;
     private AlertDialog activeDialog;
 
     @Override protected void onCreate(Bundle state) {
@@ -93,6 +101,7 @@ public final class PlayerActivity extends Activity implements ChannelNavigator.L
         allChannels = repository.loadAll();
         navigator = new ChannelNavigator(this);
         setContentView(buildUi());
+        Telemetry.screen(this, "player");
         try {
             Channel requested = Channel.fromJson(new JSONObject(getIntent().getStringExtra(EXTRA_CHANNEL_JSON)));
             Channel cached = repository.byNumber(allChannels, requested.number);
@@ -119,6 +128,7 @@ public final class PlayerActivity extends Activity implements ChannelNavigator.L
     }
 
     @Override protected void onDestroy() {
+        reportPlaybackSession("activity_destroyed");
         playbackGeneration++;
         if (hideGuidePanel != null) mainHandler.removeCallbacks(hideGuidePanel);
         if (progressTicker != null) mainHandler.removeCallbacks(progressTicker);
@@ -240,7 +250,14 @@ public final class PlayerActivity extends Activity implements ChannelNavigator.L
     private void startChannel(Channel next) {
         if (next == null) return;
         dismissDialog();
+        reportPlaybackSession("channel_changed");
         channel = next;
+        resetPlaybackMetrics();
+        Telemetry.event(this, "playback_request", Telemetry.data(
+                "category", next.category,
+                "language", next.language,
+                "guide_scope", scopeLabel,
+                "access_state", next.accessState));
         repository.setLastChannel(next.number);
         int generation = ++playbackGeneration;
         releasePlayer();
@@ -257,13 +274,16 @@ public final class PlayerActivity extends Activity implements ChannelNavigator.L
                     if (generation != playbackGeneration || isFinishing()) return;
                     loading.setVisibility(View.GONE);
                     if (info.authRequired) {
-                        showAuthRequired(info.message);
+                        String reference = Telemetry.playbackFailure(this, next, "playback_authorization", info.message, info.responseCode, null);
+                        showAuthRequired(withReference(info.message, reference));
                     } else if (info.subscriptionRequired) {
                         markAccess(Channel.ACCESS_SUBSCRIPTION, info.message);
-                        showSubscription(info.message);
+                        String reference = Telemetry.playbackFailure(this, next, "subscription_required", info.message, info.responseCode, null);
+                        showSubscription(withReference(info.message, reference));
                     } else if (info.unavailable) {
                         markAccess(Channel.ACCESS_UNAVAILABLE, info.message);
-                        showUnavailable(info.message, info.responseCode);
+                        String reference = Telemetry.playbackFailure(this, next, "playback_unavailable", info.message, info.responseCode, null);
+                        showUnavailable(withReference(info.message, reference), info.responseCode);
                     } else {
                         preparePlayer(info);
                         loadEpg(next);
@@ -280,6 +300,9 @@ public final class PlayerActivity extends Activity implements ChannelNavigator.L
     }
 
     private void preparePlayer(PlaybackInfo info) {
+        playbackProtocol = (info.mimeType.toLowerCase(Locale.ROOT).contains("dash")
+                || info.streamUrl.toLowerCase(Locale.ROOT).contains(".mpd")) ? "dash" : "hls";
+        playbackDrm = info.drm;
         Map<String, String> streamHeaders = jsonMap(info.streamHeaders);
         DefaultHttpDataSource.Factory dataSourceFactory = new DefaultHttpDataSource.Factory()
                 .setUserAgent(streamHeaders.getOrDefault("User-Agent", "GharTV-Jio-Live/" + BuildConfig.VERSION_NAME))
@@ -293,23 +316,29 @@ public final class PlayerActivity extends Activity implements ChannelNavigator.L
         player.addListener(new Player.Listener() {
             @Override public void onPlaybackStateChanged(int state) {
                 if (state == Player.STATE_READY) {
+                    endBuffering();
                     loading.setVisibility(View.GONE);
                     panelStatus = "Live now";
                     markAccess(Channel.ACCESS_AVAILABLE, "Playable on this connected Jio account.");
+                    recordPlaybackReady();
                     updateGuidePanel();
                     scheduleHideGuidePanel();
                 } else if (state == Player.STATE_BUFFERING) {
+                    beginBuffering();
                     loading.setVisibility(View.VISIBLE);
                     panelStatus = "Buffering live television…";
                     showGuidePanel(false);
                 } else if (state == Player.STATE_ENDED) {
+                    endBuffering();
                     loading.setVisibility(View.GONE);
                     panelStatus = "This live feed ended.";
+                    reportPlaybackSession("stream_ended");
                     showGuidePanel(false);
                 }
             }
 
             @Override public void onPlayerError(PlaybackException error) {
+                endBuffering();
                 loading.setVisibility(View.GONE);
                 showPlaybackError(error);
             }
@@ -364,7 +393,8 @@ public final class PlayerActivity extends Activity implements ChannelNavigator.L
                     channel.nextTitle = finalFollowing == null ? "" : finalFollowing.title;
                     updateGuidePanel();
                 });
-            } catch (Exception ignored) {
+            } catch (Exception error) {
+                Telemetry.playbackFailure(this, selected, "epg_refresh", error.getMessage(), 0, error);
                 mainHandler.post(this::updateGuidePanel);
             }
         });
@@ -493,9 +523,11 @@ public final class PlayerActivity extends Activity implements ChannelNavigator.L
     private void showPlaybackError(Throwable error) {
         String technical = error.getMessage() == null ? error.getClass().getSimpleName() : error.getMessage();
         String lower = technical.toLowerCase(Locale.ROOT);
+        int httpStatus = lower.contains("403") ? 403 : (lower.contains("401") ? 401 : (lower.contains("419") ? 419 : 0));
+        String reference = Telemetry.playbackFailure(this, channel, "media3_playback", technical, httpStatus, error);
         if (lower.contains("401") || lower.contains("419") || lower.contains("token")
                 || lower.contains("unauthor") || lower.contains("session")) {
-            showAuthRequired("The Jio session needs to be connected again before this channel can play.\n\nDetails: " + technical);
+            showAuthRequired(withReference("The Jio session needs to be connected again before this channel can play.\n\nDetails: " + technical, reference));
             return;
         }
         String friendly;
@@ -507,7 +539,7 @@ public final class PlayerActivity extends Activity implements ChannelNavigator.L
         } else {
             friendly = "This live feed stopped or could not start. You can retry or continue to the next channel.";
         }
-        showUnavailable(friendly + "\n\nDetails: " + technical, lower.contains("403") ? 403 : 0);
+        showUnavailable(withReference(friendly + "\n\nDetails: " + technical, reference), httpStatus);
     }
 
     private void reconnectJio() {
@@ -543,6 +575,76 @@ public final class PlayerActivity extends Activity implements ChannelNavigator.L
         }
     }
 
+    private void resetPlaybackMetrics() {
+        tuneStartedAt = System.currentTimeMillis();
+        playbackReadyAt = 0L;
+        bufferingStartedAt = 0L;
+        totalBufferingMs = 0L;
+        bufferingCount = 0;
+        playbackSessionReported = false;
+        playbackProtocol = "unknown";
+        playbackDrm = false;
+    }
+
+    private void beginBuffering() {
+        if (bufferingStartedAt == 0L) {
+            bufferingStartedAt = System.currentTimeMillis();
+            bufferingCount++;
+        }
+    }
+
+    private void endBuffering() {
+        if (bufferingStartedAt > 0L) {
+            totalBufferingMs += Math.max(0L, System.currentTimeMillis() - bufferingStartedAt);
+            bufferingStartedAt = 0L;
+        }
+    }
+
+    private void recordPlaybackReady() {
+        if (playbackReadyAt != 0L) return;
+        playbackReadyAt = System.currentTimeMillis();
+        Telemetry.event(this, "playback_ready", Telemetry.data(
+                "protocol", playbackProtocol,
+                "drm", playbackDrm,
+                "startup_ms", Math.max(0L, playbackReadyAt - tuneStartedAt),
+                "buffer_count", bufferingCount,
+                "buffer_ms", totalBufferingMs,
+                "category", channel == null ? "unknown" : channel.category,
+                "language", channel == null ? "unknown" : channel.language,
+                "guide_scope", scopeLabel));
+    }
+
+    private void reportPlaybackSession(String reason) {
+        if (playbackSessionReported || playbackReadyAt <= 0L || channel == null) return;
+        endBuffering();
+        playbackSessionReported = true;
+        long durationMs = Math.max(0L, System.currentTimeMillis() - playbackReadyAt);
+        Telemetry.event(this, "playback_session", Telemetry.data(
+                "end_reason", reason,
+                "view_duration_bucket", durationBucket(durationMs),
+                "protocol", playbackProtocol,
+                "drm", playbackDrm,
+                "buffer_count", bufferingCount,
+                "buffer_ms_bucket", durationBucket(totalBufferingMs),
+                "category", channel.category,
+                "language", channel.language,
+                "guide_scope", scopeLabel));
+    }
+
+    private String durationBucket(long milliseconds) {
+        if (milliseconds < 30_000L) return "under_30s";
+        if (milliseconds < 2 * 60_000L) return "30s_to_2m";
+        if (milliseconds < 10 * 60_000L) return "2m_to_10m";
+        if (milliseconds < 30 * 60_000L) return "10m_to_30m";
+        return "over_30m";
+    }
+
+    private String withReference(String message, String reference) {
+        String body = message == null || message.trim().isEmpty() ? "The channel could not start." : message;
+        if (!Telemetry.isEnabled(this) || reference == null || reference.isEmpty()) return body;
+        return body + "\n\nDiagnostics reference: " + reference;
+    }
+
     private Map<String, String> jsonMap(JSONObject json) {
         Map<String, String> map = new HashMap<>();
         if (json == null) return map;
@@ -555,6 +657,9 @@ public final class PlayerActivity extends Activity implements ChannelNavigator.L
     }
 
     private void changeChannel(int direction) {
+        Telemetry.event(this, "channel_change", Telemetry.data(
+                "direction", direction > 0 ? "next" : "previous",
+                "guide_scope", scopeLabel));
         dismissDialog();
         Channel next = repository.next(channelScope, channel == null ? 0 : channel.number, direction);
         if (next == null || (channelScope.size() == 1 && channel != null && next.number == channel.number)) {

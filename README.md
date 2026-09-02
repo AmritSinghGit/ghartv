@@ -70,3 +70,7 @@ See [`OPERON_PROJECT.md`](OPERON_PROJECT.md) for the continuity boundary.
 ## Upstream and trademark notice
 
 The direct account/catalogue/playback architecture was informed by the MIT-licensed `dineshintry/plugin.kodi.jiotv` project. GharTV is a separate native Android TV implementation. Jio and JioTV are trademarks of their respective owner. This repository is not commissioned, endorsed or supported by Jio.
+
+## v0.5.3 technical diagnostics
+
+GharTV now includes an explicit opt-in, first-party technical diagnostics system. Users can preview, send, disable or delete queued reports from the TV. Mobile numbers, OTPs, Jio credentials/tokens/cookies, stream/licence URLs, successful channel viewing history and hardware identifiers are excluded. See [TELEMETRY.md](TELEMETRY.md) and [PRIVACY.md](PRIVACY.md).

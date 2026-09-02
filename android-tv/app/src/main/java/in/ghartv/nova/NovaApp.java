@@ -13,6 +13,7 @@ import java.util.concurrent.TimeUnit;
 public final class NovaApp extends Application {
     @Override public void onCreate() {
         super.onCreate();
+        Telemetry.initialize(this);
         Constraints constraints = new Constraints.Builder()
                 .setRequiredNetworkType(NetworkType.CONNECTED)
                 .build();

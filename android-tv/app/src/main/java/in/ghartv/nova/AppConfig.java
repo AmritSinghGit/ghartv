@@ -24,6 +24,10 @@ public final class AppConfig {
     public static final String GITHUB_REPOSITORY = "https://github.com/AmritSinghGit/ghartv";
     public static final String INSTALL_PAGE = "https://amritsinghgit.github.io/ghartv/";
     public static final String UPDATE_MANIFEST = "https://raw.githubusercontent.com/AmritSinghGit/ghartv/main/update/latest.json";
+    public static final String TELEMETRY_CONFIG = "https://raw.githubusercontent.com/AmritSinghGit/ghartv/main/update/telemetry.json";
+    public static final String PRIVACY_PAGE = "https://amritsinghgit.github.io/ghartv/privacy.html";
+    public static final String TELEMETRY_FALLBACK_ENDPOINT = "https://ghartv-telemetry.ghartv-47d9a0.workers.dev";
+    public static final String TELEMETRY_FALLBACK_INGEST_KEY = "0b9caed749efc352e0e62e4bf6f5d2d9c2b0ff1c385b2c4f41643bf1c95f0ded";
 
     public static final int MAX_CHANNEL_NUMBER = 9999;
     public static final long CATALOGUE_REFRESH_MS = 24L * 60L * 60L * 1000L;

@@ -48,6 +48,8 @@ public final class LoginActivity extends Activity {
         TvUi.immersive(this);
         api = new JioApiClient(this);
         setContentView(buildUi());
+        Telemetry.screen(this, "login");
+        mainHandler.postDelayed(() -> Telemetry.maybeRequestConsent(this), 900L);
 
         JioSession existing = JioSession.load(this);
         if (!existing.mobile.isEmpty()) mobile.setText(existing.mobile);
@@ -359,17 +361,24 @@ public final class LoginActivity extends Activity {
             return;
         }
         busy(true, "Requesting OTP from Jio…");
+        long startedAt = System.currentTimeMillis();
         executor.execute(() -> {
             try {
                 api.sendOtp(number);
+                Telemetry.event(this, "otp_send", Telemetry.data(
+                        "result", "success",
+                        "duration_ms", System.currentTimeMillis() - startedAt));
                 mainHandler.post(() -> {
                     busy(false, "OTP sent. Enter the code received from Jio.");
                     status.setTextColor(TvUi.MINT);
                     revealOtp();
                 });
             } catch (Exception error) {
+                String reference = Telemetry.error(this, "otp_send", error, Telemetry.data(
+                        "result", "failure",
+                        "duration_ms", System.currentTimeMillis() - startedAt));
                 mainHandler.post(() -> {
-                    busy(false, readable(error));
+                    busy(false, readable(error) + (Telemetry.isEnabled(this) ? "  •  " + reference : ""));
                     status.setTextColor(TvUi.ERROR);
                     send.requestFocus();
                 });
@@ -386,9 +395,13 @@ public final class LoginActivity extends Activity {
             return;
         }
         busy(true, "Verifying JioTV…");
+        long startedAt = System.currentTimeMillis();
         executor.execute(() -> {
             try {
                 api.verifyOtp(number, code);
+                Telemetry.event(this, "otp_verify", Telemetry.data(
+                        "result", "success",
+                        "duration_ms", System.currentTimeMillis() - startedAt));
                 mainHandler.post(() -> {
                     status.setText("Connected. Opening live television…");
                     status.setTextColor(TvUi.MINT);
@@ -398,8 +411,11 @@ public final class LoginActivity extends Activity {
                     finish();
                 });
             } catch (Exception error) {
+                String reference = Telemetry.error(this, "otp_verify", error, Telemetry.data(
+                        "result", "failure",
+                        "duration_ms", System.currentTimeMillis() - startedAt));
                 mainHandler.post(() -> {
-                    busy(false, readable(error));
+                    busy(false, readable(error) + (Telemetry.isEnabled(this) ? "  •  " + reference : ""));
                     status.setTextColor(TvUi.ERROR);
                     otp.requestFocus();
                 });

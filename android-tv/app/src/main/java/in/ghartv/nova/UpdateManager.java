@@ -50,6 +50,7 @@ public final class UpdateManager {
         if (!ownerInitiated && now - last < AppConfig.UPDATE_CHECK_INTERVAL_MS) return;
         activity.getSharedPreferences(AppConfig.PREFS, Activity.MODE_PRIVATE)
                 .edit().putLong(AppConfig.KEY_LAST_UPDATE_CHECK, now).apply();
+        Telemetry.event(activity, "update_check", Telemetry.data("manual", ownerInitiated, "result", "started"));
 
         if (ownerInitiated) Toast.makeText(activity, "Checking for GharTV updates…", Toast.LENGTH_SHORT).show();
         EXECUTOR.execute(() -> {
@@ -57,10 +58,17 @@ public final class UpdateManager {
                 UpdateInfo update = fetchManifest();
                 activity.runOnUiThread(() -> {
                     if (activity.isFinishing() || activity.isDestroyed()) return;
-                    if (update.versionCode > BuildConfig.VERSION_CODE) showUpdate(activity, update);
+                    boolean available = update.versionCode > BuildConfig.VERSION_CODE;
+                    Telemetry.event(activity, "update_check", Telemetry.data(
+                            "manual", ownerInitiated,
+                            "result", "success",
+                            "update_available", available,
+                            "offered_version_code", update.versionCode));
+                    if (available) showUpdate(activity, update);
                     else if (ownerInitiated) Toast.makeText(activity, "GharTV is up to date", Toast.LENGTH_SHORT).show();
                 });
             } catch (Exception error) {
+                Telemetry.error(activity, "update_check", error, Telemetry.data("manual", ownerInitiated));
                 activity.runOnUiThread(() -> {
                     if (ownerInitiated && !activity.isFinishing()) {
                         Toast.makeText(activity, "Update check failed: " + readable(error), Toast.LENGTH_LONG).show();
@@ -93,6 +101,7 @@ public final class UpdateManager {
     }
 
     private static void showUpdate(Activity activity, UpdateInfo update) {
+        Telemetry.event(activity, "update_available", Telemetry.data("offered_version_code", update.versionCode));
         new AlertDialog.Builder(activity)
                 .setTitle("GharTV update available")
                 .setMessage(update.versionName + "\n\n" + update.notes +
@@ -103,6 +112,7 @@ public final class UpdateManager {
     }
 
     private static void download(Activity activity, UpdateInfo update) {
+        Telemetry.event(activity, "update_download", Telemetry.data("result", "started", "version_code", update.versionCode));
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O
                 && !activity.getPackageManager().canRequestPackageInstalls()) {
             Toast.makeText(activity, "Allow GharTV to install updates, then choose Check for updates again.", Toast.LENGTH_LONG).show();
@@ -155,11 +165,15 @@ public final class UpdateManager {
                     throw new SecurityException("Downloaded APK checksum did not match the signed release manifest");
                 }
                 File verified = target;
+                Telemetry.event(activity, "update_download", Telemetry.data(
+                        "result", "success",
+                        "version_code", update.versionCode));
                 activity.runOnUiThread(() -> {
                     dialog.dismiss();
                     promptInstall(activity, verified);
                 });
             } catch (Exception error) {
+                Telemetry.error(activity, "update_download", error, Telemetry.data("version_code", update.versionCode));
                 activity.runOnUiThread(() -> {
                     dialog.dismiss();
                     Toast.makeText(activity, "Update failed: " + readable(error), Toast.LENGTH_LONG).show();
@@ -169,6 +183,7 @@ public final class UpdateManager {
     }
 
     private static void promptInstall(Activity activity, File apk) {
+        Telemetry.event(activity, "update_install_prompt", Telemetry.data("result", "opened"));
         Uri uri = FileProvider.getUriForFile(activity,
                 activity.getPackageName() + ".files", apk);
         Intent install = new Intent(Intent.ACTION_VIEW)

@@ -41,3 +41,11 @@ First release candidate intended for installation on the physical Hisense E6N.
 - 0.2 Phone Mode: mobile-app control layer.
 - 0.3 One Guide: mixed provider and free-web guide.
 - 0.4.2 Nova: native Jio architecture mixed with free-web/provider sources.
+
+## 0.5.3-observability
+
+- Added explicit opt-in technical diagnostics and crash/error references.
+- Added local preview, send, disable, delete and diagnostic-ID reset controls.
+- Added privacy-filtered playback/guide/update metrics and failed-channel-only identification.
+- Added first-party Cloudflare Worker/D1 collector, 30-day retention and owner report.
+- Preserved the Jio-only TV interface, package, signing identity, main branch and ghartv project lane.
