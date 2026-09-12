@@ -21,8 +21,8 @@ android {
         applicationId = "in.ghartv.nova"
         minSdk = 26
         targetSdk = 35
-        versionCode = 10
-        versionName = "0.5.3-observability"
+        versionCode = 11
+        versionName = "0.5.4-rc2-living-room"
     }
 
     buildFeatures {

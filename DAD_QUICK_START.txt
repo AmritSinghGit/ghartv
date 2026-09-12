@@ -1,13 +1,18 @@
 GHARTV · JIO LIVE — DAILY USE
 
 1. Open Apps > GharTV · Jio Live.
-2. Use arrows to highlight a live channel.
-3. Press OK to watch.
-4. Type a channel number to tune directly.
-5. Press Channel + or Channel - to switch.
-6. Press GUIDE (or TV) to return to the live guide.
-7. Press INFO while watching for Now and Next.
-8. Hold OK on a channel card to add or remove a Favourite.
+2. Start from For you, Continue, Recent, Punjabi, Hindi, English or Favourites.
+3. Press OK on a channel to watch.
+4. The Now/Next panel disappears automatically.
+5. Press INFO or OK while watching to show programme progress, Previous, Guide and Next.
+6. Channel + / Channel - stays inside the view you chose.
+7. Type a channel number to tune directly from the complete Jio guide.
+8. Press GUIDE (or TV) to return home.
 
-ACCOUNT / UPDATE
-Open Jio account only to update the guide, check for a GharTV update, or reconnect Jio.
+SUBSCRIPTION / NEEDS ATTENTION
+- Choose Next working channel to continue immediately.
+- Subscription means Jio explicitly marked the account/channel as requiring a plan.
+- Needs attention means Jio continued to deny or could not play that channel; other channels may still work.
+
+UPDATE
+Open Account > Check for GharTV update. Android updates the same app and keeps the saved login, favourites and local suggestions.

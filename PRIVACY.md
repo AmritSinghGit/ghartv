@@ -51,3 +51,12 @@ This local action does not delete reports already accepted by the collector. Acc
 Turning diagnostics off immediately deletes the unsent local queue. Android **Clear
 data** or uninstall removes all remaining local GharTV data. Use **Jio account → Sign
 out** to remove the encrypted Jio session and cached guide without uninstalling.
+
+## Local living-room suggestions
+
+GharTV v0.5.4 remembers successful channel numbers, recency and coarse watch-time
+buckets locally on the television so it can offer **For you**, **Continue** and
+**Recent**. A failed tune attempt is never promoted. This local history is account-
+scoped, automatically bounded, can be reset from the Jio account menu, and is not
+read or uploaded by GharTV diagnostics. Successful channel names/IDs and programme
+history remain excluded from telemetry.

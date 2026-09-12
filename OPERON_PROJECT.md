@@ -8,7 +8,7 @@ GharTV is registered in the existing Operon owner portfolio as an independent **
 - Project: GharTV · Jio Live
 - Package: `in.ghartv.nova`
 - Local continuation path: `~/Downloads/GharTV_Nova_v0.4.2`
-- Source repository after publication: `AmritSinghGit/ghartv`
+- Source and release repository: `AmritSinghGit/ghartv`
 - Owner portfolio registry: existing Operon Owner OS / portfolio work in Operon PR #39
 
 ## Authority split

@@ -6,6 +6,7 @@ import org.json.JSONObject;
 import java.util.Locale;
 import java.util.Objects;
 
+/** One canonical Jio channel record used by the guide, index and player. */
 public final class Channel {
     public static final String ACCESS_UNKNOWN = "unknown";
     public static final String ACCESS_AVAILABLE = "available";
@@ -22,6 +23,10 @@ public final class Channel {
     public boolean catchupAvailable;
     public String businessType = "";
     public boolean requiresSubscription;
+
+    /** Compatibility alias retained for older catalogue parsers. */
+    public boolean subscriptionHint;
+
     public String accessState = ACCESS_UNKNOWN;
     public String accessMessage = "";
     public long accessUpdatedAt;
@@ -29,18 +34,21 @@ public final class Channel {
     public String nextTitle = "";
 
     public String displayNumber() {
-        if (number < 1000) return String.format(Locale.US, "%03d", number);
-        return String.valueOf(number);
+        return number < 1000 ? String.format(Locale.US, "%03d", number) : String.valueOf(number);
     }
 
     public boolean isJio() { return true; }
 
     public boolean isSubscriptionChannel() {
-        return requiresSubscription || ACCESS_SUBSCRIPTION.equals(accessState);
+        return requiresSubscription || subscriptionHint || ACCESS_SUBSCRIPTION.equals(accessState);
     }
 
     public boolean isUnavailable() {
         return ACCESS_UNAVAILABLE.equals(accessState) && !isSubscriptionChannel();
+    }
+
+    public boolean isAvailable() {
+        return ACCESS_AVAILABLE.equals(accessState) && !isSubscriptionChannel();
     }
 
     public boolean isRegularGuideChannel() {
@@ -51,7 +59,8 @@ public final class Channel {
         if (isSubscriptionChannel()) {
             return ACCESS_AVAILABLE.equals(accessState) ? "SUBSCRIPTION • INCLUDED" : "SUBSCRIPTION";
         }
-        if (isUnavailable()) return "UNAVAILABLE";
+        if (isUnavailable()) return "NEEDS ATTENTION";
+        if (isAvailable()) return "WORKING";
         return "LIVE";
     }
 
@@ -66,7 +75,8 @@ public final class Channel {
         object.put("logoUrl", logoUrl);
         object.put("catchupAvailable", catchupAvailable);
         object.put("businessType", businessType);
-        object.put("requiresSubscription", requiresSubscription);
+        object.put("requiresSubscription", requiresSubscription || subscriptionHint);
+        object.put("subscriptionHint", requiresSubscription || subscriptionHint);
         object.put("accessState", accessState);
         object.put("accessMessage", accessMessage);
         object.put("accessUpdatedAt", accessUpdatedAt);
@@ -86,9 +96,13 @@ public final class Channel {
         channel.logoUrl = object.optString("logoUrl", "");
         channel.catchupAvailable = object.optBoolean("catchupAvailable", object.optBoolean("isCatchupAvailable", false));
         channel.businessType = object.optString("businessType", object.optString("business_type", ""));
-        channel.requiresSubscription = object.optBoolean("requiresSubscription",
-                "premium".equalsIgnoreCase(channel.businessType.trim()));
-        channel.accessState = object.optString("accessState",
+        channel.subscriptionHint = object.optBoolean("subscriptionHint", false);
+        channel.requiresSubscription = object.optBoolean(
+                "requiresSubscription",
+                channel.subscriptionHint || "premium".equalsIgnoreCase(channel.businessType.trim()));
+        channel.subscriptionHint = channel.subscriptionHint || channel.requiresSubscription;
+        channel.accessState = object.optString(
+                "accessState",
                 channel.requiresSubscription ? ACCESS_SUBSCRIPTION : ACCESS_UNKNOWN);
         channel.accessMessage = object.optString("accessMessage", "");
         channel.accessUpdatedAt = object.optLong("accessUpdatedAt", 0L);

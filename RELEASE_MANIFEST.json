@@ -1,8 +1,8 @@
 {
   "product": "GharTV Jio Live",
-  "release": "v0.5.3",
-  "versionName": "0.5.3-observability",
-  "versionCode": 10,
+  "release": "v0.5.4-rc2",
+  "versionName": "0.5.4-rc2-living-room",
+  "versionCode": 11,
   "applicationId": "in.ghartv.nova",
   "minSdk": 26,
   "targetSdk": 35,
@@ -10,22 +10,18 @@
   "laneId": "ghartv",
   "operonEntityType": "project",
   "repository": "AmritSinghGit/ghartv",
+  "branch": "main",
+  "baselineSha": "b9f16b936b666d191843f2a08fa29b9c299c02c3",
   "installPage": "https://amritsinghgit.github.io/ghartv/",
-  "directApk": "https://github.com/AmritSinghGit/ghartv/releases/latest/download/GharTV-Jio-Live.apk",
+  "stableDirectApk": "https://github.com/AmritSinghGit/ghartv/releases/latest/download/GharTV-Jio-Live.apk",
+  "reviewApk": "https://github.com/AmritSinghGit/ghartv/releases/download/v0.5.4-rc2/GharTV-Jio-Live-v0.5.4-rc2.apk",
   "continuation": "in-place from ~/Downloads/GharTV_Nova_v0.4.2",
-  "architecture": "Leanback-only native Android TV; Jio OTP/catalogue/EPG/playback; Media3 HLS/DASH/Widevine; opt-in first-party telemetry via Cloudflare Worker and D1",
-  "telemetry": {
-    "consent": "explicit opt-in",
-    "retentionDays": 30,
-    "endpoint": "https://ghartv-telemetry.ghartv-47d9a0.workers.dev",
-    "successfulViewingHistory": false,
-    "jioCredentialsCollected": false
-  },
+  "architecture": "Leanback-only Android TV; Jio OTP/catalogue/EPG/playback; Media3 HLS/DASH/Widevine; opt-in diagnostics; local-only living-room suggestions",
   "buildToolchain": {
     "androidGradlePlugin": "8.10.1",
     "gradle": "8.11.1",
     "jdk": "17",
     "media3": "1.10.1"
   },
-  "ownerState": "OBSERVABILITY UPDATE CANDIDATE \u2014 OWNER ACCEPTANCE PENDING"
+  "ownerState": "REVIEW CANDIDATE — STABLE UPDATE NOT ANNOUNCED"
 }

@@ -1,33 +1,49 @@
-# GharTV 0.5.1 TV-test acceptance checklist
+# GharTV v0.5.4 RC2 owner-review checklist
 
-## Source and release
+## Identity and preservation
 
-- [ ] `bash VALIDATE_SOURCE.command` passes.
-- [ ] Release APK is signed with the persistent GharTV key.
-- [ ] APK SHA-256 matches the GitHub Release checksum.
-- [ ] Version is `0.5.1-tv-test` / code `8`.
-- [ ] No YouTube/web/provider/M3U implementation remains.
-- [ ] Operon classification is `project`, not `tenant`.
+- [ ] Version is `0.5.4-rc2-living-room` / code `11`.
+- [ ] Android updates the existing `in.ghartv.nova` installation rather than creating a second app.
+- [ ] Jio session, guide, favourites and diagnostics choice remain after installation.
+- [ ] Stable `update/latest.json` remains `0.5.3-observability` / code `10` during review.
 
-## Google TV emulator
+## Living-room home and indexing
 
-- [ ] Existing `GharTV_Nova_Manual_google_tv_API36` AVD is reused.
-- [ ] Release APK installs and opens `.LoginActivity`.
-- [ ] Runtime verifier accepts Login, Guide and Player screens.
-- [ ] D-pad focus is visible and no control is unreachable.
-- [ ] Mobile and OTP fields work with the Google TV phone remote or keyboard.
-- [ ] Catalogue cache/refresh, filters, search and favourites render correctly.
+- [ ] **For you** opens first after migration from the old All view.
+- [ ] Continue/Recent contain only channels that reached real playback, never failed tune attempts.
+- [ ] Working now contains channels proven playable on this TV/account.
+- [ ] Category chips show channel counts.
+- [ ] Exact number lookup and searches such as `101`, `ptc`, `punjabi news` and `sports` rank correctly.
+- [ ] Leaving and returning to Punjabi, Favourites or another view restores the prior highlighted channel.
+- [ ] Reset Continue and For you removes only local suggestions, not login or favourites.
 
-## Hisense E6N
+## Player guide
 
-- [ ] `amritsinghgit.github.io/ghartv` opens on the TV.
-- [ ] Latest APK downloads and installs.
-- [ ] Physical remote and Google TV phone remote work.
-- [ ] Jio OTP login succeeds.
-- [ ] Live guide loads with logos and channel numbers.
-- [ ] Number tuning, Channel Up/Down, GUIDE and INFO work.
+- [ ] The Now/Next panel appears briefly and disappears after remote inactivity.
+- [ ] Retained button focus cannot keep the panel visible forever.
+- [ ] It shows channel, exact guide scope, Now, time range, progress and Next.
+- [ ] INFO/OK/D-pad reveals it; Previous, Guide and Next are reachable.
+- [ ] No permanent strip covers full-screen video.
+
+## Scoped channel switching
+
+- [ ] Punjabi, Hindi, Favourites, Working now and search results each retain their exact CH +/- scope.
+- [ ] Direct number tuning still searches the complete Jio catalogue.
+- [ ] Every error screen can skip to the next likely working channel.
+
+## Playback and access recovery
+
+- [ ] A 401/419 refreshes once and then requests reconnect only when necessary.
+- [ ] A 403 requests a fresh playback authorisation once.
+- [ ] Explicit subscription and persistent Jio account/device access remain separate.
+- [ ] DNS/timeout/reset and selected 5xx failures retry once.
+- [ ] A stalled buffer requests one fresh live feed, then presents recovery actions.
+- [ ] Temporary failure labels expire; a later successful playback marks the channel Working.
+
+## Physical-TV acceptance
+
 - [ ] At least one HLS channel plays.
 - [ ] At least one entitled DASH/Widevine channel plays.
-- [ ] Audio/video remains stable for 30 minutes.
-- [ ] TV restart preserves the encrypted session and cached guide.
-- [ ] Update check recognises the installed version.
+- [ ] Twenty consecutive channel changes remain stable.
+- [ ] Playback remains stable for thirty minutes.
+- [ ] Diagnostics report references appear only after opt-in and the private owner report contains no sensitive Jio data.

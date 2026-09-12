@@ -31,21 +31,23 @@ import androidx.recyclerview.widget.RecyclerView;
 
 import com.bumptech.glide.Glide;
 
+import org.json.JSONArray;
+
 import java.text.DateFormat;
 import java.util.ArrayList;
 import java.util.Date;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
 public final class MainActivity extends Activity implements ChannelNavigator.Listener {
     private final Handler mainHandler = new Handler(Looper.getMainLooper());
     private final ExecutorService executor = Executors.newFixedThreadPool(3);
-    private final Map<String, List<Program>> epgCache = new HashMap<>();
-    private final Map<String, Long> epgCacheTime = new HashMap<>();
+    private final Map<String, List<Program>> epgCache = new ConcurrentHashMap<>();
+    private final Map<String, Long> epgCacheTime = new ConcurrentHashMap<>();
 
     private ChannelRepository repository;
     private List<Channel> allChannels = new ArrayList<>();
@@ -54,7 +56,7 @@ public final class MainActivity extends Activity implements ChannelNavigator.Lis
     private ChipAdapter chipAdapter;
     private RecyclerView channelGrid;
     private Channel selectedChannel;
-    private String selectedCategory = "All";
+    private String selectedCategory = ChannelIndex.VIEW_FOR_YOU;
     private String searchQuery = "";
     private boolean catalogueBusy;
     private boolean redirectingToLogin;
@@ -74,6 +76,8 @@ public final class MainActivity extends Activity implements ChannelNavigator.Lis
     private TextView numberOverlay;
     private TextView emptyState;
     private ProgressBar guideLoading;
+    private TextView viewTitle;
+    private TextView viewSummary;
 
     private ChannelNavigator navigator;
     private Runnable pendingEpgLoad;
@@ -112,7 +116,10 @@ public final class MainActivity extends Activity implements ChannelNavigator.Lis
         TvUi.immersive(this);
         if (repository == null) return;
         if (!JioSession.load(this).isPresent()) routeToLogin();
-        else loadFromDisk(false);
+        else {
+            repository.invalidateIndex();
+            loadFromDisk(false);
+        }
     }
 
     @Override protected void onDestroy() {
@@ -137,13 +144,13 @@ public final class MainActivity extends Activity implements ChannelNavigator.Lis
 
         LinearLayout shell = new LinearLayout(this);
         shell.setOrientation(LinearLayout.VERTICAL);
-        shell.setPadding(TvUi.dp(this, 28), TvUi.dp(this, 14), TvUi.dp(this, 28), TvUi.dp(this, 14));
+        shell.setPadding(TvUi.dp(this, 22), TvUi.dp(this, 12), TvUi.dp(this, 22), TvUi.dp(this, 12));
         root.addView(shell, new FrameLayout.LayoutParams(-1, -1));
-        shell.addView(buildHeader(), new LinearLayout.LayoutParams(-1, TvUi.dp(this, 54)));
+        shell.addView(buildHeader(), new LinearLayout.LayoutParams(-1, TvUi.dp(this, 52)));
 
         catalogueStatus = TvUi.label(this, "Connecting to JioTV…", 13, TvUi.MUTED, true);
         catalogueStatus.setGravity(Gravity.CENTER_VERTICAL);
-        shell.addView(catalogueStatus, new LinearLayout.LayoutParams(-1, TvUi.dp(this, 28)));
+        shell.addView(catalogueStatus, new LinearLayout.LayoutParams(-1, TvUi.dp(this, 24)));
 
         LinearLayout body = new LinearLayout(this);
         body.setOrientation(LinearLayout.HORIZONTAL);
@@ -152,10 +159,10 @@ public final class MainActivity extends Activity implements ChannelNavigator.Lis
         shell.addView(body, bodyParams);
 
         LinearLayout hero = buildHero();
-        LinearLayout.LayoutParams heroParams = new LinearLayout.LayoutParams(0, -1, .36f);
+        LinearLayout.LayoutParams heroParams = new LinearLayout.LayoutParams(0, -1, .30f);
         heroParams.rightMargin = TvUi.dp(this, 16);
         body.addView(hero, heroParams);
-        body.addView(buildGuide(), new LinearLayout.LayoutParams(0, -1, .64f));
+        body.addView(buildGuide(), new LinearLayout.LayoutParams(0, -1, .70f));
 
         numberOverlay = TvUi.label(this, "", 30, TvUi.TEXT, true);
         numberOverlay.setGravity(Gravity.CENTER);
@@ -184,15 +191,15 @@ public final class MainActivity extends Activity implements ChannelNavigator.Lis
         header.addView(live, liveParams);
         header.addView(new View(this), new LinearLayout.LayoutParams(0, 1, 1f));
 
-        Button search = actionButton("Find");
+        Button search = actionButton("⌕  Search");
         search.setOnClickListener(view -> showSearch());
         header.addView(search, headerButtonParams());
 
-        Button refresh = actionButton("Update guide");
+        Button refresh = actionButton("↻  Guide");
         refresh.setOnClickListener(view -> refreshCatalogue(true));
         header.addView(refresh, headerButtonParams());
 
-        accountButton = actionButton("Jio account");
+        accountButton = actionButton("Account");
         accountButton.setOnClickListener(view -> showAccountMenu());
         LinearLayout.LayoutParams accountParams = new LinearLayout.LayoutParams(TvUi.dp(this, 145), TvUi.dp(this, 38));
         accountParams.leftMargin = TvUi.dp(this, 10);
@@ -299,10 +306,14 @@ public final class MainActivity extends Activity implements ChannelNavigator.Lis
 
         LinearLayout guideTitleRow = new LinearLayout(this);
         guideTitleRow.setGravity(Gravity.CENTER_VERTICAL);
-        TextView title = TvUi.label(this, "LIVE CHANNELS", 16, TvUi.TEXT, true);
-        title.setLetterSpacing(.08f);
-        guideTitleRow.addView(title, new LinearLayout.LayoutParams(-2, -1));
-        guideTitleRow.addView(new View(this), new LinearLayout.LayoutParams(0, 1, 1f));
+        viewTitle = TvUi.label(this, "FOR YOU", 16, TvUi.TEXT, true);
+        viewTitle.setLetterSpacing(.08f);
+        guideTitleRow.addView(viewTitle, new LinearLayout.LayoutParams(-2, -1));
+        viewSummary = TvUi.label(this, "", 11, TvUi.MUTED, false);
+        viewSummary.setGravity(Gravity.CENTER_VERTICAL | Gravity.END);
+        LinearLayout.LayoutParams summaryParams = new LinearLayout.LayoutParams(0, -1, 1f);
+        summaryParams.leftMargin = TvUi.dp(this, 14);
+        guideTitleRow.addView(viewSummary, summaryParams);
         guideLoading = new ProgressBar(this);
         guideLoading.setIndeterminate(true);
         guideLoading.setVisibility(View.GONE);
@@ -313,6 +324,7 @@ public final class MainActivity extends Activity implements ChannelNavigator.Lis
         chips.setLayoutManager(new LinearLayoutManager(this, RecyclerView.HORIZONTAL, false));
         chipAdapter = new ChipAdapter(value -> {
             selectedCategory = value;
+            searchQuery = "";
             repository.setLastCategory(value);
             Telemetry.event(this, "guide_filter", Telemetry.data("category", value));
             renderGuide(true);
@@ -322,10 +334,12 @@ public final class MainActivity extends Activity implements ChannelNavigator.Lis
 
         FrameLayout gridHost = new FrameLayout(this);
         channelGrid = new RecyclerView(this);
-        GridLayoutManager gridManager = new GridLayoutManager(this, 3);
-        gridManager.setInitialPrefetchItemCount(9);
+        int spanCount = TvUi.gridSpanCount(this);
+        GridLayoutManager gridManager = new GridLayoutManager(this, spanCount);
+        gridManager.setInitialPrefetchItemCount(spanCount * 3);
         channelGrid.setLayoutManager(gridManager);
-        channelGrid.setItemViewCacheSize(18);
+        channelGrid.setItemViewCacheSize(24);
+        channelGrid.setHasFixedSize(true);
         channelAdapter = new ChannelAdapter(repository.favourites(), new ChannelAdapter.Listener() {
             @Override public void onFocused(Channel channel, int position) { select(channel); }
             @Override public void onPlay(Channel channel) { play(channel); }
@@ -363,7 +377,8 @@ public final class MainActivity extends Activity implements ChannelNavigator.Lis
         }
         String mobile = session.mobile;
         String suffix = mobile.length() >= 4 ? mobile.substring(mobile.length() - 4) : "connected";
-        accountButton.setText("Jio ••••" + suffix);
+        int queuedDiagnostics = Telemetry.queuedCount(this);
+        accountButton.setText("Jio ••••" + suffix + (queuedDiagnostics > 0 ? "  •  " + queuedDiagnostics : ""));
         allChannels = repository.loadAll();
         renderGuide(focus);
         updateCatalogueStatus(null);
@@ -420,12 +435,36 @@ public final class MainActivity extends Activity implements ChannelNavigator.Lis
         });
     }
 
+    private String activeViewKey() {
+        if (searchQuery == null || searchQuery.trim().isEmpty()) return selectedCategory;
+        return ChannelIndex.VIEW_SEARCH + ":" + ChannelIndex.normalize(searchQuery);
+    }
+
     private void renderGuide(boolean requestFocus) {
         List<String> categories = repository.categories(allChannels);
-        if (!categories.contains(selectedCategory)) selectedCategory = "All";
-        chipAdapter.submit(categories, selectedCategory);
+        if (!categories.contains(selectedCategory)) {
+            selectedCategory = ChannelIndex.VIEW_FOR_YOU;
+            repository.setLastCategory(selectedCategory);
+        }
+        Map<String, Integer> counts = repository.categoryCounts(allChannels);
+        chipAdapter.submit(categories, selectedCategory, counts);
         visibleChannels = repository.filter(allChannels, selectedCategory, searchQuery);
+        if (viewTitle != null) {
+            viewTitle.setText(searchQuery.isEmpty()
+                    ? selectedCategory.toUpperCase(Locale.ROOT)
+                    : ("SEARCH  •  " + searchQuery).toUpperCase(Locale.ROOT));
+        }
+        if (viewSummary != null) {
+            String scope = searchQuery.isEmpty() ? "this view" : "the full Jio guide";
+            viewSummary.setText(String.format(Locale.US,
+                    "%,d in %s  •  %s", visibleChannels.size(), scope, repository.indexSummary(allChannels)));
+        }
         channelAdapter.submit(visibleChannels, repository.favourites());
+        Telemetry.event(this, "guide_rendered", Telemetry.data(
+                "view", selectedCategory,
+                "search_active", !searchQuery.isEmpty(),
+                "result_count", visibleChannels.size(),
+                "catalogue_count", allChannels.size()));
         boolean empty = visibleChannels.isEmpty();
         emptyState.setVisibility(empty ? View.VISIBLE : View.GONE);
         channelGrid.setVisibility(empty ? View.INVISIBLE : View.VISIBLE);
@@ -435,7 +474,9 @@ public final class MainActivity extends Activity implements ChannelNavigator.Lis
             return;
         }
 
-        Channel preferred = repository.byNumber(visibleChannels, repository.lastChannel());
+        int preferredNumber = repository.lastChannelForView(activeViewKey());
+        Channel preferred = repository.byNumber(visibleChannels, preferredNumber);
+        if (preferred == null) preferred = repository.byNumber(visibleChannels, repository.lastChannel());
         if (preferred == null) preferred = visibleChannels.get(0);
         select(preferred);
         if (requestFocus) {
@@ -455,6 +496,7 @@ public final class MainActivity extends Activity implements ChannelNavigator.Lis
             heroNumber.setText("---");
             heroTitle.setText("No channel selected");
             heroSource.setText("JioTV • your account");
+            heroSource.setTextColor(TvUi.CYAN);
             heroNow.setText("Live now");
             heroNext.setText("Choose a live channel from the guide");
             heroLogo.setImageDrawable(null);
@@ -465,9 +507,27 @@ public final class MainActivity extends Activity implements ChannelNavigator.Lis
         }
         playButton.setEnabled(true);
         favouriteButton.setEnabled(true);
+        repository.rememberViewSelection(activeViewKey(), channel.number);
         heroNumber.setText(channel.displayNumber());
         heroTitle.setText(channel.name);
-        heroSource.setText("JioTV  •  " + channel.language + "  •  " + channel.category);
+        if (channel.isAvailable()) {
+            playButton.setText("▶  WATCH LIVE");
+            heroSource.setText((channel.isSubscriptionChannel() ? "SUBSCRIPTION INCLUDED" : "WORKING")
+                    + "  •  " + channel.language + "  •  " + channel.category);
+            heroSource.setTextColor(TvUi.MINT);
+        } else if (channel.isSubscriptionChannel()) {
+            playButton.setText("TRY CHANNEL");
+            heroSource.setText("SUBSCRIPTION  •  " + channel.language + "  •  " + channel.category);
+            heroSource.setTextColor(TvUi.AMBER);
+        } else if (channel.isUnavailable()) {
+            playButton.setText("TRY AGAIN");
+            heroSource.setText("JIO ACCESS  •  " + channel.language + "  •  " + channel.category);
+            heroSource.setTextColor(TvUi.ERROR);
+        } else {
+            playButton.setText("▶  WATCH LIVE");
+            heroSource.setText("JioTV  •  " + channel.language + "  •  " + channel.category);
+            heroSource.setTextColor(TvUi.CYAN);
+        }
         heroNow.setText(channel.nowTitle.isEmpty() ? "Live now" : channel.nowTitle);
         heroNext.setText(channel.nextTitle.isEmpty() ? "Loading programme guide…" : "Next: " + channel.nextTitle);
         favouriteButton.setText(repository.favourites().contains(channel.number) ? "★  Favourite" : "☆  Favourite");
@@ -522,20 +582,37 @@ public final class MainActivity extends Activity implements ChannelNavigator.Lis
     }
 
     private void play(Channel channel) {
+        List<Channel> scope = visibleChannels.isEmpty() ? allChannels : visibleChannels;
+        String label = searchQuery.isEmpty() ? selectedCategory : "Search • " + searchQuery;
+        openPlayer(channel, scope, label);
+    }
+
+    private void playDirect(Channel channel) {
+        openPlayer(channel, allChannels, ChannelIndex.VIEW_ALL);
+    }
+
+    private void openPlayer(Channel channel, List<Channel> scopeChannels, String scopeLabel) {
         if (channel == null) return;
         if (!JioSession.load(this).isPresent()) {
             routeToLogin();
             return;
         }
         repository.setLastChannel(channel.number);
+        repository.rememberViewSelection(activeViewKey(), channel.number);
         Telemetry.event(this, "tune_request", Telemetry.data(
                 "category", channel.category,
                 "language", channel.language,
-                "guide_scope", selectedCategory,
+                "guide_scope", scopeLabel,
                 "access_state", channel.accessState));
         Intent player = new Intent(this, PlayerActivity.class);
-        try { player.putExtra(PlayerActivity.EXTRA_CHANNEL_JSON, channel.toJson().toString()); }
-        catch (Exception error) {
+        try {
+            player.putExtra(PlayerActivity.EXTRA_CHANNEL_JSON, channel.toJson().toString());
+            JSONArray scope = new JSONArray();
+            List<Channel> safeScope = scopeChannels == null || scopeChannels.isEmpty() ? allChannels : scopeChannels;
+            for (Channel visible : safeScope) scope.put(visible.number);
+            player.putExtra(PlayerActivity.EXTRA_SCOPE_NUMBERS, scope.toString());
+            player.putExtra(PlayerActivity.EXTRA_SCOPE_LABEL, scopeLabel == null ? ChannelIndex.VIEW_ALL : scopeLabel);
+        } catch (Exception error) {
             Toast.makeText(this, "Could not open this channel", Toast.LENGTH_SHORT).show();
             return;
         }
@@ -546,8 +623,8 @@ public final class MainActivity extends Activity implements ChannelNavigator.Lis
         if (channel == null) return;
         boolean added = repository.toggleFavourite(channel.number);
         favouriteButton.setText(added ? "★  Favourite" : "☆  Favourite");
-        channelAdapter.submit(visibleChannels, repository.favourites());
-        if ("Favourites".equals(selectedCategory)) renderGuide(false);
+        repository.invalidateIndex();
+        renderGuide(false);
         Toast.makeText(this, added ? "Added to favourites" : "Removed from favourites", Toast.LENGTH_SHORT).show();
     }
 
@@ -555,7 +632,7 @@ public final class MainActivity extends Activity implements ChannelNavigator.Lis
         EditText input = new EditText(this);
         input.setSingleLine(true);
         input.setText(searchQuery);
-        input.setHint("Channel name, number, language, or category");
+        input.setHint("Try 101, PTC, Punjabi news, sports…");
         input.setInputType(InputType.TYPE_CLASS_TEXT);
         input.setSelectAllOnFocus(true);
         new AlertDialog.Builder(this)
@@ -585,6 +662,7 @@ public final class MainActivity extends Activity implements ChannelNavigator.Lis
                 "Update live guide",
                 "Check for GharTV update",
                 "Diagnostics & privacy  •  " + diagnostics,
+                "Reset Continue and For you",
                 "Sign out of JioTV"
         };
         new AlertDialog.Builder(this)
@@ -595,9 +673,26 @@ public final class MainActivity extends Activity implements ChannelNavigator.Lis
                     if (which == 0) refreshCatalogue(true);
                     else if (which == 1) UpdateManager.check(this, true);
                     else if (which == 2) DiagnosticsDialog.show(this);
-                    else if (which == 3) confirmSignOut();
+                    else if (which == 3) confirmResetHome();
+                    else if (which == 4) confirmSignOut();
                 })
                 .setNegativeButton("Close", null)
+                .show();
+    }
+
+    private void confirmResetHome() {
+        new AlertDialog.Builder(this)
+                .setTitle("Reset Continue and For you?")
+                .setMessage("This removes only the local viewing suggestions on this TV. It does not sign out, remove favourites, or send viewing history anywhere.")
+                .setPositiveButton("Reset suggestions", (dialog, which) -> {
+                    repository.history().clear();
+                    repository.invalidateIndex();
+                    selectedCategory = ChannelIndex.VIEW_FOR_YOU;
+                    repository.setLastCategory(selectedCategory);
+                    renderGuide(true);
+                    Toast.makeText(this, "Home suggestions reset", Toast.LENGTH_SHORT).show();
+                })
+                .setNegativeButton("Cancel", null)
                 .show();
     }
 
@@ -622,7 +717,14 @@ public final class MainActivity extends Activity implements ChannelNavigator.Lis
         }
         long updated = repository.lastUpdatedAt();
         String when = updated <= 0 ? "not downloaded yet" : DateFormat.getDateTimeInstance(DateFormat.SHORT, DateFormat.SHORT).format(new Date(updated));
-        catalogueStatus.setText(String.format(Locale.US, "LIVE  •  %,d channels  •  guide updated %s  •  GharTV %s", allChannels.size(), when, BuildConfig.VERSION_NAME));
+        int subscriptions = repository.subscriptionCount(allChannels);
+        int restricted = repository.unavailableCount(allChannels);
+        String accessSummary = "";
+        if (subscriptions > 0) accessSummary += String.format(Locale.US, "  •  %,d subscription", subscriptions);
+        if (restricted > 0) accessSummary += String.format(Locale.US, "  •  %,d need attention", restricted);
+        catalogueStatus.setText(String.format(Locale.US,
+                "LIVE  •  %,d channels%s  •  %s  •  updated %s  •  GharTV %s",
+                allChannels.size(), accessSummary, repository.indexSummary(allChannels), when, BuildConfig.VERSION_NAME));
         catalogueStatus.setTextColor(TvUi.MUTED);
     }
 
@@ -635,7 +737,10 @@ public final class MainActivity extends Activity implements ChannelNavigator.Lis
         Telemetry.event(this, "channel_change", Telemetry.data(
                 "direction", direction > 0 ? "next" : "previous",
                 "guide_scope", selectedCategory));
-        Channel next = repository.next(allChannels, selectedChannel == null ? repository.lastChannel() : selectedChannel.number, direction);
+        List<Channel> scope = visibleChannels.isEmpty() ? allChannels : visibleChannels;
+        Channel next = repository.next(scope,
+                selectedChannel == null ? repository.lastChannel() : selectedChannel.number,
+                direction);
         if (next != null) play(next);
     }
 
@@ -651,7 +756,7 @@ public final class MainActivity extends Activity implements ChannelNavigator.Lis
             Toast.makeText(this, "Channel " + channelNumber + " is not in your JioTV guide", Toast.LENGTH_SHORT).show();
             return;
         }
-        play(requested);
+        playDirect(requested);
     }
 
     @Override public boolean dispatchKeyEvent(KeyEvent event) {

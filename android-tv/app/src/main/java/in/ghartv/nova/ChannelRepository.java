@@ -18,41 +18,77 @@ import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
-import java.util.LinkedHashSet;
 import java.util.List;
-import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 
+/**
+ * Canonical Jio guide repository with a cached living-room index.
+ *
+ * Channel failures are evidence, not permanent labels: transient access states
+ * expire automatically so one bad evening cannot hide a channel forever.
+ */
 public final class ChannelRepository {
-    public static final String CATEGORY_ALL = "All";
-    public static final String CATEGORY_FAVOURITES = "Favourites";
-    public static final String CATEGORY_SUBSCRIPTION = "Subscription";
-    public static final String CATEGORY_UNAVAILABLE = "Unavailable";
+    public static final String CATEGORY_ALL = ChannelIndex.VIEW_ALL;
+    public static final String CATEGORY_FAVOURITES = ChannelIndex.VIEW_FAVOURITES;
+    public static final String CATEGORY_SUBSCRIPTION = ChannelIndex.VIEW_SUBSCRIPTION;
+    public static final String CATEGORY_UNAVAILABLE = ChannelIndex.VIEW_JIO_ACCESS;
 
-    private static final int CATALOGUE_SCHEMA = 2;
+    private static final int CATALOGUE_SCHEMA = 4;
     private static final String JIO_CACHE = "jio_channels.json";
     private static final String META_CACHE = "catalog_meta.json";
+    private static final String VIEW_SELECTION_PREFIX = "view_selection_";
+
+    private static final long ACCESS_AVAILABLE_TTL_MS = 7L * 24L * 60L * 60L * 1000L;
+    private static final long ACCESS_UNAVAILABLE_TTL_MS = 6L * 60L * 60L * 1000L;
+    private static final long ACCESS_SUBSCRIPTION_TTL_MS = 24L * 60L * 60L * 1000L;
 
     private final Context context;
     private final JioApiClient api;
+    private final WatchHistoryStore historyStore;
+
+    private ChannelIndex index;
+    private long indexSignature = Long.MIN_VALUE;
+    private List<Channel> memoryChannels;
+    private long memoryFileModified = Long.MIN_VALUE;
 
     public ChannelRepository(Context context) {
         this.context = context.getApplicationContext();
         this.api = new JioApiClient(this.context);
+        this.historyStore = new WatchHistoryStore(this.context);
     }
 
     public JioApiClient api() { return api; }
+    public WatchHistoryStore history() { return historyStore; }
 
     public synchronized List<Channel> loadAll() {
+        File cacheFile = new File(context.getFilesDir(), JIO_CACHE);
+        long modified = cacheFile.exists() ? cacheFile.lastModified() : 0L;
+        if (memoryChannels != null && modified == memoryFileModified) {
+            ensureIndex(memoryChannels);
+            return new ArrayList<>(memoryChannels);
+        }
+
         LinkedHashMap<Integer, Channel> byNumber = new LinkedHashMap<>();
+        boolean normalized = false;
+        long now = System.currentTimeMillis();
         for (Channel channel : loadChannelFile(JIO_CACHE)) {
             if (channel.id.isEmpty() || channel.number <= 0) continue;
+            normalized |= normalizeAccessState(channel, now);
             byNumber.put(channel.number, channel);
         }
         List<Channel> channels = new ArrayList<>(byNumber.values());
         channels.sort(Comparator.comparingInt(value -> value.number));
-        return channels;
+        memoryChannels = channels;
+        memoryFileModified = modified;
+        if (normalized && !channels.isEmpty()) {
+            try {
+                saveChannelFile(JIO_CACHE, channels);
+                memoryFileModified = new File(context.getFilesDir(), JIO_CACHE).lastModified();
+            } catch (Exception ignored) {}
+        }
+        ensureIndex(channels);
+        return new ArrayList<>(channels);
     }
 
     public synchronized List<Channel> refreshJio() throws Exception {
@@ -62,9 +98,13 @@ public final class ChannelRepository {
 
         List<Channel> fresh = api.fetchChannels();
         if (fresh.isEmpty()) throw new IllegalStateException("JioTV returned an empty television guide");
+        long now = System.currentTimeMillis();
         for (Channel channel : fresh) {
+            channel.requiresSubscription = channel.requiresSubscription || channel.subscriptionHint;
+            channel.subscriptionHint = channel.subscriptionHint || channel.requiresSubscription;
             Channel prior = previousById.get(channel.id);
             if (prior != null) {
+                normalizeAccessState(prior, now);
                 channel.accessState = prior.accessState;
                 channel.accessMessage = prior.accessMessage;
                 channel.accessUpdatedAt = prior.accessUpdatedAt;
@@ -74,21 +114,27 @@ public final class ChannelRepository {
             if (channel.requiresSubscription && Channel.ACCESS_UNKNOWN.equals(channel.accessState)) {
                 channel.accessState = Channel.ACCESS_SUBSCRIPTION;
                 channel.accessMessage = "This channel may require a separate JioTV subscription.";
+                channel.accessUpdatedAt = now;
             }
+            normalizeAccessState(channel, now);
         }
         saveChannelFile(JIO_CACHE, fresh);
         JSONObject meta = new JSONObject();
         meta.put("schema", CATALOGUE_SCHEMA);
-        meta.put("updatedAt", System.currentTimeMillis());
+        meta.put("updatedAt", now);
         meta.put("count", fresh.size());
         meta.put("source", "JioTV mobile catalogue");
         writeFile(META_CACHE, meta.toString());
+        memoryChannels = null;
+        memoryFileModified = Long.MIN_VALUE;
+        invalidateIndex();
         return loadAll();
     }
 
+    /** Persist a channel access result. Stale results are later expired automatically. */
     public synchronized void updateAccessState(String channelId, String state, String message) {
         if (channelId == null || channelId.trim().isEmpty()) return;
-        List<Channel> channels = loadChannelFile(JIO_CACHE);
+        List<Channel> channels = loadAll();
         boolean changed = false;
         for (Channel channel : channels) {
             if (!channelId.equals(channel.id)) continue;
@@ -101,6 +147,9 @@ public final class ChannelRepository {
         if (!changed) return;
         try { saveChannelFile(JIO_CACHE, channels); }
         catch (Exception ignored) {}
+        memoryChannels = new ArrayList<>(channels);
+        memoryFileModified = new File(context.getFilesDir(), JIO_CACHE).lastModified();
+        invalidateIndex();
     }
 
     public void applyAccessState(Channel channel, String state, String message) {
@@ -111,9 +160,18 @@ public final class ChannelRepository {
         updateAccessState(channel.id, channel.accessState, channel.accessMessage);
     }
 
+    /** Forget only temporary access evidence for an owner-initiated retry. */
+    public void clearTemporaryAccess(Channel channel) {
+        if (channel == null || channel.requiresSubscription || channel.subscriptionHint) return;
+        applyAccessState(channel, Channel.ACCESS_UNKNOWN, "");
+    }
+
     public synchronized void clearCatalogue() {
         new File(context.getFilesDir(), JIO_CACHE).delete();
         new File(context.getFilesDir(), META_CACHE).delete();
+        memoryChannels = null;
+        memoryFileModified = Long.MIN_VALUE;
+        invalidateIndex();
     }
 
     public long lastUpdatedAt() {
@@ -129,76 +187,35 @@ public final class ChannelRepository {
         catch (Exception ignored) { return loadAll().size(); }
     }
 
-    public List<String> categories(List<Channel> channels) {
-        LinkedHashSet<String> values = new LinkedHashSet<>();
-        values.add(CATEGORY_ALL);
-        values.add(CATEGORY_FAVOURITES);
-        if (containsSubscription(channels)) values.add(CATEGORY_SUBSCRIPTION);
-        if (containsUnavailable(channels)) values.add(CATEGORY_UNAVAILABLE);
-
-        String[] preferredLanguages = {"Hindi", "Punjabi", "English", "Marathi", "Bengali", "Tamil", "Telugu", "Gujarati", "Kannada", "Malayalam"};
-        for (String language : preferredLanguages) {
-            if (containsLanguage(channels, language)) values.add(language);
-        }
-        for (Channel channel : channels) {
-            if (!channel.isRegularGuideChannel()) continue;
-            String language = clean(channel.language);
-            if (!language.isEmpty() && !"Other".equalsIgnoreCase(language)) values.add(language);
-        }
-
-        String[] preferredGenres = {"News", "Entertainment", "Movies", "Sports", "Kids", "Music", "Devotional", "Business News", "Infotainment", "Lifestyle", "Educational"};
-        for (String genre : preferredGenres) {
-            if (containsCategory(channels, genre)) values.add(genre);
-        }
-        for (Channel channel : channels) {
-            if (!channel.isRegularGuideChannel()) continue;
-            String category = clean(channel.category);
-            if (!category.isEmpty() && !"Other".equalsIgnoreCase(category)) values.add(category);
-        }
-        return new ArrayList<>(values);
+    public synchronized List<String> categories(List<Channel> channels) {
+        return ensureIndex(channels).categories();
     }
 
-    public List<Channel> filter(List<Channel> channels, String category, String query) {
-        Set<Integer> favourites = favourites();
-        String selected = category == null || category.trim().isEmpty() ? CATEGORY_ALL : category.trim();
-        String normalizedQuery = query == null ? "" : query.trim().toLowerCase(Locale.ROOT);
-        List<Channel> out = new ArrayList<>();
-        for (Channel channel : channels) {
-            boolean categoryMatch;
-            if (CATEGORY_ALL.equalsIgnoreCase(selected)) {
-                categoryMatch = channel.isRegularGuideChannel();
-            } else if (CATEGORY_FAVOURITES.equalsIgnoreCase(selected)) {
-                categoryMatch = favourites.contains(channel.number);
-            } else if (CATEGORY_SUBSCRIPTION.equalsIgnoreCase(selected)) {
-                categoryMatch = channel.isSubscriptionChannel();
-            } else if (CATEGORY_UNAVAILABLE.equalsIgnoreCase(selected)) {
-                categoryMatch = channel.isUnavailable();
-            } else {
-                categoryMatch = channel.isRegularGuideChannel()
-                        && (channel.language.equalsIgnoreCase(selected) || channel.category.equalsIgnoreCase(selected));
-            }
+    public synchronized Map<String, Integer> categoryCounts(List<Channel> channels) {
+        return ensureIndex(channels).categoryCounts();
+    }
 
-            String access = channel.accessLabel().toLowerCase(Locale.ROOT);
-            boolean queryMatch = normalizedQuery.isEmpty()
-                    || channel.name.toLowerCase(Locale.ROOT).contains(normalizedQuery)
-                    || channel.language.toLowerCase(Locale.ROOT).contains(normalizedQuery)
-                    || channel.category.toLowerCase(Locale.ROOT).contains(normalizedQuery)
-                    || channel.displayNumber().contains(normalizedQuery)
-                    || access.contains(normalizedQuery);
-            if (categoryMatch && queryMatch) out.add(channel);
-        }
-        return out;
+    public synchronized List<Channel> filter(List<Channel> channels, String category, String query) {
+        return ensureIndex(channels).filter(category, query);
+    }
+
+    public synchronized List<Channel> search(List<Channel> channels, String query) {
+        return ensureIndex(channels).search(query);
     }
 
     public String categoryForChannel(Channel channel) {
-        if (channel == null) return CATEGORY_ALL;
-        if (channel.isSubscriptionChannel()) return CATEGORY_SUBSCRIPTION;
-        if (channel.isUnavailable()) return CATEGORY_UNAVAILABLE;
-        String language = clean(channel.language);
-        return language.isEmpty() || "Other".equalsIgnoreCase(language) ? CATEGORY_ALL : language;
+        if (channel == null) return ChannelIndex.VIEW_ALL;
+        if (channel.isSubscriptionChannel()) return ChannelIndex.VIEW_SUBSCRIPTION;
+        if (channel.isUnavailable()) return ChannelIndex.VIEW_JIO_ACCESS;
+        String language = channel.language == null ? "" : channel.language.trim();
+        return language.isEmpty() || "Other".equalsIgnoreCase(language)
+                ? ChannelIndex.VIEW_ALL : language;
     }
 
-    public Channel byNumber(List<Channel> channels, int number) {
+    public synchronized Channel byNumber(List<Channel> channels, int number) {
+        Channel found = ensureIndex(channels).byNumber(number);
+        if (found != null) return found;
+        if (channels == null) return null;
         for (Channel channel : channels) if (channel.number == number) return channel;
         return null;
     }
@@ -212,6 +229,19 @@ public final class ChannelRepository {
         if (index < 0) return direction >= 0 ? channels.get(0) : channels.get(channels.size() - 1);
         int next = (index + (direction >= 0 ? 1 : -1) + channels.size()) % channels.size();
         return channels.get(next);
+    }
+
+    /** Next candidate that is not already known to fail, falling back to ordinary next. */
+    public Channel nextLikelyWorking(List<Channel> channels, int number, int direction) {
+        if (channels == null || channels.isEmpty()) return null;
+        Channel fallback = next(channels, number, direction);
+        Channel cursor = fallback;
+        for (int i = 0; i < channels.size(); i++) {
+            if (cursor == null) break;
+            if (!cursor.isUnavailable() && (!cursor.isSubscriptionChannel() || cursor.isAvailable())) return cursor;
+            cursor = next(channels, cursor.number, direction);
+        }
+        return fallback;
     }
 
     public Set<Integer> favourites() {
@@ -233,6 +263,7 @@ public final class ChannelRepository {
         if (values.contains(key)) { values.remove(key); added = false; }
         else { values.add(key); added = true; }
         prefs.edit().putStringSet(AppConfig.KEY_FAVOURITES, values).apply();
+        invalidateIndex();
         return added;
     }
 
@@ -247,40 +278,113 @@ public final class ChannelRepository {
     }
 
     public String lastCategory() {
-        return context.getSharedPreferences(AppConfig.PREFS, Context.MODE_PRIVATE)
-                .getString(AppConfig.KEY_LAST_CATEGORY, CATEGORY_ALL);
+        SharedPreferences prefs = context.getSharedPreferences(AppConfig.PREFS, Context.MODE_PRIVATE);
+        String value = prefs.getString(AppConfig.KEY_LAST_CATEGORY, ChannelIndex.VIEW_FOR_YOU);
+        if (value == null || value.trim().isEmpty()) return ChannelIndex.VIEW_FOR_YOU;
+        String clean = value.trim();
+        // One-time semantic migration from the v0.5.3 guide labels.
+        if ("All".equalsIgnoreCase(clean)) return ChannelIndex.VIEW_FOR_YOU;
+        if ("Unavailable".equalsIgnoreCase(clean)) return ChannelIndex.VIEW_JIO_ACCESS;
+        return clean;
     }
 
     public void setLastCategory(String value) {
         context.getSharedPreferences(AppConfig.PREFS, Context.MODE_PRIVATE)
-                .edit().putString(AppConfig.KEY_LAST_CATEGORY, value).apply();
+                .edit().putString(AppConfig.KEY_LAST_CATEGORY,
+                        value == null || value.trim().isEmpty() ? ChannelIndex.VIEW_FOR_YOU : value.trim())
+                .apply();
     }
 
-    private boolean containsLanguage(List<Channel> channels, String expected) {
-        for (Channel channel : channels) {
-            if (channel.isRegularGuideChannel() && channel.language.equalsIgnoreCase(expected)) return true;
+    public void rememberViewSelection(String view, int number) {
+        if (number <= 0) return;
+        context.getSharedPreferences(AppConfig.PREFS, Context.MODE_PRIVATE)
+                .edit().putInt(VIEW_SELECTION_PREFIX + viewKey(view), number).apply();
+    }
+
+    public int lastChannelForView(String view) {
+        return context.getSharedPreferences(AppConfig.PREFS, Context.MODE_PRIVATE)
+                .getInt(VIEW_SELECTION_PREFIX + viewKey(view), lastChannel());
+    }
+
+    public synchronized String indexSummary(List<Channel> channels) {
+        ChannelIndex current = ensureIndex(channels);
+        return String.format(java.util.Locale.US, "%,d indexed", current.searchableCount());
+    }
+
+    public int subscriptionCount(List<Channel> channels) {
+        int count = 0;
+        if (channels != null) for (Channel channel : channels) if (channel.isSubscriptionChannel()) count++;
+        return count;
+    }
+
+    public int unavailableCount(List<Channel> channels) {
+        int count = 0;
+        if (channels != null) for (Channel channel : channels) if (channel.isUnavailable()) count++;
+        return count;
+    }
+
+    public synchronized void invalidateIndex() {
+        index = null;
+        indexSignature = Long.MIN_VALUE;
+    }
+
+    private synchronized ChannelIndex ensureIndex(List<Channel> channels) {
+        List<Channel> safe = channels == null ? Collections.emptyList() : channels;
+        long signature = signature(safe);
+        if (index == null || signature != indexSignature) {
+            index = new ChannelIndex(safe, favourites(), historyStore);
+            indexSignature = signature;
         }
-        return false;
+        return index;
     }
 
-    private boolean containsCategory(List<Channel> channels, String expected) {
+    private long signature(List<Channel> channels) {
+        long value = 1125899906842597L;
+        value = value * 31L + channels.size();
         for (Channel channel : channels) {
-            if (channel.isRegularGuideChannel() && channel.category.equalsIgnoreCase(expected)) return true;
+            value = value * 31L + channel.number;
+            value = value * 31L + (channel.id == null ? 0 : channel.id.hashCode());
+            value = value * 31L + (channel.accessState == null ? 0 : channel.accessState.hashCode());
+            value = value * 31L + (channel.requiresSubscription || channel.subscriptionHint ? 1 : 0);
         }
-        return false;
+        value = value * 31L + favourites().hashCode();
+        value = value * 31L + historyStore.recentNumbers(100).hashCode();
+        value = value * 31L + historyStore.topNumbers(100).hashCode();
+        return value;
     }
 
-    private boolean containsSubscription(List<Channel> channels) {
-        for (Channel channel : channels) if (channel.isSubscriptionChannel()) return true;
-        return false;
+    private boolean normalizeAccessState(Channel channel, long now) {
+        boolean changed = false;
+        channel.requiresSubscription = channel.requiresSubscription || channel.subscriptionHint;
+        channel.subscriptionHint = channel.subscriptionHint || channel.requiresSubscription;
+        String state = channel.accessState == null ? Channel.ACCESS_UNKNOWN : channel.accessState;
+        long age = channel.accessUpdatedAt <= 0L ? Long.MAX_VALUE : Math.max(0L, now - channel.accessUpdatedAt);
+        if (Channel.ACCESS_AVAILABLE.equals(state) && age > ACCESS_AVAILABLE_TTL_MS) {
+            state = Channel.ACCESS_UNKNOWN;
+            changed = true;
+        } else if (Channel.ACCESS_UNAVAILABLE.equals(state) && age > ACCESS_UNAVAILABLE_TTL_MS) {
+            state = Channel.ACCESS_UNKNOWN;
+            changed = true;
+        } else if (Channel.ACCESS_SUBSCRIPTION.equals(state)
+                && !channel.requiresSubscription && age > ACCESS_SUBSCRIPTION_TTL_MS) {
+            state = Channel.ACCESS_UNKNOWN;
+            changed = true;
+        }
+        if (channel.requiresSubscription && Channel.ACCESS_UNKNOWN.equals(state)) {
+            state = Channel.ACCESS_SUBSCRIPTION;
+            changed = true;
+        }
+        if (!state.equals(channel.accessState)) channel.accessState = state;
+        if (changed && Channel.ACCESS_UNKNOWN.equals(state)) {
+            channel.accessMessage = "";
+            channel.accessUpdatedAt = 0L;
+        }
+        return changed;
     }
 
-    private boolean containsUnavailable(List<Channel> channels) {
-        for (Channel channel : channels) if (channel.isUnavailable()) return true;
-        return false;
+    private String viewKey(String view) {
+        return Integer.toHexString(ChannelIndex.normalize(view).hashCode());
     }
-
-    private String clean(String value) { return value == null ? "" : value.trim(); }
 
     private List<Channel> loadChannelFile(String name) {
         try {

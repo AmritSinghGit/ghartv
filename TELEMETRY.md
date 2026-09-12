@@ -49,3 +49,8 @@ an admin token that is stored outside Git and outside the APK at:
 ```
 
 Run `GHARTV_TELEMETRY_REPORT.command` on the authorised Mac to open a local report.
+
+## v0.5.4 local suggestion boundary
+
+Local suggestion history is a separate app-private store. Telemetry does not read it
+and successful channel identity or programme history is not added to diagnostic events.

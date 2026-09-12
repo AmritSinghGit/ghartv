@@ -99,14 +99,22 @@ public final class TvUi {
                     focused ? 2.3f : 1f,
                     v.getContext()));
             v.animate()
-                    .scaleX(focused ? 1.045f : 1f)
-                    .scaleY(focused ? 1.045f : 1f)
+                    .scaleX(focused ? 1.035f : 1f)
+                    .scaleY(focused ? 1.035f : 1f)
                     .translationZ(focused ? dp(v.getContext(), 11) : 0)
                     .alpha(focused ? 1f : .96f)
                     .setInterpolator(new AccelerateDecelerateInterpolator())
                     .setDuration(120)
                     .start();
         });
+    }
+
+
+    public static int gridSpanCount(Context context) {
+        int widthDp = context.getResources().getConfiguration().screenWidthDp;
+        if (widthDp >= 900) return 4;
+        if (widthDp >= 650) return 3;
+        return 2;
     }
 
     public static ColorStateList tint(int color) {
