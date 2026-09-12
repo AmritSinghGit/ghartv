@@ -1,0 +1,91 @@
+name: GharTV RC2 bounded preparation
+on:
+  push:
+    paths: ['.github/workflows/prepare-rc2.yml']
+permissions:
+  contents: write
+jobs:
+  prepare-review:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+      - name: Apply bounded changes to verified existing source
+        shell: python
+        run: |
+          from pathlib import Path
+          import hashlib, json, subprocess
+          java=Path('android-tv/app/src/main/java/in/ghartv/nova')
+          def load(path,expected=None):
+              b=path.read_bytes()
+              if expected:
+                  assert hashlib.sha1(b'blob '+str(len(b)).encode()+b'\0'+b).hexdigest()==expected,str(path)+' changed'
+              return b.decode()
+          def change(s,old,new,n=1):
+              assert s.count(old)==n,repr(old)+' matches '+str(s.count(old))
+              return s.replace(old,new)
+          p=java/'MainActivity.java';s=load(p,'3f81e5b899ad4ee38417eea8995146b049e17ac3')
+          s=change(s,'    voiceButton = actionButton(', '    Button movies = actionButton("Movies");\n    movies.setOnClickListener(v -> startActivity(new Intent(this, MovieHubActivity.class)));\n    header.addView(movies, headerButtonParams());\n\n    voiceButton = actionButton(')
+          s=change(s,'new LinearLayout.LayoutParams(TvUi.dp(this, 104), TvUi.dp(this, 38))','new LinearLayout.LayoutParams(TvUi.dp(this, 90), TvUi.dp(this, 38))')
+          s=change(s,'new LinearLayout.LayoutParams(TvUi.dp(this, 144), TvUi.dp(this, 38))','new LinearLayout.LayoutParams(TvUi.dp(this, 128), TvUi.dp(this, 38))')
+          s=change(s,'new LinearLayout.LayoutParams(TvUi.dp(this, 82), -1)','new LinearLayout.LayoutParams(TvUi.dp(this, 62), -1)');p.write_text(s)
+          p=java/'LoginActivity.java';s=load(p,'3388c6a23817600dc2d644aa7cae81d29ac2e3fb')
+          s=change(s,'TextView jio = TvUi.badge(this, "JIO LIVE", TvUi.MINT);','Button jio = TvUi.button(this, "Movies & services", false);\n        jio.setOnClickListener(v -> startActivity(new Intent(this, MovieHubActivity.class)));')
+          s=change(s,'new LinearLayout.LayoutParams(-2, TvUi.dp(this, 28));\n        jioParams','new LinearLayout.LayoutParams(-2, TvUi.dp(this, 40));\n        jioParams');p.write_text(s)
+          p=java/'PlayerActivity.java';s=load(p,'24f3e30cd84ee13e9f389d381d0114679e1bd0db')
+          s=change(s,'    private Channel channel;','    private Channel channel;\n    String pictureChannelId() { return channel == null ? "" : channel.id; }');p.write_text(s)
+          p=java/'PlaybackQualityController.java';s=load(p,'2106ba1b54f4aff3cc2ec08782933f8281d653cc')
+          s=change(s,'                if (details != null) details.setText(description());','                PictureShape.apply(activity, view, ((PlayerActivity) activity).pictureChannelId());\n                if (details != null) details.setText(description());')
+          old='        if (view != null) view.setResizeMode(prefs.getBoolean("picture_zoom", false)\n            ? AspectRatioFrameLayout.RESIZE_MODE_ZOOM : AspectRatioFrameLayout.RESIZE_MODE_FIT);'
+          s=change(s,old,'        PictureShape.apply(activity, view, ((PlayerActivity) activity).pictureChannelId());')
+          start=s.index('    private void showScaling() {');end=s.index('    private void showStats()',start)
+          s=s[:start]+'    private void showScaling() {\n        PictureShape.show(activity, view, ((PlayerActivity) activity).pictureChannelId());\n    }\n'+s[end:]
+          s=change(s,'.setNegativeButton("Fit / fill",','.setNegativeButton("Picture shape",')
+          s=change(s,'Fit/fill uses the existing TV rendering path.','Fit/crop/stretch uses the existing TV rendering path.');p.write_text(s)
+          p=Path('android-tv/app/src/main/AndroidManifest.xml');s=load(p)
+          s=change(s,'<queries><intent><action android:name="android.speech.RecognitionService" /></intent></queries>', '<queries>\n        <intent><action android:name="android.speech.RecognitionService" /></intent>\n        <package android:name="video.laminar.tv.chaupal.android" />\n        <package android:name="com.graymatrix.did" />\n        <package android:name="in.startv.hotstar" />\n    </queries>')
+          s=change(s,'        <provider\n','        <activity android:name=".MovieHubActivity" android:exported="false" android:screenOrientation="landscape" />\n\n        <provider\n');p.write_text(s)
+          p=Path('android-tv/app/build.gradle.kts');s=load(p);s=change(s,'versionCode = 15','versionCode = 16');s=change(s,'0.5.5-rc1-voice-quality','0.5.5-rc2-movies-picture');p.write_text(s)
+          p=Path('VALIDATE_SOURCE.command');s=load(p);s=change(s,"'versionCode = 15'","'versionCode = 16'");s=change(s,'0.5.5-rc1-voice-quality','0.5.5-rc2-movies-picture');s=change(s," 'VoiceSearchController.java','VoiceSearchActivity.java'"," 'MovieHubActivity.java','PictureShape.java','VoiceSearchController.java','VoiceSearchActivity.java'");p.write_text(s)
+          production=json.loads(Path('update/latest.json').read_text());assert production['versionCode']==14
+          assert production['sourceCommit']=='b46b2cd607c309d364d531b5fd9da618cd007f6c'
+          subprocess.run(['git','config','user.name','github-actions[bot]'],check=True)
+          subprocess.run(['git','config','user.email','41898282+github-actions[bot]@users.noreply.github.com'],check=True)
+          subprocess.run(['git','add','android-tv','VALIDATE_SOURCE.command'],check=True)
+          subprocess.run(['git','commit','-m','feat: RC2 official movie-provider hub and per-channel picture shape'],check=True)
+          print('RC2_SOURCE_SHA='+subprocess.check_output(['git','rev-parse','HEAD'],text=True).strip())
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: android-actions/setup-android@v3
+      - name: Compile actual unsigned release
+        run: |
+          set -euo pipefail
+          sdkmanager "platforms;android-36" "build-tools;36.0.0" "platform-tools"
+          bash VALIDATE_SOURCE.command
+          cd android-tv
+          ./gradlew --no-daemon --max-workers=2 :app:assembleRelease
+      - name: Verify and publish source plus unsigned review package only
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          test "$(git ls-remote origin refs/heads/main | cut -f1)" = "$GITHUB_SHA"
+          test -z "$(git status --porcelain --untracked-files=normal)"
+          mkdir -p /tmp/ghartv-review
+          cp android-tv/app/build/outputs/apk/release/app-release-unsigned.apk /tmp/ghartv-review/GharTV-review-unsigned.apk
+          "$ANDROID_HOME/build-tools/36.0.0/aapt" dump badging /tmp/ghartv-review/GharTV-review-unsigned.apk | head -1 > /tmp/ghartv-review/package.txt
+          python - <<'PY'
+          import hashlib,json,subprocess,os
+          from pathlib import Path
+          folder=Path('/tmp/ghartv-review');apk=folder/'GharTV-review-unsigned.apk';badging=(folder/'package.txt').read_text()
+          assert "name='in.ghartv.nova'" in badging and "versionCode='16'" in badging and "versionName='0.5.5-rc2-movies-picture'" in badging
+          value={'source_sha':subprocess.check_output(['git','rev-parse','HEAD'],text=True).strip(),'version_name':'0.5.5-rc2-movies-picture','version_code':16,'unsigned_apk_sha256':hashlib.sha256(apk.read_bytes()).hexdigest(),'signed':False,'installable':False,'run_id':int(os.environ['GITHUB_RUN_ID']),'production_unchanged':True}
+          (folder/'review-build.json').write_text(json.dumps(value,indent=2)+'\n')
+          print('RC2_BUILD='+json.dumps(value))
+          PY
+          git push origin HEAD:main
+          gh release create v0.5.5-rc2 /tmp/ghartv-review/GharTV-review-unsigned.apk /tmp/ghartv-review/review-build.json --repo "$GITHUB_REPOSITORY" --target "$(git rev-parse HEAD)" --prerelease --title 'GharTV 0.5.5 RC2 — owner signing required' --notes 'Owner review source and cloud-built UNSIGNED release package. Do not install the unsigned APK. The canonical Mac command must verify it and sign with the existing owner key. Production remains the approved RC5 code 14. Movies opens official services, not bundled subscriptions. Picture shape is per-channel fit/crop/stretch, not AI upscaling.'
