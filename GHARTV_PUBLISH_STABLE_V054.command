@@ -1,4 +1,3 @@
 #!/bin/bash
-set -Eeuo pipefail
-ROOT="$(cd "$(dirname "$0")" && pwd)"
-exec /bin/bash "$ROOT/GHARTV_PUBLISH_STABLE_V054_FROM_RC4.command" "$@"
+printf '%s\n' 'Production already offers the exact accepted RC5 code 14.' 'The voice/picture code-15 candidate needs owner review, not this old stable publisher.' 'Use CURRENT_HANDOFF.md and GHARTV_SYNC_CURRENT_AND_REPORT.command.'
+exit 2

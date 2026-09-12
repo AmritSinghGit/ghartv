@@ -1,80 +1,67 @@
-# GharTV — canonical product and TV-runtime continuation
+# GharTV — canonical continuation · Cyan Review 2
 
-Owner decision on 12 September 2026: approve the reviewed birthday/photo candidate for production distribution now. The microphone/whole-TV-search defect is explicitly nonblocking. This conversation takes over the existing GharTV donor/product/TV-runtime work; it does not create a second lane.
+## Authority and immediate status
 
-## Durable identity
+Continue the same independent project `ghartv`, repository `AmritSinghGit/ghartv`, branch `main`, Android package `in.ghartv.nova`. This chat is the owner-designated continuation of the GharTV Nova product and TV-runtime donor chats. Do not create another project, branch, checkout, AVD, telemetry service, database or analytics authority.
 
-| Field | Authority |
-| --- | --- |
-| Project repository / lane | `AmritSinghGit/ghartv` / `ghartv` |
-| Existing branch | `main` |
-| Existing checkout | `~/Downloads/GharTV_Nova_v0.4.2` |
-| Android package | `in.ghartv.nova` |
-| Existing review AVD | `GharTV_Nova_Manual_google_tv_API36` |
-| Reviewed application source | `b46b2cd607c309d364d531b5fd9da618cd007f6c` |
-| Application source parent | `968e43b6eaeb774f5b8ab0ede211dc5ae193cf11` |
-| Application build | `0.5.4-rc5-family-photo` / versionCode `14` |
-| Artifact tag | `v0.5.4-rc5` |
-| APK SHA-256 | `6f60d18a78e4b1692d6591d04bcef6e1cfda4252dba976d160a12cef03930199` |
-| Android source build evidence | successful GitHub run `34678914925` |
-| Production update publication | `e91fa93d89e2a36872da19dcceb3fcfa0d48bf96` |
-| Delivery/control SHA | the exact Git commit containing this handoff/runner; record at execution |
+Production is the exact accepted birthday APK: source `b46b2cd607c309d364d531b5fd9da618cd007f6c`, version `0.5.4-rc5-family-photo`, code 14, APK SHA-256 `6f60d18a78e4b1692d6591d04bcef6e1cfda4252dba976d160a12cef03930199`. Its production update manifest was published in `e91fa93d89e2a36872da19dcceb3fcfa0d48bf96`. Physical-TV installation is NOT verified. The current updater offers Download/Later and Android installation confirmation; neither a compulsory-update gate nor silent installation has been shipped.
 
-The production update manifest was changed and read back successfully. The exact existing APK was promoted: no application rebuild, no re-signing, no new package, no provider action and no new application branch. Application source and delivery/control commits are different identities; never label the newer documentation/runner commit as the APK's build source.
+Owner review source is `bf3c9ddc0d4538c98e16590f5d420fafffba5952`, version `0.5.5-rc1-voice-quality`, code 15. Real Android source validation and `assembleDebug` succeeded in run **34682418746**, job **103523363573** on 12 September 2026. This does not prove a release-signed APK or physical-TV success. The canonical Mac runner builds/signs with the existing local key, verifies signer continuity, publishes only a review prerelease, then replaces the app in the existing owner emulator. It NEVER changes `update/latest.json`.
 
-APK: https://github.com/AmritSinghGit/ghartv/releases/download/v0.5.4-rc5/GharTV-Jio-Live-v0.5.4-rc5.apk
+Record the delivery/control commit separately from the application source. Later documentation/launcher commits do not become the APK's source identity.
 
-Update manifest: https://raw.githubusercontent.com/AmritSinghGit/ghartv/main/update/latest.json
+## Correct the old publisher failure
 
-GitHub release metadata still marks RC5 as a prerelease. GitHub's `releases/latest` still selects v0.5.3. The app's production channel uses the explicit RC5 URL above, not that moving GitHub-latest link. The version name remains truthful. Do not run the old FROM_RC5 stable-rebuild publisher as though the reviewed source were still main HEAD.
+The owner ran `GHARTV_RC5_EXACT_STABLE_R1.command publish` at 13:13 IST. It rejected the later reporting/handoff commits with “Application source or other files advanced after RC5.” It exited during preflight and did NOT remove or roll back the already-advertised RC5 production update. Its `UPDATE_ADVERTISED=False` described that run, not the live feed. Supplying the obsolete publisher after adding reporting commits was an assistant delivery conflict.
 
-## What the person at the TV must do
+Stop using that downloaded publisher. In-repository RC4/RC5 stable publishers are now disabled. The single canonical owner entry is `GHARTV_SYNC_CURRENT_AND_REPORT.command`. It permits newer control-only commits while requiring the exact review Android tree, matching launcher bytes, a clean existing checkout and fast-forward ancestry. Unknown or unpushed work is preserved, not reset/stashed/deleted.
 
-Open **GharTV → Jio account → Check for GharTV update → Download update**. If Android requests permission, allow GharTV to install updates, return to the app and check again. Confirm the Android installer and reopen the app. Do not uninstall or clear data. Normal birthday splash duration is 4.8 seconds; the held emulator preview is not production launch behaviour.
+Dad's immediate route: **GharTV → Jio account → Check for GharTV update → Download update → Android Install → Open**. Allow installation by GharTV if Android asks, return and retry. Do not uninstall or clear data. Automatic checks are throttled to 12 hours and do not silently install the APK.
 
-Automatic app checks are throttled to 12 hours. The existing dialog offers **Later**. There is no already-implemented forced-update gate, push notification to an idle/offline TV, silent installation or verified remote install receipt. Publishing the update is not proof of physical-TV installation. Manual update check is the immediate path today.
+## Sharing and live owner analytics
 
-## Owner command and reporting
+Verified short share address: **https://tinyurl.com/2yju9h2t** → https://amritsinghgit.github.io/ghartv/ . Creation and exact redirect verification are recorded in run **34682565284**, job **103523772777** at 08:09:59 UTC. A requested is.gd custom alias failed; do not claim it exists. No separate detailed shortener statistics were requested. The shortener may have its own logging/privacy policy.
 
-`GHARTV_SYNC_CURRENT_AND_REPORT.command` is the continuation entry point. It:
+Owner dashboard shell: **https://amritsinghgit.github.io/ghartv/owner.html**. This static reader reuses the existing `ghartv-telemetry.ghartv-47d9a0.workers.dev` collector and D1 store. It creates no server or database. The hosted page starts locked and requires the existing private collector admin token. It keeps the token only in page memory, not URLs or browser storage, and refuses fetch redirects. The Mac runner reads the existing `~/Library/Application Support/GharTV/telemetry/collector.env` and opens a mode-600 private copy using that credential. Never share that private HTML file or upload it to GitHub.
 
-- Verifies the existing origin/main, clean local state, fast-forward ancestry, unchanged reviewed Android source, live manifest and APK digest. It does not blindly push unknown local files.
-- Reuses the same AVD; starts it only if absent and its existing image/ports are available. Verifies installed APK bytes and does not downgrade, uninstall or reset storage. Does not install on arbitrary physical TVs.
-- Reads the existing collector using its existing local admin credential. The credential is not copied to the HTML, command arguments, GitHub or handoff. Authenticated requests do not follow redirects.
-- Generates a private owner HTML snapshot containing observed pseudonymous installations, last-received timestamps, version adoption, actual timing fields with sample counts/P50/P95, failure and feature-event tables, and a copyable exact-candidate feedback form. Unavailable data is not zero. Export-derived tables cover at most the latest 5,000 events in a 30-day received-time window, not complete household history.
-- Links to the existing Operon GharTV analytics surface when reachable; never starts a duplicate analytics service. Snapshot refresh is a repeat of this command, not a claim of continuous live refresh.
-- Removes only checksum-matched known obsolete RC5 repair installers in Downloads and temporary files created by the current run. Edited/unknown downloads, old repositories/worktrees, logs, signing material, credentials and data are preserved. This is bounded cleanup, not proof that every old Mac artifact has been deleted.
-- Writes per-run receipts under the existing GharTV owner state, a note to the existing Obsidian vault when present, and attempts the existing `amrit-context handoff --file` command. A zero CLI exit does not attest remote memory replication. Does not invent or renumber a global Operon session.
+The dashboard refreshes every **15 seconds while visible**. It displays opted-in diagnostic installation counts, reported versions/models/network types, latest receipt times, feature events, failures, measured *_ms values and available picture-quality samples. Detailed tables use at most **5,000 recent events**, disclose truncation and sample coverage, and show missing/stale data explicitly. “Reported recently” is NOT “currently watching.” Upload lag is separate from dashboard refresh. No website-visitor counter or exhaustive viewing history is implemented.
 
-Private output: `~/Library/Application Support/GharTV/owner-review/current/GHARTV_OWNER_REPORT.html`.
-Run-specific receipts: `~/Library/Application Support/GharTV/owner-review/runs/`.
-Latest copyable handoff: `~/Library/Application Support/GharTV/owner-review/PASTE_TO_CHAT.txt`.
+Its layout, authenticated-contract rendering using mocked responses, HTML-injection resistance, token-field clearing and lock-clearing behavior were checked in Chromium. JavaScript, shell and embedded Python syntax checks passed. These are NOT authenticated live-collector or Mac/physical-TV tests.
 
-No direct Mac, physical TV, local Obsidian or memory-bridge execution was available in the takeover chat. Those states must be learned from the owner's command receipt, not assumed from GitHub success.
+## Implemented in the new Android review source
 
-## Analytics integration authority
+1. App-owned Voice Search activity. Existing GharTV voice action launches it explicitly, not the TV-wide Assistant. Listening is user-initiated and bounded to 15 seconds; on-device recognition is preferred where available, with a disclosed configured-provider fallback and usable text entry. Raw audio and search words are not sent to GharTV telemetry. A physical remote's OS-reserved Assistant button is not assumed interceptable.
+2. Picture button within the existing player panel: Auto adaptive, Highest-supported source, or Data saver preference. Fit/fill uses the existing renderer. No second player/decoder or stream proxy is created.
+3. Live local picture statistics: source pixels, display mode, declared bitrate, estimated media bandwidth, dropped frames and buffer ahead. Optional technical samples are emitted through the existing opt-in telemetry path each 60 seconds. The observer-to-first-frame metric is not full tuning latency.
 
-Continue tenant `ghartv` in existing `operon-analytics`, repository `AmritSinghGit/operon`, branch `codex/opr-analytics-003-vcnow-data-control-convergence`, PR #61. Observed PR head at takeover: `52a66778d717fbb34b7da9aef95e7fd17f378dd1`. The PR is open and unmerged; its older description is not authority over a newer observed head. This handoff does not merge, deploy or replace that analytics candidate.
+**NOT implemented:** AI super-resolution, a new transcoding/upscaling service, mandatory/silent updates, precise device location, website-visit analytics or automatic causal assignment of every buffering problem. A larger output image or higher bitrate is not native source detail. Higher-source mode may buffer and cannot exceed the provider's authorized renditions or decoder support.
 
-Runtime discovery remains the existing `~/Library/Application Support/Operon/operon-command-market-v0.2.0/runtime/server.url` and `/ghartv-analytics.html`. A reachable HTML page is not proof of its exact running application SHA or authenticated report coverage; the receipt states this limitation.
+## Privacy and wider distribution
 
-## Next implementation, in priority order
+The family photograph and birthday mappings are already embedded in the public source/APK from the accepted candidate. Diagnostic consent does not make those packaged assets private. Before wider rollout, separate private household personalization from the public build and review provider distribution/authorization requirements. No family photo, account identifiers, passwords, tokens, stream URLs, precise location or successful programme history should enter owner analytics.
 
-1. **In-app voice:** explicit GharTV microphone returns recognition text to GharTV's channel/programme search; retain remote-first focus and cancellation. Handle permission denied, no recognizer, offline/network errors, empty results and repeated use. Do not promise interception of a TV/remote's OS-reserved Assistant key; establish which button is being used on the physical TV. This does not block today's release.
-2. **Update policy:** add a version-aware mandatory-update policy and visible installation/relaunch state in a future reviewed APK. The already-installed old APK cannot acquire a new blocking behaviour from an unsupported JSON key. Reserve blocking for a deliberate owner policy, include retry/help/offline behaviour, and never label an installer prompt as installation success. Ordinary sideload updates use Android's permitted installation flow; do not promise silent updates.
-3. **Privacy-conscious inventory:** retain the existing random diagnostic identifier; optional owner-friendly household/device labels and optional coarse location with explicit consent and provenance. Do not silently add precise tracking, IP/SSID, account IDs or hardware serial numbers. Build a first-launch/version-seen acknowledgement with timestamps and clear offline/unknown states.
-4. **Performance attribution:** carry an action/playback correlation ID across UI action, catalogue/search, authorization, manifest/segment and decoder/first-frame stages; record bounded numeric timings, HTTP classes, retry/backoff and buffering ratio. Separate device/emulator dimensions without claiming an uncertain heuristic is proof. Distinguish evidence from suspected cause.
-5. **Playback quality:** report actual selected rendition, video dimensions/codec/frame rate, estimated throughput, startup/rebuffer duration and dropped frames using available player analytics. Choose a sustainable authorized rendition, rather than manufacturing bandwidth or detail. Higher re-encoding bitrate does not recover missing source detail. Upscaling would be a separate measured device-capability choice, not a claim of true higher-resolution source.
-6. **Reporting:** converge the bounded snapshot fields into the existing authenticated tenant dashboard, with freshness, consent, retention/deletion, role separation and error alerts. No new reporting backend or public telemetry dump.
+## Canonical local and cross-lane identities
 
-The existing privacy notice excludes successful viewing history, programme titles, Jio account data and exact location. Keep those boundaries unless a new explicit consent design is reviewed. Location/labels and detailed quality telemetry above are planned, not already shipped. The family photograph is already embedded in the public repository/APK: diagnostic privacy does not make that media private. A future private-household personalization design must address this without silently breaking today's accepted experience.
+- Checkout: `~/Downloads/GharTV_Nova_v0.4.2`.
+- Existing AVD: `GharTV_Nova_Manual_google_tv_API36`; prefer the already-running instance, otherwise its existing port 5580. Never create a second AVD or touch a physical TV through a guessed address.
+- Existing signing: `~/Library/Application Support/GharTV/signing/signing.env`; never regenerate or upload the key.
+- Owner outputs: `~/Library/Application Support/GharTV/owner-review/current` plus small evidence runs. One managed launcher at `~/.local/share/ghartv-launcher/current/GHARTV_SYNC_CURRENT_AND_REPORT.command`.
+- Existing Obsidian vault: `~/Documents/Amrit Executive Memory`, handoffs under `90 System/Operon Portfolio/Handoffs/Terminal Runs/ghartv`. Do not create a replacement vault. Mirror run receipt into the existing `~/.local/state/operon-terminal-runs/ghartv`.
+- Existing memory route: `amrit-context handoff --file <note>`. Record exit status, not an unsupported claim that every replica/chat is synced. The owner's previous log reports Obsidian written and bridge commands exit 0; remote readback of all replicas is unverified.
+- Analytics authority remains Operon lane `operon-analytics`, tenant `ghartv`, PR **61**, branch `codex/opr-analytics-003-vcnow-data-control-convergence`, last observed SHA `52a66778d717fbb34b7da9aef95e7fd17f378dd1`. No Analytics merge/deployment or replacement worktree is authorized by this reader delivery.
 
-## Release and recovery discipline
+## Owner command behavior and cleanup
 
-Accepted app SHA → exact APK digest → immutable per-version download URL → owner decision → production-manifest commit → observed version receipt. Future app changes require a new candidate and monotonically higher versionCode. Keep prior signed artifacts in GitHub. Reverting the update offer can stop offering a bad update but does not downgrade already-updated TVs; recovery for them is a tested roll-forward. Do not wipe login to force rollback.
+Default: reconcile existing checkout, verify production feed, remove checksum-matched obsolete installers, build/sign/publish REVIEW APK, open existing emulator, open the live owner dashboard and save handoff. `--dashboard-only` skips build/install. Failures still save a receipt, and a verified checkout can still open the dashboard after a review-build failure. One exclusive owner-run lock prevents simultaneous runs.
 
-Every next handoff records source SHA, delivery SHA, artifact digest, actual runtime/version evidence, owner decision, known gaps, cleanup outcome and next action. Code/handoff facts may be public; private logs, identities, tokens, reports, photos beyond the already-approved assets and household location must not be added to GitHub.
+Cleanup is bounded to known obsolete command bytes, this run's temporary downloads and the previous managed current APK only after successful replacement. Unknown files, worktrees, Git history, keys, credentials, data, Obsidian history, Docker and other lanes are preserved. Do not claim the whole Mac was cleaned.
 
-## Essential checks on this delivery
+First Enter copies the handoff; second Enter permits closing only the managed matching single-tab Apple Terminal window. Other terminals are left open. Hand off production source, review source, delivery/local SHA, APK digest, emulator result, collector authentication, dashboard, Obsidian, bridge, cleanup count and blocker separately.
 
-Bash syntax and embedded Python compilation passed. Bounded synthetic checks covered percentile calculations, unavailable-not-zero states, HTML escaping, sample coverage labels, preserving edited/unrelated installers, missing credentials, private file mode and failure receipts. The report layout and feedback control were rendered in Chromium using an in-memory document. These are helper checks, not a Mac/physical-TV UAT or a live collector read. No long test suite was added to the project.
+## Browser chat versus desktop-app visibility
+
+GitHub and Obsidian do not control ChatGPT account-history synchronization. Check the same OpenAI account and workspace, Chat rather than Codex/Work filtering, All recents and history search; then update/restart or sign out/in as appropriate. Never delete ChatGPT application data or duplicate this development conversation to conceal a history-visibility issue. There is no direct Mac/OpenAI account administration tool in this chat, so the issue is not remotely repaired by these commits.
+
+## Next acceptance
+
+Run the canonical command and return its handoff. On the emulator, check Voice → Start listening/text fallback and full-screen player → Picture → modes/live stats. On dad's TV, separately confirm installed version and birthday/playback behavior. Only promote code 15 after owner acceptance of this review; do not overwrite production with an unreviewed build.
