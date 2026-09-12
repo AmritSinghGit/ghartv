@@ -1,0 +1,21 @@
+{
+  "schema": "ghartv.website-release.v1",
+  "website_revision": "visual-guide-1",
+  "website_implementation_sha": "72c4379345775d5e08a118e2f05bc075709771a0",
+  "repository": "AmritSinghGit/ghartv",
+  "branch": "main",
+  "site": "https://amritsinghgit.github.io/ghartv/",
+  "share_url": "https://tinyurl.com/2yju9h2t",
+  "screenshot_provenance": "visual-guide-evidence.json",
+  "application_changed": false,
+  "production_source_sha": "b46b2cd607c309d364d531b5fd9da618cd007f6c",
+  "android_review_source_sha": "bf3c9ddc0d4538c98e16590f5d420fafffba5952",
+  "owner_launcher_changed": false,
+  "owner_launcher_sha256": "d881494707e32be2dc50e2f4187ff52beb684256d23afa530cda093c9ca2f054",
+  "assets": {
+    "index.html": "git-blob:b54847622bde0fe0195766ddfa822ee6c0322133",
+    "assets/site.css": "git-blob:d5de86923fe8531c759f53aedb83b6b0af9a1c0b",
+    "assets/site.js": "git-blob:927386d000ff6da0b4e0992bff9ba70852245dd2",
+    "assets/player-owner-capture.avif": "sha256:687263e86ddd934c0b4813e7c65db447b871b8c53bc5fe40f8473a1248e98e71"
+  }
+}
