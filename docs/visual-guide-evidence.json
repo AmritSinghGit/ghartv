@@ -1,0 +1,46 @@
+{
+  "schema": "ghartv.website-evidence.v1",
+  "website_revision": "visual-guide-1",
+  "date": "2026-09-12",
+  "source_base": "99270cab331bc6c9e1ace1b4fc8e80701229dddb",
+  "scope": "existing GitHub Pages site only; no Android, production-feed, launcher, collector or analytics runtime change",
+  "screenshot": {
+    "path": "assets/player-owner-capture.avif",
+    "source": "owner-supplied desktop capture in canonical GharTV chat, showing PTC Simran player",
+    "original_size": [2048,1323],
+    "app_only_crop_xyxy": [122,154,1254,790],
+    "published_size": [720,405],
+    "processing": "crop to app viewport, proportional web-size resampling, AVIF encoding; no fabricated or retouched UI",
+    "sha256": "687263e86ddd934c0b4813e7c65db447b871b8c53bc5fe40f8473a1248e98e71",
+    "git_blob": "62ef59c22959b1984285b41284eae682dbb34c70",
+    "source_capture_install_sha": "NOT_VERIFIABLE_FROM_SCREENSHOT",
+    "private_surrounding_desktop_published": false,
+    "detail_view": "CSS crop of the SAME capture; not a separate screen or newer candidate"
+  },
+  "public_apk": {
+    "version": "0.5.4-rc5-family-photo",
+    "version_code": 14,
+    "source_sha": "b46b2cd607c309d364d531b5fd9da618cd007f6c",
+    "apk_sha256": "6f60d18a78e4b1692d6591d04bcef6e1cfda4252dba976d160a12cef03930199",
+    "unchanged": true
+  },
+  "review_source_sha": "bf3c9ddc0d4538c98e16590f5d420fafffba5952",
+  "checks": {
+    "node_javascript_syntax": "PASS",
+    "chromium_offline_layout_and_interactions": "PASS",
+    "desktop_viewport": [1440,1000],
+    "mobile_viewport": [390,844],
+    "image_decode": "PASS",
+    "horizontal_overflow": "NONE_AT_CHECKED_VIEWPORTS",
+    "install_tabs_keyboard": "PASS",
+    "picture_shape_illustration": "PASS",
+    "screenshot_modal_escape": "PASS",
+    "manifest_origin_rejection_and_fallback": "PASS",
+    "limitations": "Browser local URL navigation was blocked by environment policy. Checks rendered the page markup with identical inline assets and controlled fetch responses, not live HTTP/CSP integration. No Mac/physical-TV execution. No user telemetry or account data used."
+  },
+  "next_app_feedback": {
+    "requested": "per-channel Original/Fit, Zoom/Crop and Stretch to screen, reset to original; source-aspect/pixel-aspect diagnosis before treating embedded bars",
+    "current_review": "fit and crop with global preference; Stretch and per-channel preferences NOT implemented",
+    "super_resolution": "NOT_IMPLEMENTED; distinguish source selection, render resizing and AI reconstruction"
+  }
+}

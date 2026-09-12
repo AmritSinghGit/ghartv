@@ -1,4 +1,23 @@
-# GharTV — canonical continuation · Cyan Review 2
+# GharTV — canonical continuation · Visual guide 1 / Cyan Review 2
+
+## Latest owner feedback and website delivery — 12 September 2026
+
+The owner asked for real app screenshots, the interface, remote controls and how-to-use content on the existing GitHub Pages site. The preceding unanswered feedback concerns PTC channels apparently displayed in 4:3, filling a 16:9 screen and improving SD sources toward HD/4K.
+
+The existing `docs/index.html` is now a responsive product/onboarding page with an app-only crop of the owner-supplied player capture, an enlarged detail of that SAME capture, screenshot lightbox, browse/preview/watch instructions, first-install/update tabs, remote key guide, interactive picture-shape illustration, troubleshooting/privacy and version/source/checksum data from the public update feed. The illustration labels Fit, Zoom/Crop and Stretch as explanatory transformations, not proof those app controls have shipped. The raw desktop screenshot, WhatsApp contacts/messages, phone numbers, family-chat content and other surrounding windows were NOT uploaded to GitHub. Image provenance and bounded validation are in `docs/visual-guide-evidence.json`.
+
+This website delivery changes ONLY public docs/assets and this handoff. It does not change `android-tv`, `update/latest.json`, the current owner launcher, signing, collector, D1, owner dashboard or Operon Analytics. No replacement app candidate or Mac command is needed to view the site. The previously issued Cyan Review 2 launcher remains byte-identical (SHA256 `d881494707e32be2dc50e2f4187ff52beb684256d23afa530cda093c9ca2f054`) and can accept this newer control-only main after its existing source/cleanliness checks. Do not rerun old stable publishers.
+
+Actual browser checks rendered the site markup and same assets in Chromium offline at 1440×1000 and 390×844, with controlled public-manifest responses: image decode, no horizontal overflow, installation-tab keyboard interaction, aspect-mode interaction, screenshot modal Escape and rejection of an untrusted APK origin passed. Local URL navigation was blocked by the environment; this is NOT a claim of live HTTP/CSP integration testing. No live user diagnostics or credentials were used. No Mac/physical-TV cleanup or Obsidian replication was performed remotely in this website turn.
+
+### Carry into the next Android review, not silently into production
+
+- Keep Original/Fit as the undistorted default. Offer clearly named Zoom/Crop and Stretch-to-screen choices, ideally remembered locally per channel with reset. Current RC1 source has global Fit/Crop only: Stretch and per-channel preferences remain NOT implemented.
+- A true 4:3 source uniformly zoomed into 16:9 loses about 25% of its original height in total; stretch widens objects by one third. Determine the actual source size, pixel aspect and whether bars are encoded into the video before adding automatic cropping. The supplied screenshot alone does not establish the encoded format or all PTC channels' behavior.
+- Distinguish selecting a provider-supplied HD rendition, display resampling and AI super-resolution. No AI enhancement service, source transcoder or 4K reconstruction is implemented. Media3's ordinary video-effects path does not support DRM-protected content; do not bypass protection to add enhancement.
+- Real screenshots of guide/search/picture settings can be added after capturing and inspecting those actual app screens. Never publish invented UI, private owner analytics or account details as marketing screenshots.
+
+Technical references: https://developer.android.com/reference/kotlin/androidx/media3/ui/AspectRatioFrameLayout and https://developer.android.com/reference/androidx/media3/exoplayer/ExoPlayer .
 
 ## Authority and immediate status
 
@@ -28,7 +47,7 @@ The dashboard refreshes every **15 seconds while visible**. It displays opted-in
 
 Its layout, authenticated-contract rendering using mocked responses, HTML-injection resistance, token-field clearing and lock-clearing behavior were checked in Chromium. JavaScript, shell and embedded Python syntax checks passed. These are NOT authenticated live-collector or Mac/physical-TV tests.
 
-## Implemented in the new Android review source
+## Implemented in the Android review source
 
 1. App-owned Voice Search activity. Existing GharTV voice action launches it explicitly, not the TV-wide Assistant. Listening is user-initiated and bounded to 15 seconds; on-device recognition is preferred where available, with a disclosed configured-provider fallback and usable text entry. Raw audio and search words are not sent to GharTV telemetry. A physical remote's OS-reserved Assistant button is not assumed interceptable.
 2. Picture button within the existing player panel: Auto adaptive, Highest-supported source, or Data saver preference. Fit/fill uses the existing renderer. No second player/decoder or stream proxy is created.
@@ -64,4 +83,4 @@ GitHub and Obsidian do not control ChatGPT account-history synchronization. Chec
 
 ## Next acceptance
 
-Run the canonical command and return its handoff. On the emulator, check Voice → Start listening/text fallback and full-screen player → Picture → modes/live stats. On dad's TV, separately confirm installed version and birthday/playback behavior. Only promote code 15 after owner acceptance of this review; do not overwrite production with an unreviewed build.
+Review the live public site's screenshots, install/update instructions and picture-shape explainer. The website update itself needs no TV installation. Continue the existing Cyan Review 2 command for the Android review: Voice → Start listening/text fallback and full-screen player → Picture → modes/live stats. Separately confirm the installed version on dad's TV. Only promote a new APK after owner acceptance; do not equate this website publication with a new Android deployment.
