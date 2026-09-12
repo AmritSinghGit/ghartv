@@ -108,7 +108,7 @@ def dashboard():
     except Exception as e:
         r['collector_auth']='UNAVAILABLE_'+type(e).__name__; token=''
     boot={'token':token,'run_id':RUN_ID,'review_source':REVIEW,'control_sha':r['delivery_sha'],'review_apk_sha256':r['review_apk_sha256']}
-    payload=json.dumps(boot).replace('<','\u003c').replace('>','\u003e').replace('&','\u0026')
+    payload=json.dumps(boot).replace('<',chr(92)+'u003c').replace('>',chr(92)+'u003e').replace('&',chr(92)+'u0026')
     page=template.read_text().replace('<!--OWNER_BOOTSTRAP-->','<script id="owner-bootstrap" type="application/json">'+payload+'</script>')
     target=CURRENT/'owner.html'; write(target,page); r['dashboard_path']=str(target)
     cmd(['open',target]); r['dashboard']='OPENED_AUTO_REFRESH_15_SECONDS'
