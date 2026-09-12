@@ -1,0 +1,56 @@
+name: Verify owner delivery
+on:
+  push:
+    paths: ['.github/workflows/owner-delivery.yml']
+permissions:
+  contents: write
+jobs:
+  bounded-delivery-check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - name: Verify and harden the exact delivered runner
+        shell: python
+        run: |
+          from pathlib import Path
+          import hashlib, json, os, subprocess, tempfile
+          p=Path('GHARTV_SYNC_CURRENT_AND_REPORT.command')
+          raw=p.read_bytes()
+          blob=hashlib.sha1(b'blob '+str(len(raw)).encode()+b'\0'+raw).hexdigest()
+          assert blob=='b03da0f34f991a7bee72ca1184a81b5187935099', 'Runner changed; no speculative patch'
+          lines=raw.decode().splitlines()
+          matches=[i for i,line in enumerate(lines) if line.startswith('    payload=json.dumps(boot)')]
+          assert len(matches)==1
+          lines[matches[0]]="    payload=json.dumps(boot).replace('<',chr(92)+'u003c').replace('>',chr(92)+'u003e').replace('&',chr(92)+'u0026')"
+          source='\n'.join(lines)+'\n'
+          p.write_text(source)
+          subprocess.run(['bash','-n',str(p)],check=True)
+          embedded=source.split("<<'PY'\n",1)[1].split('\nPY\n',1)[0]
+          compile(embedded,str(p),'exec')
+          with tempfile.TemporaryDirectory() as tmp:
+            environment=dict(os.environ,HOME=tmp,GHARTV_PROJECT=tmp+'/missing-checkout')
+            result=subprocess.run(['bash',str(p.resolve()),'--noninteractive'],env=environment,capture_output=True,text=True,timeout=20)
+            assert result.returncode==1 and 'Canonical checkout missing' in result.stdout
+            receipts=list(Path(tmp).rglob('receipt.json'))
+            assert len(receipts)==1
+            receipt=json.loads(receipts[0].read_text())
+            assert receipt['production_feed']=='NOT_CHECKED' and receipt['emulator']=='UNCHANGED'
+            assert receipt['status']=='ACTION_REQUIRED'
+          data=p.read_bytes()
+          print('OWNER_RUNNER_SHA256='+hashlib.sha256(data).hexdigest())
+          print('OWNER_RUNNER_GIT_BLOB='+hashlib.sha1(b'blob '+str(len(data)).encode()+b'\0'+data).hexdigest())
+          print('OWNER_RUNNER_SYNTAX_AND_FAILURE_RECEIPT=PASS')
+          manifest=json.loads(Path('update/latest.json').read_text())
+          assert manifest['versionCode']==14 and manifest['sha256']=='6f60d18a78e4b1692d6591d04bcef6e1cfda4252dba976d160a12cef03930199'
+          print('PRODUCTION_RC5_PRESERVED=YES')
+      - name: Publish only the verified bounded correction
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git ls-remote origin refs/heads/main | cut -f1)" = "$GITHUB_SHA"
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add GHARTV_SYNC_CURRENT_AND_REPORT.command
+          git commit -m 'fix: escape private owner-page bootstrap safely'
+          git push origin HEAD:main
+          echo "OWNER_DELIVERY_SHA=$(git rev-parse HEAD)"
