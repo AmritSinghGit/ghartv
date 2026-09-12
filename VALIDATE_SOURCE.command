@@ -9,7 +9,7 @@ required=[
  'SplashActivity.java','MainActivity.java','PlayerActivity.java','Channel.java','ChannelRepository.java','ChannelIndex.java',
  'WatchHistoryStore.java','Telemetry.java','UpdateManager.java','JioApiClient.java','Program.java',
  'FamilyTheme.java','CelebrationView.java','AuroraBackgroundView.java','HeroPreviewController.java',
- 'VoiceSearchController.java','ProgramSearchService.java','EngagementTracker.java'
+ 'VoiceSearchController.java','VoiceSearchActivity.java','PlaybackQualityController.java','ProgramSearchService.java','EngagementTracker.java'
 ]
 missing=[name for name in required if not (java/name).is_file()]
 if missing: raise SystemExit('Missing required source: '+', '.join(missing))
@@ -18,8 +18,7 @@ for photo in ['family_dad_simrat_splash.webp','family_dad_simrat_backdrop.webp']
     if not p.is_file() or p.stat().st_size < 5000: raise SystemExit('Missing family photo asset: '+photo)
 for xml in (app/'src/main').rglob('*.xml'): ET.parse(xml)
 gradle=(app/'build.gradle.kts').read_text()
-assert (('versionCode = 14' in gradle and 'versionName = "0.5.4-rc5-family-photo"' in gradle)
-        or ('versionCode = 15' in gradle and 'versionName = "0.5.4"' in gradle)), gradle
+assert 'versionCode = 15' in gradle and 'versionName = "0.5.5-rc1-voice-quality"' in gradle, gradle
 manifest=(app/'src/main/AndroidManifest.xml').read_text()
 assert 'android.software.leanback' in manifest and 'android.hardware.touchscreen' in manifest
 assert 'android:required="false"' in manifest
@@ -61,9 +60,10 @@ for p in spell_paths:
 for marker in ['GHARTV_TELEMETRY_ADMIN_TOKEN','collector.env','Authorization: Bearer']:
     if marker in all_text: raise SystemExit('Secret boundary failed: '+marker)
 update=json.loads((root/'update/latest.json').read_text())
-assert ((update['versionCode']==10 and update['versionName']=='0.5.3-observability')
-        or (update['versionCode']==15 and update['versionName']=='0.5.4')), update
-# Lexical brace/string balance; the candidate command additionally performs a real local Gradle compile before push.
+assert update['versionCode']==14 and update['versionName']=='0.5.4-rc5-family-photo', update
+assert update['sha256']=='6f60d18a78e4b1692d6591d04bcef6e1cfda4252dba976d160a12cef03930199', update
+assert update['sourceCommit']=='b46b2cd607c309d364d531b5fd9da618cd007f6c', update
+# Lexical balance supplements the real Android build; it is not a compiler.
 for path in java.glob('*.java'):
     s=path.read_text(); depth=0; quote=None; esc=False; line=False; block=False; i=0
     while i<len(s):
@@ -85,5 +85,5 @@ for path in java.glob('*.java'):
             if depth<0: raise SystemExit(f'Brace underflow: {path}')
         i+=1
     if depth or quote or block: raise SystemExit(f'Lexical balance failed: {path}')
-print(f'GHARTV_SOURCE_VALIDATION=PASS · {len(list(java.glob("*.java")))} Java files · RC5 photo splash and automatic preview · stable update held at v0.5.3')
+print(f'GHARTV_SOURCE_VALIDATION=PASS · {len(list(java.glob("*.java")))} Java files · voice/quality RC1 source · production exact RC5 code 14 preserved')
 PY
