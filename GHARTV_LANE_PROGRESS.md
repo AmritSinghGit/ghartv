@@ -10,6 +10,17 @@ canonical_handoff: CURRENT_HANDOFF.md
 <!-- GHARTV-MANAGED-LANE-NOTE:v1 -->
 # GharTV — cross-lane progress and next acceptance
 
+## Latest owner receipt — signing recovery, 12 September 2026
+
+Observed owner run `GHARTV-CYAN-4-20260912T133236Z-77995` at delivery/local SHA `2723c40449607e11ec17e9314a58621ceb25bb72`: Obsidian **WRITTEN_AND_READBACK_VERIFIED**, memory bridge handoff exit0/sync exit0 (replica readback unverified), public code14 advertised; native signing failed, signed APK NOT_VERIFIED, emulator UNCHANGED, dashboard NOT_OPENED. This is real local memory success but NOT an installed RC2. The pasted handoff contains no native signer stderr, so the exact password/alias/keystore failure is not diagnosed. Do not blame an incorrect user password without evidence.
+
+Earlier v0.5.2/v0.5.3 scripts reused the existing `~/Library/Application Support/GharTV/signing/signing.env` and `ghartv-release.jks`. Cyan Review4 regressed that operation by ignoring the configuration and asking the owner for the path, alias and password manually. Cyan Review5 restores bounded reuse of that exact existing local configuration. It parses only the four documented signing variables as data (no shell execution), gives passwords only to the local apksigner child through documented environment-variable inputs, and neither logs nor uploads those values. No password prompt, new key, brute-force retry, Gradle rebuild or production change. Missing/invalid configuration stops with a specific diagnostic code instead of asking the owner to guess.
+
+Same RC2 source and cloud-built unsigned APK. Verify package, compiled payload and certificate continuity against public RC5 before review-only upload and data-preserving installation in the existing named AVD. Confirm installed bytes and foreground GharTV activity, not merely a successful installer invocation. Publish only the signed review APK, never a keystore/config/log. Existing source and unknown notes/files remain preserved. Signing diagnostics contain allowlisted stage/status/error codes, not raw stderr or secrets. Open the existing owner report even if review preparation fails, without asserting authenticated/updated report data.
+
+The new helper has not been run on the owner's Mac at publication. Do not carry forward the old memory receipt as proof that the new note was written or that RC2 was installed. The new copied receipt is the acceptance evidence. The older manual-signing directions below are historical context, superseded by this section and CURRENT_HANDOFF.md.
+
+
 ## Authority and observed releases
 
 GharTV is a separate product/project, not VCNow. Preserve existing repo `AmritSinghGit/ghartv`, lane `ghartv`, branch `main`, Android package `in.ghartv.nova`, checkout `~/Downloads/GharTV_Nova_v0.4.2`, existing signing identity and AVD `GharTV_Nova_Manual_google_tv_API36`. No duplicate project, branch, worktree, runtime or tenant.

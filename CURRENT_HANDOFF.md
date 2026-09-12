@@ -1,51 +1,39 @@
-# GharTV — Cyan Review4 delivery / same Movies & Picture RC2
+# GharTV — Cyan Review5 signing recovery / SAME RC2 application
 
-## Authority
+## Observed owner evidence
 
-Independent project/lane `ghartv`, repository `AmritSinghGit/ghartv`, branch `main`, package `in.ghartv.nova`. No duplicate checkout, AVD, signing identity, tenant or analytics runtime. Read **GHARTV_LANE_PROGRESS.md** for the cross-lane memory, owner requirement and primary-source research. PRODUCT_COMMERCIALIZATION.md remains the commercial direction; it is not launch clearance.
+Run `GHARTV-CYAN-4-20260912T133236Z-77995`, delivery/local `2723c40449607e11ec17e9314a58621ceb25bb72`: Obsidian WRITTEN_AND_READBACK_VERIFIED; bridge handoff0/sync0 with replica readback unverified. Native signing failed. Signed APK NOT_VERIFIED, emulator UNCHANGED, dashboard NOT_OPENED. This establishes successful local memory transport and failed app delivery, not an installed RC2. The pasted receipt contains no native signer stderr; exact original password/alias/keystore failure remains unknown.
 
-## Observed releases
+The password prompt was an assistant-introduced regression. Earlier v0.5.2/v0.5.3 scripts loaded the existing signing.env and keystore automatically; Review4 deliberately ignored them and requested manual path/alias/password. Do not tell the owner their password was definitely wrong.
 
-Production remains `0.5.4-rc5-family-photo`, code14, source `b46b2cd607c309d364d531b5fd9da618cd007f6c`, APK SHA256 `6f60d18a78e4b1692d6591d04bcef6e1cfda4252dba976d160a12cef03930199`. Public update manifest unchanged. Android confirmation is required; no mandatory/silent installation. Dad's installed state is unverified.
+## Recovery published, execution pending
 
-Owner review remains `0.5.5-rc2-movies-picture`, code16, application source `b4d0304441b7d00833e4d475c16e43e1ef92b3f3`, unsigned APK SHA256 `32efc94eaa635b3da1d1895570b857e9f5d2dea5b5bed1151818c48d03a7cd21`, tag `v0.5.5-rc2`. Actual release compilation passed in run34686776416/job103535017009. Latest release read still showed only unsigned APK/build record. Signing and running-emulator evidence await the owner command; do not invent a signed digest.
+Canonical entry stays `GHARTV_SYNC_CURRENT_AND_REPORT.command`, now Cyan Review5. SHA256 `75dcc31ee1a76381077d6733c2538664de1a82d616959ea92fd7cfc3db41e831`. It replaces the managed runner, not the app source. No new branch/worktree/AVD/product or local Gradle rebuild.
 
-Implemented in RC2: official Chaupal/ZEE5/JioHotstar provider directory, Movies before Jio login, per-channel Original/Fit, Zoom/Crop, Stretch/reset, prior app-owned voice and opt-in diagnostics. Account-aware movie aggregation, title entitlement verification, universal login and AI upscaling are NOT implemented.
+The default review run reuses exact existing `~/Library/Application Support/GharTV/signing/signing.env` and `ghartv-release.jks`. Parse only GHARTV_SIGNING_STORE, GHARTV_SIGNING_STORE_PASSWORD, GHARTV_SIGNING_KEY_ALIAS and GHARTV_SIGNING_KEY_PASSWORD as data, never source/eval shell commands. Validate canonical key path, ownership and private config permissions. Supply both passwords only to the local apksigner child through documented environment-variable inputs. Do not read them through chat, print, retain in diagnostics, upload or pass as literal command-line arguments. No password prompt, guessing, retry loop, new key or key rotation. Invalid/missing configuration yields a specific safe error code. Native raw stderr is not retained; only allowlisted error category/exit status is saved.
 
-## Latest owner requirement
+Reuse an existing verified signed RC2 asset when present. Otherwise sign the pinned unsigned cloud package; verify payload equality, package/version and certificate continuity against accepted RC5. Publish only the signed REVIEW APK to the existing prerelease. Never write update/latest.json, upload secrets, clobber a different review asset or clear/uninstall a TV app.
 
-GharTV should show titles available through the household's existing subscriptions, not just app shortcuts. Proposed implementation: approved regional catalogue, My services preferences, documented title/provider links, reuse the provider app's own valid session, and sanctioned provider authorisation/entitlement interfaces where available. Record purchase route, device/TV support, plan, region and last verification. Same phone/email, app installed, user selected and title access verified are distinct states.
+Reuse the existing named AVD; install with -r only after checks; pull and hash the installed APK; wake and open MainActivity; require a running GharTV process and resumed GharTV activity before REVIEW_READY. Record post-install state separately if foregrounding fails. The physical TV is never selected by this launcher. Open the existing local owner report or locked hosted shell independently from signing outcome, without claiming authenticated/fresh report data.
 
-Google TV service selection, JustWatch's contracted catalogue API, Chaupal's existing-account QR activation and Airtel/Tata subscription arrangements are documented in GHARTV_LANE_PROGRESS.md. No public universal entitlement endpoint or GharTV partner contract was verified. No account was queried. Do not claim catalogue availability proves a particular person's paid access or use private app storage/cookies/DRM bypass.
+Memory-first and final receipt behavior remain: write/readback the existing managed Obsidian lane note, invoke existing amrit-context handoff/sync-once, record actual bridge exit codes, preserve unmanaged notes, and save safe run evidence. First Enter copies; second permits closing only the matching dedicated single-tab Apple Terminal. No terminal-global changes. The old owner receipt is not proof that this new note/update has already run.
 
-## Corrected review route — Obsidian first
+## Application identities do not change
 
-Canonical file **GHARTV_SYNC_CURRENT_AND_REPORT.command**, Cyan Review4, SHA256 **e797636a8718a67273ef68ce240c9d5e3bbe5f1201ea96b4864c70e0248654b5**. Same RC2 compiled payload, no Gradle rebuild. This supersedes the source-only Cyan Review3 delivery and the earlier review4 helper bytes. No new product candidate.
+Independent project/lane `ghartv`, repo `AmritSinghGit/ghartv`, branch main, package `in.ghartv.nova`. Checkout `~/Downloads/GharTV_Nova_v0.4.2`. Existing AVD `GharTV_Nova_Manual_google_tv_API36`, normally emulator-5580. Managed download `~/.local/share/ghartv-launcher/current`. State `~/Library/Application Support/GharTV/owner-review`.
 
-The helper verifies current GitHub runner/note bytes, writes and reads back the existing Obsidian lane note before any checkout/signing check, invokes existing `~/bin/amrit-context` or PATH equivalent handoff/sync-once, and records actual outcomes. Missing/failed mirrors do not automatically block otherwise safe review. Dirty local source is preserved while the memory step still runs.
+Owner application remains **0.5.5-rc2-movies-picture / code16**, source **b4d0304441b7d00833e4d475c16e43e1ef92b3f3**, unsigned SHA256 **32efc94eaa635b3da1d1895570b857e9f5d2dea5b5bed1151818c48d03a7cd21**, tag v0.5.5-rc2. Actual Android release compilation was previously successful in run34686776416/job103535017009. GitHub release still contained only unsigned APK/build metadata at this recovery's initial read. Signed hash and actual installed candidate await owner execution.
 
-Then it verifies expected clean main/origin/ancestry and the exact RC2 Android tree, fast-forwards only, and checks public RC5 remains unchanged. No reset/stash/force-push/new clone/worktree. At the terminal the owner types **REVIEW RC2** to permit review-only signing/upload/emulator installation; Enter defers. `--memory-only` skips review. `--signed-apk <file>` allows an owner-supplied signed APK subject to all checks.
+Public production remains **0.5.4-rc5-family-photo / code14**, source **b46b2cd607c309d364d531b5fd9da618cd007f6c**, APK SHA256 **6f60d18a78e4b1692d6591d04bcef6e1cfda4252dba976d160a12cef03930199**. No production promotion, silent/mandatory-update implementation or physical-TV verification.
 
-Signing uses Android's native apksigner prompt and the owner-selected EXISTING keystore. The helper does not parse signing.env or collector.env, capture/store passwords, generate keys or upload credentials. Terminal I/O uses a raw non-seekable file wrapper, not buffered r+; prompt read/write was checked with a real pseudoterminal. A previously published exact signed review artifact is reused instead of re-signing.
+RC2 contains the official Movies directory (Chaupal/ZEE5/JioHotstar), Movies before Jio login, per-channel Original/Fit, Zoom/Crop, Stretch/reset, retained in-app voice and optional diagnostics. Account-aware content discovery/entitlements, universal provider login and AI super-resolution remain pending. See GHARTV_LANE_PROGRESS.md and PRODUCT_COMMERCIALIZATION.md; commercial/content rights and customer isolation remain separate requirements.
 
-Before publication/install, verify compiled ZIP payload matches exact unsigned RC2, certificate matches accepted RC5 and aapt reports the correct package/code16/version. Upload only the signed APK to existing `v0.5.5-rc2`; refuse conflicting assets, no clobber. Never write update/latest.json or mark production accepted.
+## Cleanup and review
 
-Use only existing AVD `GharTV_Nova_Manual_google_tv_API36`; reuse one matching runtime or start that existing AVD on free5580/5581. No new AVD/physical-TV action. Refuse newer/different code16/signature mismatch; never uninstall or clear data. Install in place, pull/verify installed APK bytes, launch, then replace the managed current APK. On failure preserve the old managed candidate.
+Remove only checksum-matched obsolete delivery kits/commands and this run's temporary files. Remove managed unsigned RC2 only after signed replacement. Preserve keys/config, app data, previous runtime until replacement, unknown files, Git history, Obsidian history, Docker and other lanes. This is not a whole-Mac cleanup.
 
-Finally write the measured handoff and refreshed Obsidian note/bridge receipt. First Enter copies; second permits closing only the managed matching single-tab Apple Terminal. No terminal-global repair or unrelated-window closure. Open existing private local dashboard file or hosted locked shell; opening is not authentication proof.
+When the app opens: check Movies, return from a provider, set different picture shapes on two channels and verify reset, then check in-app Voice. Verify version16 and the printed signed/installed digest. Do not treat cloud native-signing validation or an upload as proof that the Mac emulator is open.
 
-## Canonical paths and cleanup
+Local checks passed syntax, bounded config parsing (quoted and shell-escaped spaces), child-only credential transport, secret-free error classification, missing/invalid/private-config guards. A single focused cloud validation exercises actual Android signing of the RC2 payload with a disposable test-only identity, never the owner's key and never published as an artifact. Refer to the actual workflow result before claiming it passed. No new persistent test suite or owner-Mac signing was run here.
 
-Checkout `~/Downloads/GharTV_Nova_v0.4.2`. Signing folder `~/Library/Application Support/GharTV/signing`. Managed runner `~/.local/share/ghartv-launcher/current`. Outputs `~/Library/Application Support/GharTV/owner-review/current` and small run receipts.
-
-Existing vault `~/Documents/Amrit Executive Memory`. Note `90 System/Operon Portfolio/Handoffs/Terminal Runs/ghartv/GharTV - Current Progress.md`. Managed marker required before replacing a current note; preserve an unmanaged file and write a unique note instead. Actual readback and bridge exit status are distinct from all-chat/replica visibility. There is no direct Mac/Obsidian execution connector in this chat, so new local state awaits the owner receipt.
-
-Cleanup only deletes checksum-matched obsolete downloaded kits/commands and owned temporary downloads. Remove the known managed unsigned RC2 copy only after signed replacement. Preserve unknown files, signing keys, credentials, source, histories, Docker, private reports and all other lanes.
-
-## Checks and next acceptance
-
-Passed Bash and embedded-Python syntax; three isolated controlled transport/Git/bridge simulations (clean memory sync, dirty checkout preservation, unmanaged note preservation); known-ZIP cleanup/unknown-file preservation; synthetic APK payload comparison. Real pseudoterminal read/write passed after correcting the non-seekable terminal issue. No native Mac signing, owner Obsidian replication, authenticated dashboard, actual AVD installation, provider playback or Android rebuild was executed here. Published helper is not proof of those outcomes.
-
-Cross-lane records posted in existing Operon owner-control PR39 and Analytics PR61. Keep tenant `ghartv`, lane `operon-analytics`; no branch/runtime/collector change, new tenant, merge or deployment. Updated helper identity should supersede the earlier delivery link, while the Android source stays unchanged.
-
-Review Movies/open/return and missing-app paths; two channels with different picture shape and reset; Voice permission/fallback; local picture diagnostics. This review is NOT acceptance of the next account-aware discovery requirement. Return the actual handoff before claiming installed RC2 or Obsidian completion. Production promotion and commercial/content rights remain separate explicit decisions.
+Cross-lane authority stays Operon Owner Control PR39 and existing Analytics tenant ghartv/lane operon-analytics/PR61. Record the observed memory success and signing failure there; no duplicate runtime, tenant, schema, merge or deployment. New success must be established from the owner-run receipt.
