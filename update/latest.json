@@ -1,8 +1,17 @@
 {
-  "versionCode": 10,
-  "versionName": "0.5.3-observability",
-  "apkUrl": "https://github.com/AmritSinghGit/ghartv/releases/latest/download/GharTV-Jio-Live.apk",
-  "sha256": "2d64fe5dac4fc03dd49b9dfe472288af5d5f2ecedd18e105f1fd3d9fe72151fc",
-  "notes": "Opt-in privacy-filtered diagnostics and error reporting, local preview/delete controls, 30-day retention and owner telemetry report. No mobile number, OTP, Jio credentials, stream URLs or successful channel viewing history are sent.",
-  "publishedAt": "2026-09-02T04:02:15.628382+00:00"
+  "versionCode": 14,
+  "versionName": "0.5.4-rc5-family-photo",
+  "apkUrl": "https://github.com/AmritSinghGit/ghartv/releases/download/v0.5.4-rc5/GharTV-Jio-Live-v0.5.4-rc5.apk",
+  "sha256": "6f60d18a78e4b1692d6591d04bcef6e1cfda4252dba976d160a12cef03930199",
+  "notes": "Owner-approved family celebration update: birthday launch screen and photo, automatic bounded muted channel preview, programme search and playback recovery. This is the exact reviewed RC5 APK, not a rebuild. In-app microphone behaviour remains a known follow-up. Android asks you to confirm installation; existing login and settings are retained by an in-place update.",
+  "publishedAt": "2026-09-12T07:00:48Z",
+  "channel": "production",
+  "artifactTag": "v0.5.4-rc5",
+  "sourceCommit": "b46b2cd607c309d364d531b5fd9da618cd007f6c",
+  "ownerDecision": "APPROVED_FOR_PRODUCTION_DISTRIBUTION_2026_09_12",
+  "distributionMode": "promote-exact-reviewed-binary",
+  "mandatoryUpdateSupported": false,
+  "silentInstallSupported": false,
+  "previousVersionCode": 10,
+  "previousArtifactSha256": "2d64fe5dac4fc03dd49b9dfe472288af5d5f2ecedd18e105f1fd3d9fe72151fc"
 }
