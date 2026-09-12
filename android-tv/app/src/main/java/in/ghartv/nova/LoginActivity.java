@@ -95,8 +95,9 @@ public final class LoginActivity extends Activity {
         TextView brand = TvUi.label(this, "GHAR TV", 23, TvUi.TEXT, true);
         brand.setLetterSpacing(.14f);
         brandRow.addView(brand, new LinearLayout.LayoutParams(-2, TvUi.dp(this, 40)));
-        TextView jio = TvUi.badge(this, "JIO LIVE", TvUi.MINT);
-        LinearLayout.LayoutParams jioParams = new LinearLayout.LayoutParams(-2, TvUi.dp(this, 28));
+        Button jio = TvUi.button(this, "Movies & services", false);
+        jio.setOnClickListener(v -> startActivity(new Intent(this, MovieHubActivity.class)));
+        LinearLayout.LayoutParams jioParams = new LinearLayout.LayoutParams(-2, TvUi.dp(this, 40));
         jioParams.leftMargin = TvUi.dp(this, 16);
         brandRow.addView(jio, jioParams);
         story.addView(brandRow, new LinearLayout.LayoutParams(-1, TvUi.dp(this, 44)));

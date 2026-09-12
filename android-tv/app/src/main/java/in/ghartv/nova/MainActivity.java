@@ -238,6 +238,10 @@ private View buildHeader() {
     header.addView(live, liveParams);
     header.addView(new View(this), new LinearLayout.LayoutParams(0, 1, 1f));
 
+    Button movies = actionButton("Movies");
+    movies.setOnClickListener(v -> startActivity(new Intent(this, MovieHubActivity.class)));
+    header.addView(movies, headerButtonParams());
+
     voiceButton = actionButton("🎙  Voice");
     voiceButton.setOnClickListener(view -> {
         if (!VoiceSearchController.launch(this)) showSearch();
@@ -254,13 +258,13 @@ private View buildHeader() {
 
     accountButton = actionButton("Jio account");
     accountButton.setOnClickListener(view -> showAccountMenu());
-    LinearLayout.LayoutParams accountParams = new LinearLayout.LayoutParams(TvUi.dp(this, 144), TvUi.dp(this, 38));
+    LinearLayout.LayoutParams accountParams = new LinearLayout.LayoutParams(TvUi.dp(this, 128), TvUi.dp(this, 38));
     accountParams.leftMargin = TvUi.dp(this, 9);
     header.addView(accountButton, accountParams);
 
     clock = TvUi.label(this, "", 17, TvUi.TEXT, true);
     clock.setGravity(Gravity.CENTER | Gravity.END);
-    LinearLayout.LayoutParams clockParams = new LinearLayout.LayoutParams(TvUi.dp(this, 82), -1);
+    LinearLayout.LayoutParams clockParams = new LinearLayout.LayoutParams(TvUi.dp(this, 62), -1);
     clockParams.leftMargin = TvUi.dp(this, 12);
     header.addView(clock, clockParams);
     return header;
@@ -268,7 +272,7 @@ private View buildHeader() {
 
 
 private LinearLayout.LayoutParams headerButtonParams() {
-    LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(TvUi.dp(this, 104), TvUi.dp(this, 38));
+    LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(TvUi.dp(this, 90), TvUi.dp(this, 38));
     params.leftMargin = TvUi.dp(this, 9);
     return params;
 }

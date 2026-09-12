@@ -7,7 +7,12 @@
 
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
     <uses-feature android:name="android.hardware.microphone" android:required="false" />
-    <queries><intent><action android:name="android.speech.RecognitionService" /></intent></queries>
+    <queries>
+        <intent><action android:name="android.speech.RecognitionService" /></intent>
+        <package android:name="video.laminar.tv.chaupal.android" />
+        <package android:name="com.graymatrix.did" />
+        <package android:name="in.startv.hotstar" />
+    </queries>
 
     <uses-feature android:name="android.software.leanback" android:required="true" />
     <uses-feature android:name="android.hardware.touchscreen" android:required="false" />
@@ -58,6 +63,8 @@
             android:screenOrientation="landscape" />
 
         <activity android:name=".VoiceSearchActivity" android:exported="false" android:screenOrientation="landscape" />
+
+        <activity android:name=".MovieHubActivity" android:exported="false" android:screenOrientation="landscape" />
 
         <provider
             android:name="androidx.core.content.FileProvider"

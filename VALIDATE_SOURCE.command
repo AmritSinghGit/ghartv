@@ -9,7 +9,7 @@ required=[
  'SplashActivity.java','MainActivity.java','PlayerActivity.java','Channel.java','ChannelRepository.java','ChannelIndex.java',
  'WatchHistoryStore.java','Telemetry.java','UpdateManager.java','JioApiClient.java','Program.java',
  'FamilyTheme.java','CelebrationView.java','AuroraBackgroundView.java','HeroPreviewController.java',
- 'VoiceSearchController.java','VoiceSearchActivity.java','PlaybackQualityController.java','ProgramSearchService.java','EngagementTracker.java'
+ 'MovieHubActivity.java','PictureShape.java','VoiceSearchController.java','VoiceSearchActivity.java','PlaybackQualityController.java','ProgramSearchService.java','EngagementTracker.java'
 ]
 missing=[name for name in required if not (java/name).is_file()]
 if missing: raise SystemExit('Missing required source: '+', '.join(missing))
@@ -18,7 +18,7 @@ for photo in ['family_dad_simrat_splash.webp','family_dad_simrat_backdrop.webp']
     if not p.is_file() or p.stat().st_size < 5000: raise SystemExit('Missing family photo asset: '+photo)
 for xml in (app/'src/main').rglob('*.xml'): ET.parse(xml)
 gradle=(app/'build.gradle.kts').read_text()
-assert 'versionCode = 15' in gradle and 'versionName = "0.5.5-rc1-voice-quality"' in gradle, gradle
+assert 'versionCode = 16' in gradle and 'versionName = "0.5.5-rc2-movies-picture"' in gradle, gradle
 manifest=(app/'src/main/AndroidManifest.xml').read_text()
 assert 'android.software.leanback' in manifest and 'android.hardware.touchscreen' in manifest
 assert 'android:required="false"' in manifest

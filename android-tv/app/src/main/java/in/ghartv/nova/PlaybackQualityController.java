@@ -66,6 +66,7 @@ public final class PlaybackQualityController {
                         observed.addAnalyticsListener(listener); apply();
                     }
                 }
+                PictureShape.apply(activity, view, ((PlayerActivity) activity).pictureChannelId());
                 if (details != null) details.setText(description());
                 long now = SystemClock.elapsedRealtime();
                 if (observed != null && now - sampledAt >= 60000) {
@@ -155,8 +156,7 @@ public final class PlaybackQualityController {
         row.addView(button, Math.max(0, row.indexOfChild(guide) - 1), params); buttonAdded = true;
     }
     private void apply() {
-        if (view != null) view.setResizeMode(prefs.getBoolean("picture_zoom", false)
-            ? AspectRatioFrameLayout.RESIZE_MODE_ZOOM : AspectRatioFrameLayout.RESIZE_MODE_FIT);
+        PictureShape.apply(activity, view, ((PlayerActivity) activity).pictureChannelId());
         if (observed == null || !observed.isCommandAvailable(Player.COMMAND_SET_TRACK_SELECTION_PARAMETERS)) return;
         TrackSelectionParameters.Builder b = observed.getTrackSelectionParameters().buildUpon()
             .clearOverridesOfType(C.TRACK_TYPE_VIDEO).setForceLowestBitrate(false)
@@ -171,13 +171,10 @@ public final class PlaybackQualityController {
                 (d, which) -> { mode = which; prefs.edit().putInt("picture_quality_mode", mode).apply(); apply(); })
             .setPositiveButton("Done", (d,w) -> TvUi.immersive(activity))
             .setNeutralButton("Live picture stats", (d,w) -> showStats())
-            .setNegativeButton("Fit / fill", (d,w) -> showScaling()).show();
+            .setNegativeButton("Picture shape", (d,w) -> showScaling()).show();
     }
     private void showScaling() {
-        new AlertDialog.Builder(activity).setTitle("Screen scaling — not new source detail")
-            .setSingleChoiceItems(new String[]{"Fit — preserve the whole image", "Fill — enlarge and crop the edges"}, prefs.getBoolean("picture_zoom", false) ? 1 : 0,
-                (d,which) -> { prefs.edit().putBoolean("picture_zoom", which == 1).apply(); apply(); })
-            .setPositiveButton("Done", (d,w) -> TvUi.immersive(activity)).show();
+        PictureShape.show(activity, view, ((PlayerActivity) activity).pictureChannelId());
     }
     private void showStats() {
         details = TvUi.label(activity, description(), 16, TvUi.TEXT, false);
@@ -201,7 +198,7 @@ public final class PlaybackQualityController {
             + "\nDropped frames in current observation window: " + dropped
             + "\nObserver attachment → first frame: " + (firstFrameMs >= 0 ? firstFrameMs + " ms" : "Not observed")
             + "\n\nStats refresh each second. These are technical samples, not a speed test or full tune-time measurement."
-            + "\nFit/fill uses the existing TV rendering path. AI super-resolution is NOT implemented. Higher output resolution does not turn an SD source into native HD/4K."
+            + "\nFit/crop/stretch uses the existing TV rendering path. AI super-resolution is NOT implemented. Higher output resolution does not turn an SD source into native HD/4K."
             + "\nQuality preferences cannot exceed the provider's authorised source renditions or decoder capabilities.";
     }
     private static String mbps(long value) { return String.format(Locale.US, "%.2f Mbps", value / 1000000.0); }
