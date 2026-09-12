@@ -268,13 +268,24 @@ public final class ChannelRepository {
     }
 
     public void setLastChannel(int number) {
-        context.getSharedPreferences(AppConfig.PREFS, Context.MODE_PRIVATE)
-                .edit().putInt(AppConfig.KEY_LAST_CHANNEL, number).apply();
+        if (number <= 0) return;
+        SharedPreferences prefs = context.getSharedPreferences(AppConfig.PREFS, Context.MODE_PRIVATE);
+        int current = prefs.getInt(AppConfig.KEY_LAST_CHANNEL, 0);
+        SharedPreferences.Editor edit = prefs.edit();
+        if (current > 0 && current != number) {
+            edit.putInt(AppConfig.KEY_PREVIOUS_CHANNEL, current);
+        }
+        edit.putInt(AppConfig.KEY_LAST_CHANNEL, number).apply();
     }
 
     public int lastChannel() {
         return context.getSharedPreferences(AppConfig.PREFS, Context.MODE_PRIVATE)
                 .getInt(AppConfig.KEY_LAST_CHANNEL, 1);
+    }
+
+    public int previousChannel() {
+        return context.getSharedPreferences(AppConfig.PREFS, Context.MODE_PRIVATE)
+                .getInt(AppConfig.KEY_PREVIOUS_CHANNEL, 0);
     }
 
     public String lastCategory() {

@@ -1,39 +1,14 @@
-# GharTV v0.5.4 RC2 acceptance
+# GharTV v0.5.4 RC4 UI and indexing acceptance
 
-## Evidence report
-
-- Open `PRODUCT_INTELLIGENCE_REPORT.html` from the run evidence folder.
-- Confirm product telemetry and local build/delivery logs are shown separately.
-- When telemetry is empty, confirm the report says there is no opt-in data rather than
-  inferring user behaviour.
-
-## Living-room home
-
-- `For you` opens first on an upgraded installation.
-- A successful channel appears in `Recent` after returning to the guide.
-- `For you` improves after several successful plays while favourites remain first.
-- Resetting suggestions does not clear the Jio session or favourites.
-- Category chips show channel counts.
-- Focus returns to the last channel used in each category.
-
-## Search and indexing
-
-- Exact channel number is first.
-- Exact channel name is ahead of partial matches.
-- Prefix searches such as `ptc`, `punj`, `sports` and `news` return immediately.
-- Search is case-insensitive and supports Unicode channel/language text.
-- Number tuning continues to work independently of the visible category.
-
-## Access and recovery
-
-- Regular language and genre views exclude Subscription and Needs attention channels.
-- Available contains channels proven playable on this TV/account.
-- DNS/timeout failure retries once, then offers Retry, Next channel and Guide.
-- A persistent 403 becomes Needs attention, not an internet or guaranteed subscription claim.
-- DRM errors remain distinguishable from network and access errors.
-
-## Release safety
-
-- APK updates the existing `in.ghartv.nova` installation and preserves data.
-- GitHub release is marked prerelease `v0.5.4-rc2`.
-- `update/latest.json` remains versionCode 10 / v0.5.3.
+- Long vertical selected-channel tile is present.
+- Watch Live, Favourite and Recall remain visible in standard and birthday themes.
+- Preview starts only by explicit action, is muted, stops after 15 seconds and releases Media3 resources.
+- Automatic family theme maps all seven owner-supplied dates correctly.
+- Internal prerelease text is absent from the ordinary home screen.
+- Voice search and typed search use the same ranked index; no-recogniser devices fall back to text.
+- Exact channel number lookup is constant-time.
+- Programme lookup is bounded and on-demand.
+- Channel Up/Down remains within the exact current view/search scope.
+- Player overlay hard-hides and exposes transport only when the stream is seekable.
+- Stable manifest remains v0.5.3/versionCode 10 during review.
+- GitHub release is prerelease `v0.5.4-rc4`.

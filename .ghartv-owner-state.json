@@ -6,13 +6,15 @@
   "package_id": "in.ghartv.nova",
   "repository": "AmritSinghGit/ghartv",
   "branch": "main",
-  "baseline_sha": "b9f16b936b666d191843f2a08fa29b9c299c02c3",
-  "current_candidate": "0.5.4-rc2-living-room",
-  "version_code": 11,
-  "candidate_release": "v0.5.4-rc2",
+  "baseline_sha": "6228319fcefe0bf49685d925da426490c77f261a",
+  "current_candidate": "0.5.4-rc4-family-preview",
+  "version_code": 13,
+  "candidate_release": "v0.5.4-rc4",
   "owner_decision": "REVIEW_PENDING",
-  "authoritative_scope": "Jio account login, indexed Jio catalogue, EPG and native live playback only",
-  "continuity_rule": "Same project, ghartv lane, package identity, main branch, signing key, Worker and D1 store; no duplicate authority",
+  "analytics_tenant": "ghartv",
+  "analytics_lane": "operon-analytics",
+  "analytics_pr": 61,
+  "continuity_rule": "Same GharTV project/repository/main/package/signing identity and same Operon Analytics branch/PR/lane; no duplicate authority",
   "stable_update": "v0.5.3 remains advertised until explicit v0.5.4 owner approval",
-  "next_action": "Fast-forward the canonical local checkout to the published candidate SHA, build with the existing signing identity, open on the existing Google TV emulator and review before stable publication"
+  "next_action": "Push/build/open RC4 independently of local Operon worktree availability; review family theme, vertical preview tile, voice/program search and transport controls."
 }

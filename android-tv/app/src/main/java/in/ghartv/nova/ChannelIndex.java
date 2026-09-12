@@ -21,7 +21,7 @@ import java.util.Set;
  * and local-only household history.
  */
 public final class ChannelIndex {
-    public static final String VIEW_FOR_YOU = "For you";
+    public static final String VIEW_FOR_YOU = "Home";
     public static final String VIEW_CONTINUE = "Continue";
     public static final String VIEW_RECENT = "Recent";
     public static final String VIEW_FAVOURITES = "Favourites";
@@ -88,9 +88,6 @@ public final class ChannelIndex {
     private void buildViews() {
         putView(VIEW_FOR_YOU, buildForYou());
 
-        List<Channel> continueChannels = channelsFromNumbers(historyStore.continueNumbers(30));
-        if (!continueChannels.isEmpty()) putView(VIEW_CONTINUE, continueChannels);
-
         List<Channel> recent = channelsFromNumbers(historyStore.recentNumbers(40));
         if (!recent.isEmpty()) putView(VIEW_RECENT, recent);
 
@@ -106,7 +103,8 @@ public final class ChannelIndex {
             if (channel.isSubscriptionChannel()) subscription.add(channel);
             if (channel.isUnavailable()) restricted.add(channel);
         }
-        if (!available.isEmpty()) putView(VIEW_AVAILABLE, sortGuide(available));
+        // Proven-working channels are ranked into Home instead of becoming another
+        // top-level chip. The visible guide stays simple for family use.
         putView(VIEW_ALL, regularChannels());
 
         LinkedHashSet<String> languages = new LinkedHashSet<>();

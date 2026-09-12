@@ -32,6 +32,15 @@ public final class Channel {
     public long accessUpdatedAt;
     public String nowTitle = "Live now";
     public String nextTitle = "";
+    // Ephemeral voice/text programme-search selection. These values are local and never
+    // included in successful-view telemetry.
+    public String searchProgrammeTitle = "";
+    public long searchProgrammeStartMs;
+    public long searchProgrammeEndMs;
+    public String searchProgrammeId = "";
+    public String searchProgrammeSrno = "";
+    public String searchProgrammeShowtime = "";
+
 
     public String displayNumber() {
         return number < 1000 ? String.format(Locale.US, "%03d", number) : String.valueOf(number);
@@ -64,6 +73,27 @@ public final class Channel {
         return "LIVE";
     }
 
+
+    public boolean hasProgrammeSelection() {
+        return searchProgrammeStartMs > 0L && searchProgrammeEndMs > searchProgrammeStartMs
+                && searchProgrammeTitle != null && !searchProgrammeTitle.trim().isEmpty();
+    }
+
+    public boolean isPastProgramme() {
+        return hasProgrammeSelection() && searchProgrammeEndMs < System.currentTimeMillis();
+    }
+
+    public boolean canRequestCatchup() {
+        return catchupAvailable && isPastProgramme();
+    }
+
+    public String programmeBadge() {
+        if (!hasProgrammeSelection()) return "";
+        if (isPastProgramme()) return canRequestCatchup() ? "CATCH-UP" : "PAST";
+        if (searchProgrammeStartMs > System.currentTimeMillis()) return "UPCOMING";
+        return "ON NOW";
+    }
+
     public JSONObject toJson() throws JSONException {
         JSONObject object = new JSONObject();
         object.put("number", number);
@@ -82,6 +112,13 @@ public final class Channel {
         object.put("accessUpdatedAt", accessUpdatedAt);
         object.put("nowTitle", nowTitle);
         object.put("nextTitle", nextTitle);
+        object.put("searchProgrammeTitle", searchProgrammeTitle);
+        object.put("searchProgrammeStartMs", searchProgrammeStartMs);
+        object.put("searchProgrammeEndMs", searchProgrammeEndMs);
+        object.put("searchProgrammeId", searchProgrammeId);
+        object.put("searchProgrammeSrno", searchProgrammeSrno);
+        object.put("searchProgrammeShowtime", searchProgrammeShowtime);
+
         return object;
     }
 
@@ -108,6 +145,13 @@ public final class Channel {
         channel.accessUpdatedAt = object.optLong("accessUpdatedAt", 0L);
         channel.nowTitle = object.optString("nowTitle", "Live now");
         channel.nextTitle = object.optString("nextTitle", "");
+        channel.searchProgrammeTitle = object.optString("searchProgrammeTitle", "");
+        channel.searchProgrammeStartMs = object.optLong("searchProgrammeStartMs", 0L);
+        channel.searchProgrammeEndMs = object.optLong("searchProgrammeEndMs", 0L);
+        channel.searchProgrammeId = object.optString("searchProgrammeId", "");
+        channel.searchProgrammeSrno = object.optString("searchProgrammeSrno", "");
+        channel.searchProgrammeShowtime = object.optString("searchProgrammeShowtime", "");
+
         return channel;
     }
 

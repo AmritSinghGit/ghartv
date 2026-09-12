@@ -1,8 +1,10 @@
-# GharTV · Jio Live
+# GharTV
+
+**Current review candidate:** v0.5.4 RC4 Family Preview — vertical channel tile, on-demand muted preview, family themes, voice/programme search and capability-gated transport controls. · Jio Live
 
 A remote-first Android TV / Google TV client for live television available to a connected JioTV account.
 
-> **Stable:** `0.5.3-observability` (`versionCode 10`). **Current owner-review candidate:** `0.5.4-rc2-living-room` (`versionCode 11`). GharTV is not an official Jio application.
+> **Stable:** `0.5.3-observability` (`versionCode 10`). **Current owner-review candidate:** `0.5.4-rc4-family-preview` (`versionCode 13`). GharTV is not an official Jio application.
 
 ## Television experience
 
@@ -55,7 +57,8 @@ Release signing uses `GHARTV_SIGNING_*` environment variables. Signing material 
 - Canonical lane: `ghartv`
 - Repository: `AmritSinghGit/ghartv`
 - Branch: `main`
-- Operon classification: independent **project**, not a tenant
+- Operon portfolio classification: independent **project**
+- Operon Analytics tenant ID: `ghartv` in the existing `operon.analytics` capability
 
 The direct account/catalogue/playback architecture was informed by the MIT-licensed `dineshintry/plugin.kodi.jiotv` project. GharTV is a separate native Android TV implementation and is not commissioned, endorsed or supported by Jio.
 
@@ -63,14 +66,18 @@ The direct account/catalogue/playback architecture was informed by the MIT-licen
 
 GharTV now includes an explicit opt-in, first-party technical diagnostics system. Users can preview, send, disable or delete queued reports from the TV. Mobile numbers, OTPs, Jio credentials/tokens/cookies, stream/licence URLs, successful channel viewing history and hardware identifiers are excluded. See [TELEMETRY.md](TELEMETRY.md) and [PRIVACY.md](PRIVACY.md).
 
-## v0.5.4 RC2 review candidate
+## v0.5.4 RC4 review candidate
 
-RC2 turns the catalogue into a living-room home: **For you**, **Continue**, **Recent**,
-**Favourites**, proven **Working now** channels, languages, genres, Subscription and
-Needs attention. It adds constant-time number lookup, ranked global search, category
-counts, per-view focus memory, incremental card updates, exact-scope CH +/-, a true
-remote-inactivity player overlay, buffering recovery and clearer error actions.
+RC4 keeps the long selected-channel tile, adds an explicit muted 15-second preview,
+fixes vertical spacing so **Watch Live** remains visible, and provides local family
+birthday themes for Mom, Amrit, Harjas, Wifey, Sis, Dad and Simrath. The normal
+living-room screen hides internal RC labels.
 
-RC2 is published as a prerelease. The stable TV update remains v0.5.3 until explicit
-owner approval. See [PRODUCT_REVIEW_v0.5.4-rc2.md](PRODUCT_REVIEW_v0.5.4-rc2.md)
-and [REVIEW_AND_PUBLISH_v0.5.4.md](REVIEW_AND_PUBLISH_v0.5.4.md).
+Voice and typed search use the same indexed channel search, followed by a bounded
+on-demand Jio EPG programme search. Pause, rewind, forward and Live are enabled only
+when the current Media3 stream exposes the required live-window capability.
+
+RC4 is published only as a prerelease. Stable televisions remain on v0.5.3 until
+explicit owner approval. See [PRODUCT_REVIEW_v0.5.4-rc4.md](PRODUCT_REVIEW_v0.5.4-rc4.md),
+[REVIEW_CHECKLIST_v0.5.4-rc4.md](REVIEW_CHECKLIST_v0.5.4-rc4.md), and
+[REVIEW_AND_PUBLISH_v0.5.4.md](REVIEW_AND_PUBLISH_v0.5.4.md).

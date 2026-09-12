@@ -1,0 +1,16 @@
+#!/bin/bash
+set -Eeuo pipefail
+SDK="${ANDROID_SDK_ROOT:-$HOME/Library/Android/sdk}"; ADB="$SDK/platform-tools/adb"
+[ -x "$ADB" ] || { echo "adb not found: $ADB" >&2; exit 1; }
+SERIAL="${GHARTV_EMULATOR_SERIAL:-}"
+if [ -z "$SERIAL" ]; then
+  while IFS= read -r s; do
+    [ -n "$s" ] || continue
+    name="$("$ADB" -s "$s" emu avd name 2>/dev/null | tr -d '\r' | head -1 || true)"
+    case "$name" in GharTV_*) SERIAL="$s"; break;; esac
+  done < <("$ADB" devices | awk '$2=="device"&&$1~/^emulator-/{print $1}')
+fi
+[ -n "$SERIAL" ] || { echo "No running GharTV emulator found." >&2; exit 1; }
+"$ADB" -s "$SERIAL" shell am force-stop in.ghartv.nova
+"$ADB" -s "$SERIAL" shell am start -W -n in.ghartv.nova/.MainActivity --es ghartv_theme_preview standard
+echo "Opened the standard GharTV theme on $SERIAL"

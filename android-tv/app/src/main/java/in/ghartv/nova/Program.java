@@ -8,6 +8,10 @@ public final class Program {
     public String posterUrl = "";
     public long startEpochMs;
     public long endEpochMs;
+    public String programId = "";
+    public String srno = "";
+    public String showtime = "";
+
     public boolean catchupAvailable;
 
     public static Program fromJson(JSONObject o) {
@@ -18,7 +22,10 @@ public final class Program {
         p.startEpochMs = o.optLong("startEpoch", 0L);
         p.endEpochMs = o.optLong("endEpoch", 0L);
         p.catchupAvailable = o.optBoolean("stbCatchupAvailable", false);
-        return p;
+                p.programId = o.optString("programId", o.optString("program_id", ""));
+        p.srno = o.optString("srno", o.optString("serialNo", o.optString("serial_no", "")));
+        p.showtime = o.optString("showtime", o.optString("showTime", ""));
+return p;
     }
 
     public boolean isLive(long now) { return startEpochMs <= now && endEpochMs > now; }

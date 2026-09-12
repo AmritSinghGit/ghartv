@@ -72,6 +72,10 @@ public final class PlayerActivity extends Activity implements ChannelNavigator.L
     private TextView nowTime;
     private TextView nextTitle;
     private ProgressBar programmeProgress;
+    private Button rewindButton;
+    private Button pauseButton;
+    private Button liveButton;
+    private Button forwardButton;
     private Button previousButton;
     private Button guideButton;
     private Button nextButton;
@@ -187,8 +191,8 @@ public final class PlayerActivity extends Activity implements ChannelNavigator.L
         guidePanel = buildGuidePanel();
         guidePanel.setVisibility(View.GONE);
         FrameLayout.LayoutParams guideParams = new FrameLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT, TvUi.dp(this, 196), Gravity.BOTTOM);
-        guideParams.setMargins(TvUi.dp(this, 26), 0, TvUi.dp(this, 26), TvUi.dp(this, 22));
+                ViewGroup.LayoutParams.MATCH_PARENT, TvUi.dp(this, 160), Gravity.BOTTOM);
+        guideParams.setMargins(TvUi.dp(this, 34), 0, TvUi.dp(this, 34), TvUi.dp(this, 14));
         root.addView(guidePanel, guideParams);
 
         numberOverlay = TvUi.label(this, "", 38, TvUi.TEXT, true);
@@ -207,77 +211,102 @@ public final class PlayerActivity extends Activity implements ChannelNavigator.L
     private LinearLayout buildGuidePanel() {
         LinearLayout panel = new LinearLayout(this);
         panel.setOrientation(LinearLayout.VERTICAL);
-        panel.setPadding(TvUi.dp(this, 24), TvUi.dp(this, 16), TvUi.dp(this, 24), TvUi.dp(this, 14));
+        panel.setPadding(TvUi.dp(this, 18), TvUi.dp(this, 8), TvUi.dp(this, 18), TvUi.dp(this, 7));
         panel.setBackground(TvUi.gradient(
-                Color.argb(246, 2, 9, 16), Color.argb(242, 5, 28, 38),
-                26, Color.argb(120, 83, 228, 255), 1.5f, this));
+                Color.argb(188, 2, 9, 16), Color.argb(176, 9, 32, 43),
+                24, Color.argb(95, 83, 228, 255), 1.2f, this));
 
         LinearLayout top = new LinearLayout(this);
         top.setGravity(Gravity.CENTER_VERTICAL);
         TextView live = TvUi.badge(this, "LIVE", TvUi.MINT);
-        top.addView(live, new LinearLayout.LayoutParams(-2, TvUi.dp(this, 28)));
+        top.addView(live, new LinearLayout.LayoutParams(-2, TvUi.dp(this, 24)));
 
-        guideChannel = TvUi.label(this, "Loading channel…", 21, TvUi.TEXT, true);
-        LinearLayout.LayoutParams channelParams = new LinearLayout.LayoutParams(0, TvUi.dp(this, 34), 1f);
-        channelParams.leftMargin = TvUi.dp(this, 14);
+        guideChannel = TvUi.label(this, "Loading channel…", 18, TvUi.TEXT, true);
+        guideChannel.setSingleLine(true);
+        LinearLayout.LayoutParams channelParams = new LinearLayout.LayoutParams(0, TvUi.dp(this, 27), 1f);
+        channelParams.leftMargin = TvUi.dp(this, 12);
         top.addView(guideChannel, channelParams);
 
         guideScope = TvUi.badge(this, scopeLabel.toUpperCase(Locale.ROOT), TvUi.CYAN);
-        top.addView(guideScope, new LinearLayout.LayoutParams(-2, TvUi.dp(this, 28)));
-        panel.addView(top, new LinearLayout.LayoutParams(-1, TvUi.dp(this, 36)));
+        top.addView(guideScope, new LinearLayout.LayoutParams(-2, TvUi.dp(this, 24)));
+        panel.addView(top, new LinearLayout.LayoutParams(-1, TvUi.dp(this, 27)));
 
         LinearLayout nowRow = new LinearLayout(this);
         nowRow.setGravity(Gravity.CENTER_VERTICAL);
-        nowTitle = TvUi.label(this, "NOW  Starting live television…", 17, TvUi.TEXT, true);
+        nowTitle = TvUi.label(this, "NOW  Starting live television…", 14, TvUi.TEXT, true);
         nowTitle.setSingleLine(true);
-        nowRow.addView(nowTitle, new LinearLayout.LayoutParams(0, TvUi.dp(this, 34), 1f));
-        nowTime = TvUi.label(this, "", 13, TvUi.MUTED, true);
+        nowRow.addView(nowTitle, new LinearLayout.LayoutParams(0, TvUi.dp(this, 24), 1f));
+        nowTime = TvUi.label(this, "", 12, TvUi.MUTED, true);
         nowTime.setGravity(Gravity.CENTER_VERTICAL | Gravity.END);
-        nowRow.addView(nowTime, new LinearLayout.LayoutParams(TvUi.dp(this, 190), TvUi.dp(this, 34)));
-        panel.addView(nowRow, new LinearLayout.LayoutParams(-1, TvUi.dp(this, 34)));
+        nowRow.addView(nowTime, new LinearLayout.LayoutParams(TvUi.dp(this, 165), TvUi.dp(this, 24)));
+        panel.addView(nowRow, new LinearLayout.LayoutParams(-1, TvUi.dp(this, 24)));
 
         programmeProgress = new ProgressBar(this, null, android.R.attr.progressBarStyleHorizontal);
         programmeProgress.setMax(1000);
         programmeProgress.setProgressTintList(android.content.res.ColorStateList.valueOf(TvUi.MINT));
         programmeProgress.setProgressBackgroundTintList(
-                android.content.res.ColorStateList.valueOf(Color.argb(55, 255, 255, 255)));
-        LinearLayout.LayoutParams progressParams = new LinearLayout.LayoutParams(-1, TvUi.dp(this, 5));
-        progressParams.topMargin = TvUi.dp(this, 3);
+                android.content.res.ColorStateList.valueOf(Color.argb(48, 255, 255, 255)));
+        LinearLayout.LayoutParams progressParams = new LinearLayout.LayoutParams(-1, TvUi.dp(this, 4));
+        progressParams.topMargin = TvUi.dp(this, 2);
         panel.addView(programmeProgress, progressParams);
 
-        nextTitle = TvUi.label(this, "NEXT  Programme guide loading…", 13, TvUi.MUTED, false);
+        nextTitle = TvUi.label(this, "NEXT  Programme guide loading…", 12, TvUi.MUTED, false);
         nextTitle.setSingleLine(true);
-        LinearLayout.LayoutParams nextParams = new LinearLayout.LayoutParams(-1, TvUi.dp(this, 30));
-        nextParams.topMargin = TvUi.dp(this, 4);
+        LinearLayout.LayoutParams nextParams = new LinearLayout.LayoutParams(-1, TvUi.dp(this, 20));
+        nextParams.topMargin = TvUi.dp(this, 2);
         panel.addView(nextTitle, nextParams);
+
+        LinearLayout transport = new LinearLayout(this);
+        transport.setGravity(Gravity.CENTER_VERTICAL);
+        rewindButton = TvUi.button(this, "↶ 15s", false);
+        rewindButton.setOnClickListener(view -> seekBy(-15_000L));
+        transport.addView(rewindButton, transportParams());
+        pauseButton = TvUi.button(this, "Pause", true);
+        pauseButton.setOnClickListener(view -> togglePause());
+        transport.addView(pauseButton, transportParams());
+        liveButton = TvUi.button(this, "Live", false);
+        liveButton.setOnClickListener(view -> goLive());
+        transport.addView(liveButton, transportParams());
+        forwardButton = TvUi.button(this, "15s ↷", false);
+        forwardButton.setOnClickListener(view -> seekBy(15_000L));
+        transport.addView(forwardButton, transportParams());
+        TextView transportHint = TvUi.label(this, "Transport appears only when this channel exposes a TV time-shift window", 10, TvUi.MUTED, false);
+        transportHint.setGravity(Gravity.CENTER_VERTICAL | Gravity.END);
+        transport.addView(transportHint, new LinearLayout.LayoutParams(0, TvUi.dp(this, 30), 1f));
+        panel.addView(transport, new LinearLayout.LayoutParams(-1, TvUi.dp(this, 31)));
 
         LinearLayout actions = new LinearLayout(this);
         actions.setGravity(Gravity.CENTER_VERTICAL | Gravity.END);
-        TextView hint = TvUi.label(this, "INFO shows this panel  •  CH ± stays inside " + scopeLabel, 11, TvUi.MUTED, false);
-        actions.addView(hint, new LinearLayout.LayoutParams(0, TvUi.dp(this, 42), 1f));
+        TextView hint = TvUi.label(this, "INFO toggles this panel  •  CH ± stays inside " + scopeLabel, 10, TvUi.MUTED, false);
+        actions.addView(hint, new LinearLayout.LayoutParams(0, TvUi.dp(this, 33), 1f));
 
-        previousButton = TvUi.button(this, "◀  Previous", false);
+        previousButton = TvUi.button(this, "◀ Previous", false);
         previousButton.setOnClickListener(view -> changeChannel(-1));
         actions.addView(previousButton, actionParams());
-
         guideButton = TvUi.button(this, "Guide", false);
         guideButton.setOnClickListener(view -> finish());
         actions.addView(guideButton, actionParams());
-
-        nextButton = TvUi.button(this, "Next  ▶", true);
+        nextButton = TvUi.button(this, "Next ▶", true);
         nextButton.setOnClickListener(view -> changeChannel(1));
         actions.addView(nextButton, actionParams());
 
-        bindActionFocus(previousButton);
-        bindActionFocus(guideButton);
-        bindActionFocus(nextButton);
-        panel.addView(actions, new LinearLayout.LayoutParams(-1, TvUi.dp(this, 46)));
+        for (View action : new View[]{rewindButton, pauseButton, liveButton, forwardButton, previousButton, guideButton, nextButton}) {
+            bindActionFocus(action);
+        }
+        panel.addView(actions, new LinearLayout.LayoutParams(-1, TvUi.dp(this, 35)));
+        refreshTransportState();
         return panel;
     }
 
+    private LinearLayout.LayoutParams transportParams() {
+        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(TvUi.dp(this, 96), TvUi.dp(this, 29));
+        params.rightMargin = TvUi.dp(this, 7);
+        return params;
+    }
+
     private LinearLayout.LayoutParams actionParams() {
-        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(TvUi.dp(this, 136), TvUi.dp(this, 42));
-        params.leftMargin = TvUi.dp(this, 8);
+        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(TvUi.dp(this, 115), TvUi.dp(this, 31));
+        params.leftMargin = TvUi.dp(this, 7);
         return params;
     }
 
@@ -386,6 +415,7 @@ public final class PlayerActivity extends Activity implements ChannelNavigator.L
                     guideStatus = "Live now";
                     markAccess(Channel.ACCESS_AVAILABLE, "Playable on this connected Jio account.");
                     recordPlaybackReady();
+                    refreshTransportState();
                     refreshGuideContent();
                     scheduleHideGuide(4500L);
                 } else if (state == Player.STATE_BUFFERING) {
@@ -393,6 +423,7 @@ public final class PlayerActivity extends Activity implements ChannelNavigator.L
                     armBufferingWatchdog();
                     loading.setVisibility(View.VISIBLE);
                     guideStatus = "Buffering live television…";
+                    refreshTransportState();
                     refreshGuideContent();
                 } else if (state == Player.STATE_ENDED) {
                     cancelBufferingWatchdog();
@@ -403,6 +434,14 @@ public final class PlayerActivity extends Activity implements ChannelNavigator.L
                     refreshGuideContent();
                     showStreamEnded();
                 }
+            }
+
+            @Override public void onIsPlayingChanged(boolean isPlaying) {
+                refreshTransportState();
+            }
+
+            @Override public void onMediaItemTransition(MediaItem mediaItem, int reason) {
+                refreshTransportState();
             }
 
             @Override public void onPlayerError(PlaybackException error) {
@@ -441,6 +480,7 @@ public final class PlayerActivity extends Activity implements ChannelNavigator.L
             player.release();
             player = null;
         }
+        refreshTransportState();
     }
 
     private void loadEpg(Channel selected) {
@@ -560,7 +600,76 @@ public final class PlayerActivity extends Activity implements ChannelNavigator.L
 
     private boolean isGuideActionFocused() {
         View focused = getCurrentFocus();
-        return focused == previousButton || focused == guideButton || focused == nextButton;
+        return focused == rewindButton || focused == pauseButton || focused == liveButton
+                || focused == forwardButton || focused == previousButton
+                || focused == guideButton || focused == nextButton;
+    }
+
+    private void refreshTransportState() {
+        if (rewindButton == null) return;
+        boolean ready = player != null && player.getPlaybackState() == Player.STATE_READY;
+        boolean seekable = ready && player.isCurrentMediaItemSeekable();
+        rewindButton.setEnabled(seekable);
+        forwardButton.setEnabled(seekable);
+        liveButton.setEnabled(seekable && player.isCurrentMediaItemLive());
+        pauseButton.setEnabled(ready);
+        pauseButton.setText(ready && !player.isPlaying() ? "Play" : "Pause");
+        rewindButton.setAlpha(seekable ? 1f : .46f);
+        forwardButton.setAlpha(seekable ? 1f : .46f);
+        liveButton.setAlpha(liveButton.isEnabled() ? 1f : .46f);
+        pauseButton.setAlpha(ready ? 1f : .46f);
+    }
+
+    private void togglePause() {
+        if (player == null || player.getPlaybackState() != Player.STATE_READY) {
+            Toast.makeText(this, "The channel is not ready yet", Toast.LENGTH_SHORT).show();
+            return;
+        }
+        String action;
+        if (player.isPlaying()) {
+            player.pause();
+            action = "pause";
+        } else {
+            player.play();
+            action = "play";
+        }
+        Telemetry.event(this, "transport_action", Telemetry.data(
+                "action", action, "seekable", player.isCurrentMediaItemSeekable(),
+                "live", player.isCurrentMediaItemLive(), "guide_scope", scopeLabel));
+        refreshTransportState();
+        notePanelInteraction();
+    }
+
+    private void seekBy(long deltaMs) {
+        if (player == null || !player.isCurrentMediaItemSeekable()) {
+            Toast.makeText(this, "This channel does not expose a rewind window", Toast.LENGTH_SHORT).show();
+            return;
+        }
+        long target = Math.max(0L, player.getCurrentPosition() + deltaMs);
+        long duration = player.getDuration();
+        if (duration != C.TIME_UNSET && duration > 0L) target = Math.min(target, Math.max(0L, duration - 250L));
+        player.seekTo(target);
+        if (!player.isPlaying()) player.play();
+        Telemetry.event(this, "transport_action", Telemetry.data(
+                "action", deltaMs < 0 ? "rewind_15s" : "forward_15s",
+                "seekable", true, "live", player.isCurrentMediaItemLive(),
+                "guide_scope", scopeLabel));
+        refreshTransportState();
+        notePanelInteraction();
+    }
+
+    private void goLive() {
+        if (player == null || !player.isCurrentMediaItemSeekable()) {
+            Toast.makeText(this, "This channel is already live-only", Toast.LENGTH_SHORT).show();
+            return;
+        }
+        player.seekToDefaultPosition();
+        player.play();
+        Telemetry.event(this, "transport_action", Telemetry.data(
+                "action", "go_live", "seekable", true, "live", player.isCurrentMediaItemLive(),
+                "guide_scope", scopeLabel));
+        refreshTransportState();
+        notePanelInteraction();
     }
 
     private void showAccessRequired(boolean explicitSubscription, String message) {
@@ -988,12 +1097,21 @@ public final class PlayerActivity extends Activity implements ChannelNavigator.L
                 if (isGuideActionFocused()) break;
                 return true;
             case KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE:
-                if (player != null) {
-                    if (player.isPlaying()) player.pause(); else player.play();
-                    showGuide(false, null);
-                    return true;
-                }
-                break;
+                togglePause();
+                showGuide(false, null);
+                return true;
+            case KeyEvent.KEYCODE_MEDIA_REWIND:
+                seekBy(-15_000L);
+                showGuide(false, null);
+                return true;
+            case KeyEvent.KEYCODE_MEDIA_FAST_FORWARD:
+                seekBy(15_000L);
+                showGuide(false, null);
+                return true;
+            case KeyEvent.KEYCODE_MEDIA_STOP:
+                goLive();
+                showGuide(false, null);
+                return true;
             case KeyEvent.KEYCODE_BACK:
                 if (guidePanel.getVisibility() == View.VISIBLE) {
                     hideGuideNow();

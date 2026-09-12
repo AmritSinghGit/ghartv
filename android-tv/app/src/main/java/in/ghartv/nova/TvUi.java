@@ -13,14 +13,14 @@ import android.widget.Button;
 import android.widget.TextView;
 
 public final class TvUi {
-    public static final int BG = Color.rgb(2, 7, 13);
-    public static final int SURFACE = Color.rgb(8, 22, 34);
-    public static final int SURFACE_2 = Color.rgb(12, 36, 51);
-    public static final int SURFACE_3 = Color.rgb(17, 57, 73);
+    public static final int BG = Color.rgb(1, 5, 11);
+    public static final int SURFACE = Color.rgb(4, 18, 28);
+    public static final int SURFACE_2 = Color.rgb(7, 32, 44);
+    public static final int SURFACE_3 = Color.rgb(10, 74, 78);
     public static final int TEXT = Color.rgb(247, 252, 255);
     public static final int MUTED = Color.rgb(151, 180, 197);
-    public static final int CYAN = Color.rgb(83, 228, 255);
-    public static final int MINT = Color.rgb(115, 245, 194);
+    public static final int CYAN = Color.rgb(108, 226, 255);
+    public static final int MINT = Color.rgb(67, 240, 190);
     public static final int PINK = Color.rgb(255, 94, 181);
     public static final int AMBER = Color.rgb(255, 200, 87);
     public static final int ERROR = Color.rgb(255, 132, 145);
@@ -101,7 +101,7 @@ public final class TvUi {
             v.animate()
                     .scaleX(focused ? 1.035f : 1f)
                     .scaleY(focused ? 1.035f : 1f)
-                    .translationZ(focused ? dp(v.getContext(), 11) : 0)
+                    .translationZ(focused ? dp(v.getContext(), 8) : 0)
                     .alpha(focused ? 1f : .96f)
                     .setInterpolator(new AccelerateDecelerateInterpolator())
                     .setDuration(120)

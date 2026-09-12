@@ -1,3 +1,10 @@
+## 0.5.4 RC4 — Family Preview
+
+- Restored the vertical selected-channel tile with explicit muted preview.
+- Corrected all family birthday mappings and refined birthday/standard glass themes.
+- Added capability-gated pause, rewind, forward and Live controls.
+- Decoupled Android review from local Operon Analytics worktree availability.
+
 # GharTV change history
 
 ## 0.5.4 RC2 — Living-room reliability

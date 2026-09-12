@@ -31,6 +31,6 @@ not invent usage conclusions.
 
 ## Release boundary
 
-`v0.5.4-rc2` is a GitHub prerelease for review. The stable update manifest remains on
+`v0.5.4-rc4` is a GitHub prerelease for review. The stable update manifest remains on
 v0.5.3, so existing televisions do not receive v0.5.4 automatically. Owner acceptance
 is required before publishing a stable v0.5.4 update request.

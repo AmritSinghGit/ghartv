@@ -7,6 +7,7 @@ public final class AppConfig {
     public static final String PREFS = "ghartv_nova";
     public static final String KEY_FAVOURITES = "favourites";
     public static final String KEY_LAST_CHANNEL = "last_channel";
+    public static final String KEY_PREVIOUS_CHANNEL = "previous_channel";
     public static final String KEY_LAST_CATEGORY = "last_category";
     public static final String KEY_LAST_UPDATE_CHECK = "last_update_check";
 

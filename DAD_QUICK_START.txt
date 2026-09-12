@@ -1,7 +1,7 @@
 GHARTV · JIO LIVE — DAILY USE
 
 1. Open Apps > GharTV · Jio Live.
-2. Start from For you, Continue, Recent, Punjabi, Hindi, English or Favourites.
+2. Start from Home, Recent, Favourites, All channels, Punjabi, Hindi, English or another language/genre.
 3. Press OK on a channel to watch.
 4. The Now/Next panel disappears automatically.
 5. Press INFO or OK while watching to show programme progress, Previous, Guide and Next.
@@ -16,3 +16,7 @@ SUBSCRIPTION / NEEDS ATTENTION
 
 UPDATE
 Open Account > Check for GharTV update. Android updates the same app and keeps the saved login, favourites and local suggestions.
+
+RECALL
+------
+After changing channels, choose Recall to return to the previous channel. Choose it again to toggle back.
