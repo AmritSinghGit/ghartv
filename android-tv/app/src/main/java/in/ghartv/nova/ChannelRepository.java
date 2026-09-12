@@ -322,6 +322,12 @@ public final class ChannelRepository {
         return String.format(java.util.Locale.US, "%,d indexed", current.searchableCount());
     }
 
+    /** Count the channels currently represented by the in-memory search index. */
+    public synchronized int indexedCount() {
+        List<Channel> channels = loadAll();
+        return ensureIndex(channels).searchableCount();
+    }
+
     public int subscriptionCount(List<Channel> channels) {
         int count = 0;
         if (channels != null) for (Channel channel : channels) if (channel.isSubscriptionChannel()) count++;

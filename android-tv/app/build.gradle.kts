@@ -21,8 +21,8 @@ android {
         applicationId = "in.ghartv.nova"
         minSdk = 26
         targetSdk = 35
-        versionCode = 13
-        versionName = "0.5.4-rc4-family-preview"
+        versionCode = 14
+        versionName = "0.5.4-rc5-family-photo"
     }
 
     buildFeatures {

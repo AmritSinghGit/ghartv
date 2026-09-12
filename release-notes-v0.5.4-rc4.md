@@ -10,7 +10,7 @@ Owner-review prerelease continuing the same `ghartv` product and signing identit
 - Removes internal RC/version labels from the normal home screen.
 
 ## Family tribute
-- Correct mappings for Dad, Simrath, Mom, Amrit, Harjas, Wifey and Sis.
+- Correct mappings for Dad, Simrat, Mom, Amrit, Harjas, Wifey and Sis.
 - Automatic date mode plus separate birthday and standard previews.
 - Richer static birthday glass theme without an animation loop.
 

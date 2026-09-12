@@ -16,7 +16,7 @@ Metrics include observed installations, DAU/WAU/MAU, sessions, rounded active
 time, playback requests/readiness, feature use, versions, device families,
 errors, HTTP statuses and freshness.
 
-Candidate `ANALYTICS-090-007` continues the existing `operon-analytics` lane,
+Candidate `ANALYTICS-090-008` continues the existing `operon-analytics` lane,
 branch `codex/opr-analytics-003-vcnow-data-control-convergence` and PR #61.
 The GharTV Android review is deliberately independent of local analytics
 materialisation: when the canonical analytics worktree is absent, tenant source

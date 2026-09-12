@@ -1,10 +1,10 @@
 package in.ghartv.nova;
 
 import android.app.Activity;
+import android.graphics.Color;
 import android.os.Handler;
 import android.os.Looper;
 import android.view.View;
-import android.widget.Button;
 import android.widget.ImageView;
 import android.widget.ProgressBar;
 import android.widget.TextView;
@@ -29,11 +29,15 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
 /**
- * Explicit, muted, short living-room preview. It never autoplays on focus and
- * releases the decoder after 15 seconds to stay friendly to low-memory TVs.
+ * Muted, bounded living-room preview. A channel must remain focused briefly
+ * before preview starts, so fast guide navigation does not create a stream for
+ * every card. Moving focus releases the old decoder; successful preview is
+ * capped at 15 seconds. Pressing the preview surface is handled by MainActivity
+ * and opens the normal continuous full-screen player.
  */
 @UnstableApi
 public final class HeroPreviewController {
+    private static final long AUTO_START_DELAY_MS = 700L;
     private static final long MAX_PREVIEW_MS = 15_000L;
 
     private final Activity activity;
@@ -42,13 +46,13 @@ public final class HeroPreviewController {
     private final ImageView poster;
     private final ProgressBar loading;
     private final TextView status;
-    private final Button button;
     private final Handler main = new Handler(Looper.getMainLooper());
     private final ExecutorService executor = Executors.newSingleThreadExecutor();
 
     private ExoPlayer player;
     private Channel selected;
     private int generation;
+    private Runnable pendingStart;
     private Runnable autoStop;
 
     public HeroPreviewController(Activity activity,
@@ -56,36 +60,57 @@ public final class HeroPreviewController {
                                  PlayerView playerView,
                                  ImageView poster,
                                  ProgressBar loading,
-                                 TextView status,
-                                 Button button) {
+                                 TextView status) {
         this.activity = activity;
         this.repository = repository;
         this.playerView = playerView;
         this.poster = poster;
         this.loading = loading;
         this.status = status;
-        this.button = button;
         playerView.setUseController(false);
         playerView.setKeepScreenOn(false);
         playerView.setVisibility(View.GONE);
         loading.setVisibility(View.GONE);
-        button.setOnClickListener(view -> toggle());
         updateIdleCopy();
     }
 
     public void select(Channel channel) {
-        boolean changed = selected == null || channel == null || selected.number != channel.number;
+        boolean changed = selected == null || channel == null
+                || selected.number != channel.number
+                || !safe(selected.id).equals(safe(channel.id));
         selected = channel;
-        if (changed) stop(false);
-        updateIdleCopy();
+        if (changed) {
+            stop(false);
+            scheduleAutoStart();
+        } else if (player == null && pendingStart == null) {
+            updateIdleCopy();
+        }
     }
 
-    public void toggle() {
-        if (player != null) {
-            stop(true);
+    private void scheduleAutoStart() {
+        Channel channel = selected;
+        if (channel == null) {
+            updateIdleCopy();
             return;
         }
-        start();
+        if (channel.isSubscriptionChannel() && !channel.isAvailable()) {
+            status.setTextColor(TvUi.AMBER);
+            status.setText("Subscription required  •  press OK to try full-screen television");
+            return;
+        }
+        if (channel.isUnavailable()) {
+            status.setTextColor(TvUi.ERROR);
+            status.setText("Needs attention  •  press OK to retry full-screen television");
+            return;
+        }
+        status.setTextColor(Color.WHITE);
+        status.setText("Auto preview starting…  •  press OK for continuous television");
+        final int scheduledGeneration = generation;
+        pendingStart = () -> {
+            pendingStart = null;
+            if (scheduledGeneration == generation) start();
+        };
+        main.postDelayed(pendingStart, AUTO_START_DELAY_MS);
     }
 
     private void start() {
@@ -94,9 +119,10 @@ public final class HeroPreviewController {
         final int currentGeneration = ++generation;
         releasePlayer();
         loading.setVisibility(View.VISIBLE);
-        status.setText("Starting a muted 15-second preview…");
-        button.setText("■  Stop preview");
+        status.setTextColor(Color.WHITE);
+        status.setText("Starting muted live preview…");
         Telemetry.event(activity, "guide_preview_request", Telemetry.data(
+                "automatic", true,
                 "language", channel.language,
                 "category", channel.category,
                 "access_state", channel.accessState
@@ -112,11 +138,11 @@ public final class HeroPreviewController {
                     if (info.authRequired || info.subscriptionRequired || info.unavailable
                             || info.streamUrl == null || info.streamUrl.trim().isEmpty()) {
                         String copy = info.subscriptionRequired
-                                ? "Preview unavailable until this Jio subscription is active."
+                                ? "Subscription required  •  press OK to try full screen"
                                 : info.authRequired
-                                ? "Reconnect JioTV before previewing this channel."
-                                : "This channel cannot be previewed right now.";
-                        fail(copy);
+                                ? "Reconnect JioTV before previewing this channel"
+                                : "Preview unavailable  •  press OK to try full screen";
+                        fail(copy, info.subscriptionRequired ? TvUi.AMBER : TvUi.ERROR);
                         return;
                     }
                     prepare(info, channel, currentGeneration);
@@ -124,8 +150,9 @@ public final class HeroPreviewController {
             } catch (Exception error) {
                 main.post(() -> {
                     if (currentGeneration != generation || activity.isFinishing()) return;
-                    fail("Preview unavailable — Watch Live may still work.");
+                    fail("Preview unavailable  •  press OK to try full screen", TvUi.ERROR);
                     Telemetry.error(activity, "guide_preview", error, Telemetry.data(
+                            "automatic", true,
                             "language", channel.language,
                             "category", channel.category
                     ));
@@ -154,8 +181,10 @@ public final class HeroPreviewController {
                     loading.setVisibility(View.GONE);
                     poster.setVisibility(View.GONE);
                     playerView.setVisibility(View.VISIBLE);
-                    status.setText("Muted preview  •  Watch Live for full-screen sound");
+                    status.setTextColor(TvUi.MINT);
+                    status.setText("Muted 15-second preview  •  OK opens continuous television");
                     Telemetry.event(activity, "guide_preview_ready", Telemetry.data(
+                            "automatic", true,
                             "protocol", protocol(info),
                             "drm", info.drm,
                             "language", channel.language,
@@ -165,14 +194,15 @@ public final class HeroPreviewController {
                 } else if (state == Player.STATE_BUFFERING) {
                     loading.setVisibility(View.VISIBLE);
                 } else if (state == Player.STATE_ENDED) {
-                    stop(false);
+                    finishBoundedPreview();
                 }
             }
 
             @Override public void onPlayerError(PlaybackException error) {
                 if (currentGeneration != generation) return;
-                fail("Preview stopped — Watch Live may still work.");
+                fail("Preview stopped  •  press OK to try full screen", TvUi.ERROR);
                 Telemetry.error(activity, "guide_preview_media", error, Telemetry.data(
+                        "automatic", true,
                         "protocol", protocol(info),
                         "drm", info.drm
                 ));
@@ -180,10 +210,11 @@ public final class HeroPreviewController {
         });
 
         MediaItem.Builder item = new MediaItem.Builder().setUri(info.streamUrl);
-        String lower = info.streamUrl.toLowerCase(Locale.ROOT);
-        if (info.mimeType.toLowerCase(Locale.ROOT).contains("dash") || lower.contains(".mpd")) {
+        String lower = safe(info.streamUrl).toLowerCase(Locale.ROOT);
+        String mime = safe(info.mimeType).toLowerCase(Locale.ROOT);
+        if (mime.contains("dash") || lower.contains(".mpd")) {
             item.setMimeType(MimeTypes.APPLICATION_MPD);
-        } else if (info.mimeType.toLowerCase(Locale.ROOT).contains("mpegurl") || lower.contains(".m3u8")) {
+        } else if (mime.contains("mpegurl") || lower.contains(".m3u8")) {
             item.setMimeType(MimeTypes.APPLICATION_M3U8);
         }
         if (info.drm && info.licenseUrl != null && !info.licenseUrl.isEmpty()) {
@@ -199,22 +230,18 @@ public final class HeroPreviewController {
     }
 
     private String protocol(PlaybackInfo info) {
-        String stream = info.streamUrl == null ? "" : info.streamUrl.toLowerCase(Locale.ROOT);
-        return info.mimeType.toLowerCase(Locale.ROOT).contains("dash") || stream.contains(".mpd") ? "dash" : "hls";
+        String stream = safe(info.streamUrl).toLowerCase(Locale.ROOT);
+        String mime = safe(info.mimeType).toLowerCase(Locale.ROOT);
+        return mime.contains("dash") || stream.contains(".mpd") ? "dash" : "hls";
     }
 
     private void scheduleStop() {
         if (autoStop != null) main.removeCallbacks(autoStop);
-        autoStop = () -> stop(false);
+        autoStop = this::finishBoundedPreview;
         main.postDelayed(autoStop, MAX_PREVIEW_MS);
     }
 
-    private void fail(String message) {
-        stop(false);
-        status.setText(message);
-    }
-
-    public void stop(boolean ownerRequested) {
+    private void finishBoundedPreview() {
         generation++;
         if (autoStop != null) main.removeCallbacks(autoStop);
         autoStop = null;
@@ -222,9 +249,38 @@ public final class HeroPreviewController {
         loading.setVisibility(View.GONE);
         playerView.setVisibility(View.GONE);
         poster.setVisibility(View.VISIBLE);
-        button.setText("▶  Preview");
-        if (ownerRequested) status.setText("Preview stopped");
-        else updateIdleCopy();
+        status.setTextColor(TvUi.MUTED);
+        status.setText("Preview ended  •  move channels or press OK for continuous television");
+    }
+
+    private void fail(String message, int color) {
+        generation++;
+        if (autoStop != null) main.removeCallbacks(autoStop);
+        autoStop = null;
+        releasePlayer();
+        loading.setVisibility(View.GONE);
+        playerView.setVisibility(View.GONE);
+        poster.setVisibility(View.VISIBLE);
+        status.setTextColor(color);
+        status.setText(message);
+    }
+
+    public void stop(boolean ownerRequested) {
+        generation++;
+        if (pendingStart != null) main.removeCallbacks(pendingStart);
+        if (autoStop != null) main.removeCallbacks(autoStop);
+        pendingStart = null;
+        autoStop = null;
+        releasePlayer();
+        loading.setVisibility(View.GONE);
+        playerView.setVisibility(View.GONE);
+        poster.setVisibility(View.VISIBLE);
+        if (ownerRequested) {
+            status.setTextColor(TvUi.MUTED);
+            status.setText("Preview stopped");
+        } else {
+            updateIdleCopy();
+        }
     }
 
     public void release() {
@@ -242,13 +298,17 @@ public final class HeroPreviewController {
 
     private void updateIdleCopy() {
         if (selected == null) {
-            status.setText("Choose a channel, then preview it here");
-        } else if (selected.isSubscriptionChannel()) {
-            status.setText("Subscription channel  •  Preview may require entitlement");
+            status.setTextColor(TvUi.MUTED);
+            status.setText("Highlight a channel to preview it automatically");
+        } else if (selected.isSubscriptionChannel() && !selected.isAvailable()) {
+            status.setTextColor(TvUi.AMBER);
+            status.setText("Subscription required  •  press OK to try full-screen television");
         } else if (selected.isUnavailable()) {
-            status.setText("Needs attention  •  Preview will retry current access");
+            status.setTextColor(TvUi.ERROR);
+            status.setText("Needs attention  •  press OK to retry full-screen television");
         } else {
-            status.setText("Press Preview for a muted 15-second look");
+            status.setTextColor(Color.WHITE);
+            status.setText("Auto preview  •  press OK for continuous television");
         }
     }
 
@@ -262,4 +322,6 @@ public final class HeroPreviewController {
         }
         return map;
     }
+
+    private static String safe(String value) { return value == null ? "" : value; }
 }

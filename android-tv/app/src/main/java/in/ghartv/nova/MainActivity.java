@@ -70,7 +70,7 @@ public final class MainActivity extends Activity implements ChannelNavigator.Lis
     private PlayerView heroPreviewView;
     private ProgressBar heroPreviewLoading;
     private TextView heroPreviewStatus;
-    private Button previewButton;
+    private FrameLayout heroPreviewHost;
     private HeroPreviewController heroPreviewController;
 
     private boolean catalogueBusy;
@@ -165,6 +165,14 @@ public final class MainActivity extends Activity implements ChannelNavigator.Lis
 private View buildUi() {
     FrameLayout root = new FrameLayout(this);
     root.addView(new AuroraBackgroundView(this), new FrameLayout.LayoutParams(-1, -1));
+    int familyBackdropRes = FamilyTheme.backdropPhotoRes(this);
+    if (familyBackdropRes != 0) {
+        ImageView familyBackdrop = new ImageView(this);
+        familyBackdrop.setScaleType(ImageView.ScaleType.CENTER_CROP);
+        familyBackdrop.setImageResource(familyBackdropRes);
+        familyBackdrop.setAlpha(.58f);
+        root.addView(familyBackdrop, new FrameLayout.LayoutParams(-1, -1));
+    }
     root.addView(new CelebrationView(this), new FrameLayout.LayoutParams(-1, -1));
 
     LinearLayout shell = new LinearLayout(this);
@@ -294,43 +302,45 @@ private LinearLayout buildHero() {
     top.addView(heroNumber, new LinearLayout.LayoutParams(-2, TvUi.dp(this, 27)));
     hero.addView(top, new LinearLayout.LayoutParams(-1, TvUi.dp(this, 26)));
 
-    FrameLayout previewHost = new FrameLayout(this);
-    previewHost.setBackground(TvUi.gradient(Color.argb(178, 3, 10, 18), Color.argb(166, 12, 33, 51),
-            22, Color.argb(85, 255, 255, 255), 1, this));
+    heroPreviewHost = new FrameLayout(this);
+    heroPreviewHost.setBackground(TvUi.gradient(Color.argb(158, 3, 10, 18), Color.argb(148, 12, 33, 51),
+            22, Color.argb(95, 255, 255, 255), 1, this));
+    heroPreviewHost.setFocusable(true);
+    heroPreviewHost.setFocusableInTouchMode(true);
+    heroPreviewHost.setOnClickListener(view -> play(selectedChannel));
+    heroPreviewHost.setOnFocusChangeListener((view, focused) -> view.animate()
+            .scaleX(focused ? 1.025f : 1f)
+            .scaleY(focused ? 1.025f : 1f)
+            .translationZ(focused ? TvUi.dp(this, 8) : 0)
+            .setDuration(110)
+            .start());
 
     heroPreviewView = new PlayerView(this);
     heroPreviewView.setUseController(false);
     heroPreviewView.setFocusable(false);
-    previewHost.addView(heroPreviewView, new FrameLayout.LayoutParams(-1, -1));
+    heroPreviewHost.addView(heroPreviewView, new FrameLayout.LayoutParams(-1, -1));
 
     heroLogo = new ImageView(this);
     heroLogo.setScaleType(ImageView.ScaleType.CENTER_INSIDE);
     heroLogo.setPadding(TvUi.dp(this, 24), TvUi.dp(this, 14), TvUi.dp(this, 24), TvUi.dp(this, 14));
-    previewHost.addView(heroLogo, new FrameLayout.LayoutParams(-1, -1));
+    heroPreviewHost.addView(heroLogo, new FrameLayout.LayoutParams(-1, -1));
 
     heroPreviewLoading = new ProgressBar(this);
     heroPreviewLoading.setIndeterminate(true);
-    previewHost.addView(heroPreviewLoading, new FrameLayout.LayoutParams(
+    heroPreviewHost.addView(heroPreviewLoading, new FrameLayout.LayoutParams(
             TvUi.dp(this, 36), TvUi.dp(this, 36), Gravity.CENTER));
 
-    heroPreviewStatus = TvUi.label(this, "Press Preview for a muted 15-second look", 9.5f, Color.WHITE, true);
+    heroPreviewStatus = TvUi.label(this, "Auto preview  •  press OK here for full-screen television", 9.5f, Color.WHITE, true);
     heroPreviewStatus.setGravity(Gravity.CENTER_VERTICAL);
     heroPreviewStatus.setPadding(TvUi.dp(this, 9), 0, TvUi.dp(this, 9), 0);
     heroPreviewStatus.setBackground(TvUi.rounded(Color.argb(164, 0, 0, 0), 13, Color.TRANSPARENT, 0, this));
     FrameLayout.LayoutParams statusParams = new FrameLayout.LayoutParams(-1, TvUi.dp(this, 24), Gravity.BOTTOM);
     statusParams.setMargins(TvUi.dp(this, 6), 0, TvUi.dp(this, 6), TvUi.dp(this, 6));
-    previewHost.addView(heroPreviewStatus, statusParams);
-
-    previewButton = actionButton("▶  Preview");
-    previewButton.setTextSize(11);
-    FrameLayout.LayoutParams previewButtonParams = new FrameLayout.LayoutParams(
-            TvUi.dp(this, 98), TvUi.dp(this, 32), Gravity.TOP | Gravity.END);
-    previewButtonParams.setMargins(0, TvUi.dp(this, 6), TvUi.dp(this, 6), 0);
-    previewHost.addView(previewButton, previewButtonParams);
+    heroPreviewHost.addView(heroPreviewStatus, statusParams);
 
     LinearLayout.LayoutParams previewParams = new LinearLayout.LayoutParams(-1, TvUi.dp(this, 104));
     previewParams.topMargin = TvUi.dp(this, 5);
-    hero.addView(previewHost, previewParams);
+    hero.addView(heroPreviewHost, previewParams);
 
     heroTitle = TvUi.label(this, "Your live television", 21, TvUi.TEXT, true);
     heroTitle.setMaxLines(2);
@@ -398,7 +408,7 @@ private LinearLayout buildHero() {
     hero.addView(hints, new LinearLayout.LayoutParams(-1, TvUi.dp(this, 17)));
 
     heroPreviewController = new HeroPreviewController(
-            this, repository, heroPreviewView, heroLogo, heroPreviewLoading, heroPreviewStatus, previewButton);
+            this, repository, heroPreviewView, heroLogo, heroPreviewLoading, heroPreviewStatus);
     return hero;
 }
 
@@ -612,6 +622,10 @@ private LinearLayout buildHero() {
             heroNow.setText("Live now");
             heroNext.setText("Choose a live channel from the guide");
             heroLogo.setImageDrawable(null);
+            if (heroPreviewHost != null) {
+                heroPreviewHost.setEnabled(false);
+                heroPreviewHost.setContentDescription("No channel selected");
+            }
             if (heroPreviewController != null) heroPreviewController.select(null);
             heroProgress.setProgress(0);
             playButton.setEnabled(false);
@@ -620,6 +634,10 @@ private LinearLayout buildHero() {
         }
         playButton.setEnabled(true);
         favouriteButton.setEnabled(true);
+        if (heroPreviewHost != null) {
+            heroPreviewHost.setEnabled(true);
+            heroPreviewHost.setContentDescription("Preview of " + channel.name + ". Press OK for continuous full-screen television.");
+        }
         repository.rememberViewSelection(activeViewKey(), channel.number);
         heroNumber.setText(channel.displayNumber());
         heroTitle.setText(channel.name);

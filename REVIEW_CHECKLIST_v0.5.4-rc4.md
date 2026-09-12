@@ -1,4 +1,4 @@
-# GharTV v0.5.4 RC4 review
+# GharTV v0.5.4 RC5 review
 
 1. Confirm the long vertical selected-channel tile is restored and Watch Live is fully visible.
 2. Start Preview: verify muted playback begins only after selection and stops/releases after 15 seconds.

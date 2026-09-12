@@ -10,6 +10,6 @@ GharTV uses a lightweight local-only birthday theme on these dates:
 | 18 August | Wifey |
 | 22 August | Sis |
 | 12 September | Dad |
-| 4 October | Simrath |
+| 4 October | Simrat |
 
 The TV can use **Automatic**, preview any family birthday, or preview the standard theme. Names and dates stay in the app's local theme configuration and are never sent through diagnostics. The rendering is static: no animation timer, no continuously running confetti, and no extra network request.

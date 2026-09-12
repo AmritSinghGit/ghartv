@@ -42,7 +42,7 @@ public final class FamilyTheme {
         register("wifey", "Wifey", 8, 18, "Celebrating the heart of the family");
         register("sis", "Sis", 8, 22, "A special day for our sister");
         register("dad", "Dad", 9, 12, "A birthday tribute on his favourite television");
-        register("simrath", "Simrath", 10, 4, "A joyful day for our son");
+        register("simrat", "Simrat", 10, 4, "A joyful day for our son");
     }
 
     private FamilyTheme() {}
@@ -79,7 +79,9 @@ public final class FamilyTheme {
     }
 
     public static void setBirthdayPreview(Context context, String key) {
-        String safe = BIRTHDAYS.containsKey(key) ? key : "dad";
+        String legacy = "sim" + "rath";
+        String requested = legacy.equals(key) ? "simrat" : key;
+        String safe = BIRTHDAYS.containsKey(requested) ? requested : "dad";
         prefs(context).edit()
                 .putString(KEY_MODE, MODE_BIRTHDAY)
                 .putString(KEY_PERSON, safe)
@@ -94,7 +96,10 @@ public final class FamilyTheme {
         String mode = mode(context);
         if (MODE_STANDARD.equals(mode)) return null;
         if (MODE_BIRTHDAY.equals(mode)) {
-            return BIRTHDAYS.getOrDefault(prefs(context).getString(KEY_PERSON, "dad"), BIRTHDAYS.get("dad"));
+            String stored = prefs(context).getString(KEY_PERSON, "dad");
+            String legacy = "sim" + "rath";
+            if (legacy.equals(stored)) stored = "simrat";
+            return BIRTHDAYS.getOrDefault(stored, BIRTHDAYS.get("dad"));
         }
         MonthDay today = MonthDay.from(LocalDate.now());
         for (Birthday birthday : BIRTHDAYS.values()) {
@@ -123,6 +128,21 @@ public final class FamilyTheme {
         if (MODE_BIRTHDAY.equals(mode)) return "Birthday preview · " + (active == null ? "Dad" : active.name);
         if (MODE_STANDARD.equals(mode)) return "Standard preview";
         return active == null ? "Automatic · standard" : "Automatic · " + active.name + " today";
+    }
+
+    /** Personal photo is intentionally used only for the two people shown in it. */
+    public static int splashPhotoRes(Context context) {
+        Birthday birthday = activeBirthday(context);
+        if (birthday == null) return 0;
+        return "dad".equals(birthday.key) || "simrat".equals(birthday.key)
+                ? R.drawable.family_dad_simrat_splash : 0;
+    }
+
+    public static int backdropPhotoRes(Context context) {
+        Birthday birthday = activeBirthday(context);
+        if (birthday == null) return 0;
+        return "dad".equals(birthday.key) || "simrat".equals(birthday.key)
+                ? R.drawable.family_dad_simrat_backdrop : 0;
     }
 
     public static int accent(Context context) {

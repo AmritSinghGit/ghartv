@@ -1,4 +1,4 @@
-## 0.5.4 RC4 — Family Preview
+## 0.5.4 RC5 — Family Preview
 
 - Restored the vertical selected-channel tile with explicit muted preview.
 - Corrected all family birthday mappings and refined birthday/standard glass themes.

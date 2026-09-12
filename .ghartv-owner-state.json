@@ -6,15 +6,15 @@
   "package_id": "in.ghartv.nova",
   "repository": "AmritSinghGit/ghartv",
   "branch": "main",
-  "baseline_sha": "6228319fcefe0bf49685d925da426490c77f261a",
-  "current_candidate": "0.5.4-rc4-family-preview",
-  "version_code": 13,
-  "candidate_release": "v0.5.4-rc4",
+  "baseline_sha": "968e43b6eaeb774f5b8ab0ede211dc5ae193cf11",
+  "current_candidate": "0.5.4-rc5-family-photo",
+  "version_code": 14,
+  "candidate_release": "v0.5.4-rc5",
   "owner_decision": "REVIEW_PENDING",
   "analytics_tenant": "ghartv",
   "analytics_lane": "operon-analytics",
   "analytics_pr": 61,
   "continuity_rule": "Same GharTV project/repository/main/package/signing identity and same Operon Analytics branch/PR/lane; no duplicate authority",
-  "stable_update": "v0.5.3 remains advertised until explicit v0.5.4 owner approval",
-  "next_action": "Push/build/open RC4 independently of local Operon worktree availability; review family theme, vertical preview tile, voice/program search and transport controls."
+  "stable_update": "v0.5.3 / versionCode 10",
+  "next_action": "Build exact repair source, require local and GitHub Android compilation, open Dad photo splash and automatic bounded channel preview, then review before stable publication"
 }

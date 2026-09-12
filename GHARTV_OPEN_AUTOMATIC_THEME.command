@@ -12,5 +12,5 @@ if [ -z "$SERIAL" ]; then
 fi
 [ -n "$SERIAL" ] || { echo "No running GharTV emulator found." >&2; exit 1; }
 "$ADB" -s "$SERIAL" shell am force-stop in.ghartv.nova
-"$ADB" -s "$SERIAL" shell am start -W -n in.ghartv.nova/.MainActivity --es ghartv_theme_preview auto
+"$ADB" -s "$SERIAL" shell am start -W -n in.ghartv.nova/.SplashActivity --es ghartv_theme_preview auto
 echo "Returned GharTV to automatic family-date mode on $SERIAL"
