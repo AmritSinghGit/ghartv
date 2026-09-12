@@ -1,0 +1,38 @@
+name: Resolve GharTV share address
+on:
+  push:
+    paths: ['.github/workflows/share-link.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  public-link:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Create and verify public redirect only
+        shell: python
+        run: |
+          import json, re, urllib.parse, urllib.request
+          destination = 'https://amritsinghgit.github.io/ghartv/'
+          attempts = [
+            ('https://www.is.gd/create.php', {'format':'simple','url':destination,'shorturl':'GharTVNova'}),
+            ('https://tinyurl.com/api-create.php', {'url':destination}),
+          ]
+          for endpoint, params in attempts:
+            try:
+              url = endpoint + '?' + urllib.parse.urlencode(params)
+              request = urllib.request.Request(url, headers={'User-Agent':'Mozilla/5.0 GharTV-owner-link/1'})
+              with urllib.request.urlopen(request, timeout=15) as response:
+                value = response.read(8192).decode('utf-8').strip()
+              if not re.fullmatch(r'https://(?:is\.gd|tinyurl\.com)/[A-Za-z0-9_-]+',value):
+                print('UNUSABLE_RESPONSE', endpoint, repr(value[:80])); continue
+              with urllib.request.urlopen(urllib.request.Request(value, method='HEAD'),timeout=15) as response:
+                final = response.geturl()
+              if final.rstrip('/') != destination.rstrip('/'):
+                print('DESTINATION_NOT_VERIFIED',value);continue
+              print('GHARTV_SHARE_RECORD='+json.dumps({'share_url':value,'destination':destination,'verified_destination':True,'statistics_requested':False}))
+              break
+            except Exception as error:
+              print('SHORT_LINK_ATTEMPT_FAILED',type(error).__name__)
+          else:
+            print('GHARTV_SHARE_FALLBACK='+destination)
