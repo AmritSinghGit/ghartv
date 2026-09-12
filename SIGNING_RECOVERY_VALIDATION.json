@@ -1,0 +1,53 @@
+{
+  "schema": "ghartv.signing-recovery-validation.v1",
+  "delivery_revision": "CYAN-REVIEW-5",
+  "checked_implementation_sha": "bf85dd42ed84b14b0aa8bd44b0081cc3fbb87bc2",
+  "owner_runner_sha256": "75dcc31ee1a76381077d6733c2538664de1a82d616959ea92fd7cfc3db41e831",
+  "owner_runner_git_blob": "7fdd2f3bfa5edf744a1565d6cc722260ddd41ab5",
+  "lane_note_sha256": "22592678a72f43141602afe2a1d41544dfdb9949e923aa4fb5f358b2be864bea",
+  "application_source_unchanged": "b4d0304441b7d00833e4d475c16e43e1ef92b3f3",
+  "unsigned_apk_sha256": "32efc94eaa635b3da1d1895570b857e9f5d2dea5b5bed1151818c48d03a7cd21",
+  "cloud_validation": {
+    "workflow": "GharTV signing recovery check",
+    "run_id": 34697425562,
+    "job_id": 103563200084,
+    "status": "completed",
+    "conclusion": "success",
+    "completed_at": "2026-09-12T13:48:27Z",
+    "toolchain": "Android build-tools 36.0.0 / actual apksigner and zipalign / JDK17",
+    "tests": {
+      "actual_native_signing_using_configured_child_environment": "PASS",
+      "separate_keystore_and_private_key_passwords": "PASS",
+      "native_signature_verify": "PASS",
+      "compiled_payload_matches_exact_unsigned_RC2": "PASS",
+      "incorrect_fixture_password_classification": "PASS",
+      "fixture_password_absent_from_saved_diagnostic": "PASS",
+      "production_manifest_code14_preserved": "PASS"
+    },
+    "signing_identity": "DISPOSABLE_TEST_ONLY_NOT_OWNER_RELEASE_KEY",
+    "test_key_or_apk_published": false,
+    "test_output_removed_with_temporary_directory": true,
+    "one_time_workflow_removed_after_success": true
+  },
+  "local_checks": {
+    "bash_and_embedded_python_syntax": "PASS",
+    "quoted_and_shell_escaped_config_paths": "PASS",
+    "four_field_parser_no_shell_execution": "PASS",
+    "passwords_absent_from_child_argument_values": "PASS",
+    "parent_environment_unchanged": "PASS",
+    "raw_signer_output_not_retained": "PASS",
+    "missing_invalid_or_nonprivate_config_rejected": "PASS"
+  },
+  "owner_evidence": {
+    "last_received_run": "GHARTV-CYAN-4-20260912T133236Z-77995",
+    "obsidian": "WRITTEN_AND_READBACK_VERIFIED",
+    "bridge": "HANDOFF_EXIT_0_SYNC_EXIT_0_REPLICA_READBACK_UNVERIFIED",
+    "review4_result": "NATIVE_SIGNING_FAILED_EMULATOR_UNCHANGED",
+    "original_native_error_detail": "NOT_PROVIDED",
+    "review5_execution": "AWAITING_OWNER",
+    "owner_signed_apk_sha256": null,
+    "review5_emulator_result": "NOT_VERIFIED",
+    "physical_tv": "NOT_VERIFIED"
+  },
+  "limits": "This proves the repaired native signing path with a disposable fixture, not validity of the owner's saved credentials, an owner-signed published APK, a running Mac emulator, authenticated analytics or completed new Obsidian replication. No Android source rebuild, provider login, production promotion or owner-key replacement was performed."
+}
