@@ -8,7 +8,7 @@ CLOSE_MARKER="${TMPDIR:-/tmp}/ghartv-review-close-$$"
 export GHARTV_CLOSE_MARKER="$CLOSE_MARKER"
 python3 - "$0" "$@" <<'PY'
 from __future__ import annotations
-import argparse, datetime as dt, fcntl, hashlib, json, os, re, shutil, socket, subprocess, sys, tempfile, time, zipfile
+import argparse, datetime as dt, fcntl, hashlib, io, json, os, re, shutil, socket, subprocess, sys, tempfile, time, zipfile
 from pathlib import Path
 REPO='AmritSinghGit/ghartv'; SOURCE='b4d0304441b7d00833e4d475c16e43e1ef92b3f3'
 PROD='b46b2cd607c309d364d531b5fd9da618cd007f6c'; TAG='v0.5.5-rc2'; PACKAGE='in.ghartv.nova'
@@ -128,7 +128,7 @@ def review():
   assets=x.get('assets',[]);u=[v for v in assets if v['name']=='GharTV-review-unsigned.apk'];s=[v for v in assets if v['name']==ASSET]
   if len(u)!=1 or u[0].get('digest')!='sha256:'+UNSIGNED or len(s)>1:raise Stop('Review assets changed')
   return s
- with open('/dev/tty','r+') as tty:
+ with io.TextIOWrapper(io.FileIO('/dev/tty','r+'), encoding='utf-8', write_through=True) as tty:
   tty.write('\nThis reviews RC2 in the named emulator only. It may sign with your chosen EXISTING key and upload only the signed REVIEW APK. Production and physical TVs stay unchanged.\nType REVIEW RC2 to proceed, or press Enter to finish after Obsidian sync: ');tty.flush()
   if tty.readline().strip()!='REVIEW RC2':r['status']='MEMORY_UPDATED_REVIEW_DEFERRED' if r['obsidian']=='WRITTEN_AND_READBACK_VERIFIED' else 'REVIEW_DEFERRED_CONTINUITY_REQUIRES_ATTENTION';return
   with tempfile.TemporaryDirectory(prefix='.rc2-review-',dir=CURRENT) as t:
@@ -255,7 +255,7 @@ finally:
  print('\n'+receipt())
  if not args.noninteractive:
   try:
-   with open('/dev/tty','r+') as tty:
+   with io.TextIOWrapper(io.FileIO('/dev/tty','r+'), encoding='utf-8', write_through=True) as tty:
     tty.write('\nPress Enter to copy this handoff: ');tty.flush();tty.readline()
     copied=subprocess.run(['pbcopy'],input=receipt(),text=True,check=False)
     tty.write(('Copied.' if copied.returncode==0 else 'Copy failed; handoff saved in current/handoff.txt.')+' Press Enter to finish this terminal: ');tty.flush();tty.readline()
