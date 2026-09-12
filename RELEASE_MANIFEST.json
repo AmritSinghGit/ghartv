@@ -12,18 +12,21 @@
   "repository": "AmritSinghGit/ghartv",
   "branch": "main",
   "baselineSha": "968e43b6eaeb774f5b8ab0ede211dc5ae193cf11",
+  "candidate_sha": "b46b2cd607c309d364d531b5fd9da618cd007f6c",
+  "production_publication_sha": "e91fa93d89e2a36872da19dcceb3fcfa0d48bf96",
+  "apkSha256": "6f60d18a78e4b1692d6591d04bcef6e1cfda4252dba976d160a12cef03930199",
   "installPage": "https://amritsinghgit.github.io/ghartv/",
-  "stableDirectApk": "https://github.com/AmritSinghGit/ghartv/releases/latest/download/GharTV-Jio-Live.apk",
+  "stableDirectApk": "https://github.com/AmritSinghGit/ghartv/releases/download/v0.5.4-rc5/GharTV-Jio-Live-v0.5.4-rc5.apk",
   "reviewApk": "https://github.com/AmritSinghGit/ghartv/releases/download/v0.5.4-rc5/GharTV-Jio-Live-v0.5.4-rc5.apk",
   "continuation": "in-place from ~/Downloads/GharTV_Nova_v0.4.2",
   "architecture": "Leanback-only Android TV; Jio OTP/catalogue/EPG/playback; Media3 HLS/DASH/Widevine; opt-in diagnostics; local-only living-room suggestions",
-  "buildToolchain": {
-    "androidGradlePlugin": "8.10.1",
-    "gradle": "8.11.1",
-    "jdk": "17",
-    "media3": "1.10.1"
-  },
-  "ownerState": "REVIEW CANDIDATE \u2014 STABLE UPDATE NOT ANNOUNCED",
-  "candidate_sha": "TO_BE_PUBLISHED_BY_REVIEW_COMMAND",
-  "owner_decision": "REVIEW_PENDING"
+  "buildToolchain": {"androidGradlePlugin":"8.10.1","gradle":"8.11.1","jdk":"17","media3":"1.10.1"},
+  "ownerState": "PRODUCTION UPDATE ADVERTISED — PHYSICAL TV INSTALLATION NOT VERIFIED",
+  "owner_decision": "APPROVED_FOR_PRODUCTION_DISTRIBUTION_2026_09_12",
+  "distribution": "exact existing reviewed binary; no rebuild or re-signing",
+  "githubReleasePrerelease": true,
+  "githubLatestTag": "v0.5.3",
+  "mandatoryUpdateSupported": false,
+  "silentInstallSupported": false,
+  "deliveryControlIdentity": "Record the actual Git HEAD separately; newer control commits are not the APK source SHA"
 }
