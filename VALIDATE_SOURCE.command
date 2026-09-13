@@ -8,7 +8,7 @@ root=Path(sys.argv[1]).resolve(); app=root/'android-tv/app'; java=app/'src/main/
 required=[
  'SplashActivity.java','MainActivity.java','PlayerActivity.java','Channel.java','ChannelRepository.java','ChannelIndex.java',
  'WatchHistoryStore.java','Telemetry.java','UpdateManager.java','JioApiClient.java','Program.java',
- 'FamilyTheme.java','CelebrationView.java','AuroraBackgroundView.java','HeroPreviewController.java',
+ 'FamilyTheme.java','CelebrationView.java','AuroraBackgroundView.java',
  'MovieHubActivity.java','PictureShape.java','VoiceSearchController.java','VoiceSearchActivity.java','PlaybackQualityController.java','ProgramSearchService.java','EngagementTracker.java'
 ]
 missing=[name for name in required if not (java/name).is_file()]
@@ -28,8 +28,7 @@ for forbidden in ['youtube.com','youtu.be','Fastway','WAVES']:
     if forbidden.lower() in all_text.lower(): raise SystemExit('Jio-only boundary failed: '+forbidden)
 for marker in [
  'VoiceSearchController.launch', 'ProgramSearchService.search', 'FamilyTheme.showPicker',
- 'HeroPreviewController', 'AUTO_START_DELAY_MS = 700L', 'MAX_PREVIEW_MS = 15_000L',
- 'Auto preview', 'press OK for continuous', 'SplashActivity', 'splashPhotoRes', 'backdropPhotoRes',
+ 'Choose WATCH LIVE to start television', 'SplashActivity', 'splashPhotoRes', 'backdropPhotoRes',
  'active_time', 'catchup_request', 'transport_action', 'seekBy(-15_000L)', 'goLive()',
  'scheduleHideGuide', 'EXTRA_SCOPE_NUMBERS', 'Next working channel', 'KEY_PREVIOUS_CHANNEL',
  'previousChannel()', 'public synchronized int indexedCount()'

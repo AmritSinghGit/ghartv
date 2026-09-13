@@ -1,6 +1,6 @@
 # GharTV
 
-**Current review candidate:** v0.5.4 RC5 Family Preview — vertical channel tile, on-demand muted preview, family themes, voice/programme search and capability-gated transport controls. · Jio Live
+**Current review candidate:** v0.5.4 RC5 Family Preview — vertical channel tile, explicit Watch Live playback, family themes, voice/programme search and capability-gated transport controls. · Jio Live
 
 A remote-first Android TV / Google TV client for live television available to a connected JioTV account.
 
@@ -68,7 +68,7 @@ GharTV now includes an explicit opt-in, first-party technical diagnostics system
 
 ## v0.5.4 RC5 review candidate
 
-RC5 keeps the long selected-channel tile, adds an explicit muted 15-second preview,
+The guide keeps the long selected-channel tile and starts playback only after Watch Live,
 fixes vertical spacing so **Watch Live** remains visible, and provides local family
 birthday themes for Mom, Amrit, Harjas, Wifey, Sis, Dad and Simrat. The normal
 living-room screen hides internal RC labels.
