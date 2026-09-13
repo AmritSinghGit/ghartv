@@ -350,6 +350,7 @@ async function authorizePlayback(session, channel, retry = true) {
     createdAt: now(),
     streamUrl: streamUrl.href,
     headers: streamHeaders,
+    authorization: cookie,
     allowedHosts: new Set([streamUrl.hostname]),
   });
   return { ticket, url: `/api/stream/${ticket}`, channel: { id: channel.id, number: channel.number, name: channel.name } };
@@ -363,6 +364,12 @@ export function safeMediaUrl(input) {
     throw new Error("Private-network media targets are blocked.");
   }
   return url;
+}
+
+export function authorizedMediaUrl(input, authorization = "") {
+  const url = safeMediaUrl(input);
+  if (!authorization || url.searchParams.has("__hdnea__") || !(url.hostname === "jio.com" || url.hostname.endsWith(".jio.com"))) return url;
+  return safeMediaUrl(`${url.href}${url.search ? "&" : "?"}${authorization}`);
 }
 
 function mediaRoute(ticket, target) {
@@ -406,7 +413,7 @@ async function proxyStream(req, res, session, pathname, searchParams) {
     catch { return apiError(res, 400, "Invalid media URL."); }
   }
   let url;
-  try { url = safeMediaUrl(target); } catch (error) { apiError(res, 400, error.message); return true; }
+  try { url = authorizedMediaUrl(target, ticket.authorization); } catch (error) { apiError(res, 400, error.message); return true; }
   if (!ticket.allowedHosts.has(url.hostname)) {
     apiError(res, 403, "This media host was not declared by the selected channel.", "media_host_blocked");
     return true;

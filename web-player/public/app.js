@@ -130,17 +130,26 @@ async function playChannel(channelId) {
     });
     $("playerProgramme").textContent = current?.showname || current?.title || "Live now";
     const video = $("video");
-    if (video.canPlayType("application/vnd.apple.mpegurl")) {
-      video.src = playback.url;
-      await video.play().catch(() => {});
-    } else if (window.Hls?.isSupported()) {
+    video.addEventListener("playing", () => { $("playerStatus").textContent = "LIVE · Local session"; }, { once: true });
+    video.addEventListener("waiting", () => { $("playerStatus").textContent = "Buffering…"; }, { once: true });
+    if (window.Hls?.isSupported()) {
       state.hls = new Hls({ enableWorker: true, lowLatencyMode: true, backBufferLength: 30 });
-      state.hls.loadSource(playback.url);
       state.hls.attachMedia(video);
-      state.hls.on(Hls.Events.MANIFEST_PARSED, () => video.play().catch(() => {}));
-      state.hls.on(Hls.Events.ERROR, (_, data) => { if (data.fatal) $("playerStatus").textContent = "Playback needs attention"; });
+      state.hls.on(Hls.Events.MEDIA_ATTACHED, () => state.hls?.loadSource(playback.url));
+      state.hls.on(Hls.Events.MANIFEST_PARSED, () => {
+        $("playerStatus").textContent = "Starting video…";
+        video.play().catch(() => { $("playerStatus").textContent = "Press play to start"; });
+      });
+      state.hls.on(Hls.Events.ERROR, (_, data) => {
+        if (!data.fatal) return;
+        $("playerStatus").textContent = "Unable to play";
+        $("playerProgramme").textContent = `Stream error: ${data.details || data.type || "unknown"}`;
+      });
+    } else if (video.canPlayType("application/vnd.apple.mpegurl")) {
+      video.src = playback.url;
+      $("playerStatus").textContent = "Starting video…";
+      await video.play().catch(() => { $("playerStatus").textContent = "Press play to start"; });
     } else throw new Error("This browser does not support HLS playback.");
-    $("playerStatus").textContent = "LIVE · Local session";
   } catch (error) {
     $("playerProgramme").textContent = error.message;
     $("playerStatus").textContent = error.status === 403 ? "Not included for this account" : "Unable to play";

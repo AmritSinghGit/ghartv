@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { channelFromRaw, createAppServer, normalizeMobile, rewriteHlsManifest, safeMediaUrl } from "../server.mjs";
+import { authorizedMediaUrl, channelFromRaw, createAppServer, normalizeMobile, rewriteHlsManifest, safeMediaUrl } from "../server.mjs";
 
 test("normalizes an Indian mobile number without retaining formatting", () => {
   assert.equal(normalizeMobile("+91 98765 43210"), "9876543210");
@@ -25,6 +25,12 @@ test("blocks non-HTTPS and private-network media targets", () => {
   assert.equal(safeMediaUrl("https://edge.example/live.m3u8").hostname, "edge.example");
   assert.throws(() => safeMediaUrl("http://edge.example/live.m3u8"), /HTTPS/);
   assert.throws(() => safeMediaUrl("https://127.0.0.1/private"), /Private-network/);
+});
+
+test("inherits the Jio stream authorization onto protected child media", () => {
+  const authorization = "__hdnea__=st=1~exp=2~acl=/*~hmac=test";
+  assert.match(authorizedMediaUrl("https://tv.media.jio.com/live/aes128.key", authorization).href, /__hdnea__=/);
+  assert.doesNotMatch(authorizedMediaUrl("https://media.example/live.key", authorization).href, /__hdnea__=/);
 });
 
 test("serves the local health and review page", async (context) => {
