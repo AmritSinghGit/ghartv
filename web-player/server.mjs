@@ -389,13 +389,20 @@ export function rewriteHlsManifest(text, base, ticket, onUrl = () => {}) {
   }).join("\n");
 }
 
-function mergeSetCookies(ticket, response) {
-  const values = typeof response.headers.getSetCookie === "function" ? response.headers.getSetCookie() : [];
+export function mergeTicketCookies(ticket, values = []) {
   const pairs = values.map((item) => item.split(";", 1)[0].trim()).filter(Boolean);
   if (!pairs.length) return;
   const existing = new Map(String(ticket.headers.cookie || "").split(";").map((p) => p.trim()).filter(Boolean).map((p) => [p.split("=", 1)[0], p]));
-  for (const pair of pairs) existing.set(pair.split("=", 1)[0], pair);
+  for (const pair of pairs) {
+    existing.set(pair.split("=", 1)[0], pair);
+    if (pair.startsWith("__hdnea__=")) ticket.authorization = pair;
+  }
   ticket.headers.cookie = [...existing.values()].join("; ");
+}
+
+function mergeSetCookies(ticket, response) {
+  const values = typeof response.headers.getSetCookie === "function" ? response.headers.getSetCookie() : [];
+  mergeTicketCookies(ticket, values);
 }
 
 async function proxyStream(req, res, session, pathname, searchParams) {
@@ -422,11 +429,16 @@ async function proxyStream(req, res, session, pathname, searchParams) {
   delete headers["content-type"];
   if (req.headers.range) headers.range = req.headers.range;
   let upstream;
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 30_000);
+  timeout.unref();
   try {
-    upstream = await fetch(url, { headers, redirect: "follow", signal: AbortSignal.timeout(30_000) });
+    upstream = await fetch(url, { headers, redirect: "follow", signal: controller.signal });
   } catch {
     apiError(res, 502, "The channel media could not be reached.", "media_unreachable");
     return true;
+  } finally {
+    clearTimeout(timeout);
   }
   let finalUrl;
   try { finalUrl = safeMediaUrl(upstream.url); } catch (error) { apiError(res, 502, error.message); return true; }
@@ -456,7 +468,12 @@ async function proxyStream(req, res, session, pathname, searchParams) {
   if (upstream.headers.get("content-length")) responseHeaders["content-length"] = upstream.headers.get("content-length");
   if (upstream.headers.get("content-range")) responseHeaders["content-range"] = upstream.headers.get("content-range");
   res.writeHead(upstream.status, responseHeaders);
-  if (upstream.body) Readable.fromWeb(upstream.body).pipe(res); else res.end();
+  if (upstream.body) {
+    const media = Readable.fromWeb(upstream.body);
+    media.on("error", () => { if (!res.destroyed) res.destroy(); });
+    res.on("close", () => { if (!media.destroyed) media.destroy(); });
+    media.pipe(res);
+  } else res.end();
   return true;
 }
 
@@ -553,6 +570,10 @@ export function createAppServer() {
       if (url.pathname.startsWith("/api/")) await handleApi(req, res, url);
       else if (!(await serveStatic(res, url.pathname))) apiError(res, 404, "Not found.");
     } catch (error) {
+      if (res.headersSent) {
+        if (!res.destroyed) res.destroy();
+        return;
+      }
       const status = Number(error.status) || (error instanceof SyntaxError ? 400 : 502);
       apiError(res, status, error.message || "The request failed.", status === 401 ? "auth_required" : "provider_error");
     }
