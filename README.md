@@ -66,6 +66,20 @@ The direct account/catalogue/playback architecture was informed by the MIT-licen
 
 GharTV now includes an explicit opt-in, first-party technical diagnostics system. Users can preview, send, disable or delete queued reports from the TV. Mobile numbers, OTPs, Jio credentials/tokens/cookies, stream/licence URLs, successful channel viewing history and hardware identifiers are excluded. See [TELEMETRY.md](TELEMETRY.md) and [PRIVACY.md](PRIVACY.md).
 
+## Local web-player owner review
+
+`GHARTV_OPEN_WEB_PLAYER.command` starts a loopback-only browser candidate at
+`http://127.0.0.1:8790`. It supports Jio phone-number/OTP connection, the live
+channel catalogue, categories/search, programme lookup and HLS playback through a
+bounded local proxy. Account and playback credentials remain only in process memory
+and are discarded when the server stops. The browser receives an HttpOnly local
+session cookie, never the provider tokens.
+
+This is an owner-only experimental connector and is not published by GitHub Pages.
+The first candidate reports DRM/DASH-only channels as unsupported instead of bypassing
+content protection. Do not represent local technical compatibility as provider
+authorization or general distribution clearance.
+
 ## v0.5.4 RC5 review candidate
 
 The guide keeps the long selected-channel tile and starts playback only after Watch Live,

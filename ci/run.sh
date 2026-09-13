@@ -10,6 +10,9 @@ cd "$PROJECT_ROOT"
 
 ./VALIDATE_SOURCE.command
 node --check telemetry/worker/src/index.js
+node --check web-player/server.mjs
+node --check web-player/public/app.js
+node --test web-player/test/server.test.mjs
 
 python3 - telemetry/worker/schema.sql <<'PY'
 import sqlite3

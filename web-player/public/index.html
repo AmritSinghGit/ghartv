@@ -1,0 +1,83 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="referrer" content="no-referrer">
+  <title>GharTV · Local web player</title>
+  <link rel="stylesheet" href="/styles.css">
+  <script defer src="/vendor/hls.min.js"></script>
+  <script defer src="/app.js"></script>
+</head>
+<body>
+  <div class="aurora one"></div><div class="aurora two"></div>
+  <header class="topbar">
+    <a class="brand" href="#">GHAR<span>TV</span></a>
+    <div class="top-actions">
+      <span class="pill review">LOCAL OWNER REVIEW</span>
+      <button id="accountButton" class="account" type="button">Connect JioTV</button>
+    </div>
+  </header>
+
+  <main>
+    <section class="hero">
+      <div class="hero-copy">
+        <p class="eyebrow">WEB PLAYER · CANDIDATE 01</p>
+        <h1>Your live television,<br><em>now in the browser.</em></h1>
+        <p class="lead">Connect the mobile number attached to your Jio account, choose a channel, and watch it here. This candidate runs only on this Mac.</p>
+        <div class="trust-row"><span>● Credentials stay in memory</span><span>● No TV session extraction</span><span>● Not published</span></div>
+      </div>
+      <div class="signal-card">
+        <div class="signal-top"><span class="live-dot">● LIVE</span><span id="heroState">Waiting to connect</span></div>
+        <div class="signal-screen"><div class="rings"></div><div class="signal-mark">G</div></div>
+        <p id="heroNote">Use your own Jio number and OTP. Nothing is saved when the local server stops.</p>
+      </div>
+    </section>
+
+    <section id="browse" class="browse hidden" aria-live="polite">
+      <div class="browse-head">
+        <div><p class="eyebrow">CHANNEL GUIDE</p><h2>What do you want to watch?</h2></div>
+        <label class="search"><span>⌕</span><input id="search" type="search" placeholder="Search channel, language or category"></label>
+      </div>
+      <div id="categoryBar" class="categories"></div>
+      <p id="resultCount" class="result-count"></p>
+      <div id="channelGrid" class="channel-grid"></div>
+    </section>
+  </main>
+
+  <dialog id="loginDialog" class="modal">
+    <form method="dialog" class="modal-card" id="loginForm">
+      <button class="close" value="cancel" aria-label="Close">×</button>
+      <p class="eyebrow">PRIVATE CONNECTION</p>
+      <h2 id="loginTitle">Connect JioTV</h2>
+      <p id="loginCopy" class="modal-copy">Enter the 10-digit mobile number that receives your Jio OTP.</p>
+      <label id="mobileField">Mobile number<input id="mobile" inputmode="numeric" autocomplete="tel" maxlength="12" placeholder="10-digit Jio number"></label>
+      <label id="otpField" class="hidden">One-time password<input id="otp" inputmode="numeric" autocomplete="one-time-code" maxlength="8" placeholder="OTP from Jio"></label>
+      <button id="loginAction" class="primary" type="submit">Send OTP</button>
+      <button id="logoutButton" class="secondary hidden" type="button">Disconnect this browser</button>
+      <p id="loginStatus" class="status"></p>
+      <p class="fine">The number, OTP and provider tokens never enter browser storage or Git. This is an experimental owner-only connector.</p>
+    </form>
+  </dialog>
+
+  <dialog id="playerDialog" class="player-modal">
+    <div class="player-shell">
+      <video id="video" controls autoplay playsinline></video>
+      <div class="player-gradient"></div>
+      <div class="player-top"><div><span class="live-dot">● LIVE</span><span class="source-badge">JioTV · LOCAL</span></div><button id="closePlayer" type="button">×</button></div>
+      <div class="player-info"><p id="playerNumber"></p><h2 id="playerTitle">Loading channel…</h2><p id="playerProgramme">Requesting an eligible stream from your connected account.</p></div>
+      <button id="previousChannel" class="channel-step previous" type="button" aria-label="Previous channel">‹</button>
+      <button id="nextChannel" class="channel-step next" type="button" aria-label="Next channel">›</button>
+      <div id="playerStatus" class="player-status">Connecting…</div>
+    </div>
+  </dialog>
+
+  <template id="channelTemplate">
+    <button class="channel-card" type="button">
+      <div class="channel-logo"><img alt="" loading="lazy"><span></span></div>
+      <div class="channel-meta"><p class="channel-number"></p><h3></h3><p class="channel-detail"></p></div>
+      <span class="play-mark">▶</span>
+    </button>
+  </template>
+</body>
+</html>
