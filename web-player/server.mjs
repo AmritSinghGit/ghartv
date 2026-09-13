@@ -378,16 +378,12 @@ async function authorizePlayback(session, channel, retry = true) {
     licenseUrl: license,
     licenseHeaders,
   });
-  const baseUrl = new URL(".", streamUrl);
-  baseUrl.search = "";
-  baseUrl.hash = "";
   return {
     ticket,
     url: protocol === "dash" ? `/api/stream/${ticket}/manifest.mpd` : `/api/stream/${ticket}`,
     protocol,
     drm: Boolean(license),
     licenseUrl: license ? `/api/license/${ticket}` : "",
-    baseUrl: baseUrl.href,
     channel: { id: channel.id, number: channel.number, name: channel.name },
   };
 }
@@ -640,7 +636,7 @@ async function handleApi(req, res, url) {
     const channel = channels.find((item) => item.id === String(body.channelId || ""));
     if (!channel) return apiError(res, 404, "Channel not found.");
     const playback = await authorizePlayback(session, channel);
-    json(res, 200, { ok: true, ...playback, source: { provider: "JioTV", authorization: "experimental_owner_local", mode: "HLS through loopback proxy" } });
+    json(res, 200, { ok: true, ...playback, source: { provider: "JioTV", authorization: "experimental_owner_local", mode: playback.protocol === "dash" ? "DASH Widevine through loopback proxy" : "HLS through loopback proxy" } });
     return;
   }
   apiError(res, 404, "Not found.", "not_found");
