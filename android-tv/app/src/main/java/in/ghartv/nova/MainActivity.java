@@ -29,7 +29,6 @@ import android.widget.Toast;
 import androidx.recyclerview.widget.GridLayoutManager;
 import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
-import androidx.media3.ui.PlayerView;
 
 import com.bumptech.glide.Glide;
 
@@ -67,11 +66,8 @@ public final class MainActivity extends Activity implements ChannelNavigator.Lis
     private boolean programmeSearchBusy;
     private Button voiceButton;
     private View celebrationBanner;
-    private PlayerView heroPreviewView;
-    private ProgressBar heroPreviewLoading;
     private TextView heroPreviewStatus;
     private FrameLayout heroPreviewHost;
-    private HeroPreviewController heroPreviewController;
 
     private boolean catalogueBusy;
     private boolean redirectingToLogin;
@@ -141,14 +137,12 @@ public final class MainActivity extends Activity implements ChannelNavigator.Lis
 
     @Override protected void onPause() {
         EngagementTracker.stop(this);
-        if (heroPreviewController != null) heroPreviewController.stop(false);
         super.onPause();
     }
 
     @Override protected void onDestroy() {
         if (pendingEpgLoad != null) mainHandler.removeCallbacks(pendingEpgLoad);
         mainHandler.removeCallbacks(clockTicker);
-        if (heroPreviewController != null) heroPreviewController.release();
         executor.shutdownNow();
         super.onDestroy();
     }
@@ -319,22 +313,12 @@ private LinearLayout buildHero() {
             .setDuration(110)
             .start());
 
-    heroPreviewView = new PlayerView(this);
-    heroPreviewView.setUseController(false);
-    heroPreviewView.setFocusable(false);
-    heroPreviewHost.addView(heroPreviewView, new FrameLayout.LayoutParams(-1, -1));
-
     heroLogo = new ImageView(this);
     heroLogo.setScaleType(ImageView.ScaleType.CENTER_INSIDE);
     heroLogo.setPadding(TvUi.dp(this, 24), TvUi.dp(this, 14), TvUi.dp(this, 24), TvUi.dp(this, 14));
     heroPreviewHost.addView(heroLogo, new FrameLayout.LayoutParams(-1, -1));
 
-    heroPreviewLoading = new ProgressBar(this);
-    heroPreviewLoading.setIndeterminate(true);
-    heroPreviewHost.addView(heroPreviewLoading, new FrameLayout.LayoutParams(
-            TvUi.dp(this, 36), TvUi.dp(this, 36), Gravity.CENTER));
-
-    heroPreviewStatus = TvUi.label(this, "Auto preview  •  press OK here for full-screen television", 9.5f, Color.WHITE, true);
+    heroPreviewStatus = TvUi.label(this, "Choose WATCH LIVE to start television", 9.5f, Color.WHITE, true);
     heroPreviewStatus.setGravity(Gravity.CENTER_VERTICAL);
     heroPreviewStatus.setPadding(TvUi.dp(this, 9), 0, TvUi.dp(this, 9), 0);
     heroPreviewStatus.setBackground(TvUi.rounded(Color.argb(164, 0, 0, 0), 13, Color.TRANSPARENT, 0, this));
@@ -411,8 +395,6 @@ private LinearLayout buildHero() {
     hints.setGravity(Gravity.CENTER_VERTICAL);
     hero.addView(hints, new LinearLayout.LayoutParams(-1, TvUi.dp(this, 17)));
 
-    heroPreviewController = new HeroPreviewController(
-            this, repository, heroPreviewView, heroLogo, heroPreviewLoading, heroPreviewStatus);
     return hero;
 }
 
@@ -630,7 +612,6 @@ private LinearLayout buildHero() {
                 heroPreviewHost.setEnabled(false);
                 heroPreviewHost.setContentDescription("No channel selected");
             }
-            if (heroPreviewController != null) heroPreviewController.select(null);
             heroProgress.setProgress(0);
             playButton.setEnabled(false);
             favouriteButton.setEnabled(false);
@@ -640,7 +621,7 @@ private LinearLayout buildHero() {
         favouriteButton.setEnabled(true);
         if (heroPreviewHost != null) {
             heroPreviewHost.setEnabled(true);
-            heroPreviewHost.setContentDescription("Preview of " + channel.name + ". Press OK for continuous full-screen television.");
+            heroPreviewHost.setContentDescription(channel.name + ". Press OK for continuous full-screen television.");
         }
         repository.rememberViewSelection(activeViewKey(), channel.number);
         heroNumber.setText(channel.displayNumber());
@@ -672,7 +653,6 @@ private LinearLayout buildHero() {
         } else {
             Glide.with(heroLogo).load(channel.logoUrl).fitCenter().into(heroLogo);
         }
-        if (heroPreviewController != null) heroPreviewController.select(channel);
         scheduleEpg(channel);
     }
 
