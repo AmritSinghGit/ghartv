@@ -660,9 +660,7 @@ public final class MainActivity extends Activity implements ChannelNavigator.Lis
                 "Sign out of JioTV"
         };
         new AlertDialog.Builder(this)
-                .setTitle("JioTV account")
-                .setMessage("Connected as " + masked + "\n\nGharTV " + BuildConfig.VERSION_NAME +
-                        " shows and plays the live channels returned for this Jio account.")
+                .setTitle("JioTV account  •  " + masked)
                 .setItems(actions, (dialog, which) -> {
                     if (which == 0) refreshCatalogue(true);
                     else if (which == 1) UpdateManager.check(this, true);

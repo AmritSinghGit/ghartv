@@ -41,7 +41,7 @@ fi
   echo "GHARTV_CI_RECEIPT=PASS"
   echo "commit=$(git rev-parse HEAD)"
   echo "branch=$(git branch --show-current || true)"
-  echo "version=0.6.0-rc1-observed-preview"
+  echo "version=0.6.0-rc2-owner-review"
   echo "apk=android-tv/app/build/outputs/apk/debug/app-debug.apk"
   echo "apk_sha256=$APK_SHA256"
   echo "runner=$RUNNER_KIND"
