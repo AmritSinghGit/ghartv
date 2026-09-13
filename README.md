@@ -1,6 +1,6 @@
 # GharTV
 
-**Current review candidate:** v0.5.4 RC7 Startup Safe — RC5 recovery with explicit Watch Live playback, family themes, voice/programme search and capability-gated transport controls. · Jio Live
+**Current review candidate:** v0.5.4 RC8 Pre-Birthday Recovery — restores the last stable pre-birthday guide flow as an in-place recovery update. · Jio Live
 
 A remote-first Android TV / Google TV client for live television available to a connected JioTV account.
 

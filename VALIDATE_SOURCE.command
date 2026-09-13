@@ -6,41 +6,26 @@ from pathlib import Path
 import json,re,sys,xml.etree.ElementTree as ET
 root=Path(sys.argv[1]).resolve(); app=root/'android-tv/app'; java=app/'src/main/java/in/ghartv/nova'; res=app/'src/main/res'
 required=[
- 'SplashActivity.java','MainActivity.java','PlayerActivity.java','Channel.java','ChannelRepository.java','ChannelIndex.java',
- 'WatchHistoryStore.java','Telemetry.java','UpdateManager.java','JioApiClient.java','Program.java',
- 'FamilyTheme.java','CelebrationView.java','AuroraBackgroundView.java',
- 'VoiceSearchController.java','ProgramSearchService.java','EngagementTracker.java'
+ 'MainActivity.java','PlayerActivity.java','Channel.java','ChannelRepository.java','ChannelIndex.java',
+ 'WatchHistoryStore.java','Telemetry.java','UpdateManager.java','JioApiClient.java','Program.java'
 ]
 missing=[name for name in required if not (java/name).is_file()]
 if missing: raise SystemExit('Missing required source: '+', '.join(missing))
-for photo in ['family_dad_simrat_splash.webp','family_dad_simrat_backdrop.webp']:
-    p=res/'drawable-nodpi'/photo
-    if not p.is_file() or p.stat().st_size < 5000: raise SystemExit('Missing family photo asset: '+photo)
 for xml in (app/'src/main').rglob('*.xml'): ET.parse(xml)
 gradle=(app/'build.gradle.kts').read_text()
-assert 'versionCode = 16' in gradle and 'versionName = "0.5.4-rc7-startup-safe"' in gradle, gradle
+assert 'versionCode = 17' in gradle and 'versionName = "0.5.4-rc8-pre-birthday-recovery"' in gradle, gradle
 manifest=(app/'src/main/AndroidManifest.xml').read_text()
 assert 'android.software.leanback' in manifest and 'android.hardware.touchscreen' in manifest
 assert 'android:required="false"' in manifest
-assert 'android:name=".SplashActivity"' in manifest and 'android.intent.category.LEANBACK_LAUNCHER' in manifest
+assert 'android:name=".SplashActivity"' not in manifest and 'android.intent.category.LEANBACK_LAUNCHER' in manifest
 all_text='\n'.join(p.read_text(errors='replace') for p in java.glob('*.java'))
 for forbidden in ['youtube.com','youtu.be','Fastway','WAVES']:
     if forbidden.lower() in all_text.lower(): raise SystemExit('Jio-only boundary failed: '+forbidden)
 for marker in [
- 'VoiceSearchController.launch', 'ProgramSearchService.search', 'FamilyTheme.showPicker',
- 'Choose WATCH LIVE to start television', 'SplashActivity', 'splashPhotoRes', 'backdropPhotoRes',
- 'active_time', 'catchup_request', 'transport_action', 'seekBy(-15_000L)', 'goLive()',
- 'scheduleHideGuide', 'EXTRA_SCOPE_NUMBERS', 'Next working channel', 'KEY_PREVIOUS_CHANNEL',
+ 'Update live guide', 'EXTRA_SCOPE_NUMBERS', 'Next working channel', 'KEY_PREVIOUS_CHANNEL',
  'previousChannel()', 'public synchronized int indexedCount()'
 ]:
     if marker not in all_text: raise SystemExit('Missing RC5 marker: '+marker)
-if 'repository.indexedCount()' not in (java/'MainActivity.java').read_text():
-    raise SystemExit('MainActivity index count contract missing')
-family=(java/'FamilyTheme.java').read_text()
-for marker in ['"mom", "Mom", 1, 4','"amrit", "Amrit", 3, 7','"harjas", "Harjas", 7, 1',
-               '"wifey", "Wifey", 8, 18','"sis", "Sis", 8, 22','"dad", "Dad", 9, 12',
-               '"simrat", "Simrat", 10, 4']:
-    if marker not in family: raise SystemExit('Birthday mapping missing: '+marker)
 # Check the active product surface only. Historical delivery scripts may retain
 # frozen evidence from earlier candidates and must not block the current source.
 spell_paths = list(java.glob('*.java'))
@@ -84,5 +69,5 @@ for path in java.glob('*.java'):
             if depth<0: raise SystemExit(f'Brace underflow: {path}')
         i+=1
     if depth or quote or block: raise SystemExit(f'Lexical balance failed: {path}')
-print(f'GHARTV_SOURCE_VALIDATION=PASS · {len(list(java.glob("*.java")))} Java files · RC5 recovery source · explicit Watch Live only')
+print(f'GHARTV_SOURCE_VALIDATION=PASS · {len(list(java.glob("*.java")))} Java files · RC8 pre-birthday recovery source')
 PY
