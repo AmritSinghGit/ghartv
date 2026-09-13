@@ -1,5 +1,5 @@
 const $ = (id) => document.getElementById(id);
-const state = { connected: false, otpSent: false, channels: [], filtered: [], category: "All", currentIndex: -1, hls: null, busy: false };
+const state = { connected: false, otpSent: false, channels: [], filtered: [], category: "All", currentIndex: -1, hls: null, shaka: null, busy: false, playbackGeneration: 0, focusGuideAfterLoad: false };
 
 async function api(path, options = {}) {
   const response = await fetch(path, {
@@ -96,14 +96,59 @@ function renderChannels() {
   }
   $("channelGrid").replaceChildren(fragment);
   $("resultCount").textContent = `${state.filtered.length.toLocaleString()} of ${state.channels.length.toLocaleString()} channels · JioTV experimental local connector`;
+  if (state.focusGuideAfterLoad) {
+    state.focusGuideAfterLoad = false;
+    requestAnimationFrame(() => $("channelGrid").querySelector(".channel-card")?.focus());
+  }
 }
 
 function destroyPlayback() {
+  state.playbackGeneration += 1;
   if (state.hls) { state.hls.destroy(); state.hls = null; }
+  if (state.shaka) { state.shaka.destroy().catch(() => {}); state.shaka = null; }
   const video = $("video");
   video.pause();
   video.removeAttribute("src");
   video.load();
+}
+
+function base64Url(input) {
+  const bytes = new TextEncoder().encode(input);
+  let binary = "";
+  for (const byte of bytes) binary += String.fromCharCode(byte);
+  return btoa(binary).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/g, "");
+}
+
+async function playDash(video, playback, generation) {
+  if (!window.shaka) throw new Error("The browser TV engine did not load.");
+  shaka.polyfill.installAll();
+  if (!shaka.Player.isBrowserSupported()) throw new Error("This browser does not support protected live television.");
+  const player = new shaka.Player();
+  state.shaka = player;
+  await player.attach(video);
+  const networking = player.getNetworkingEngine();
+  networking.registerRequestFilter((type, request) => {
+    if (type === shaka.net.NetworkingEngine.RequestType.LICENSE) {
+      request.uris = [new URL(playback.licenseUrl, location.origin).href];
+      return;
+    }
+    request.uris = request.uris.map((uri) => {
+      if (uri.startsWith(location.origin)) return uri;
+      if (!uri.startsWith("https://")) return uri;
+      return `${location.origin}/api/stream/${playback.ticket}?u=${base64Url(uri)}`;
+    });
+  });
+  if (playback.drm && playback.licenseUrl) {
+    player.configure({ drm: { servers: { "com.widevine.alpha": new URL(playback.licenseUrl, location.origin).href } } });
+  }
+  player.addEventListener("error", (event) => {
+    if (generation !== state.playbackGeneration) return;
+    const code = event.detail?.code || "unknown";
+    $("playerStatus").textContent = "Unable to play";
+    $("playerProgramme").textContent = `Protected stream error: ${code}`;
+  });
+  await player.load(playback.url, null, "application/dash+xml");
+  await video.play().catch(() => { $("playerStatus").textContent = "Press play to start"; });
 }
 
 async function playChannel(channelId) {
@@ -113,6 +158,7 @@ async function playChannel(channelId) {
   state.currentIndex = state.channels.indexOf(channel);
   state.busy = true;
   destroyPlayback();
+  const generation = state.playbackGeneration;
   $("playerNumber").textContent = `CHANNEL ${String(channel.number).padStart(3, "0")} · ${channel.language} · ${channel.category}`;
   $("playerTitle").textContent = channel.name;
   $("playerProgramme").textContent = "Checking this account and preparing the live stream…";
@@ -130,9 +176,12 @@ async function playChannel(channelId) {
     });
     $("playerProgramme").textContent = current?.showname || current?.title || "Live now";
     const video = $("video");
-    video.addEventListener("playing", () => { $("playerStatus").textContent = "LIVE · Local session"; }, { once: true });
-    video.addEventListener("waiting", () => { $("playerStatus").textContent = "Buffering…"; }, { once: true });
-    if (window.Hls?.isSupported()) {
+    video.addEventListener("playing", () => { if (generation === state.playbackGeneration) $("playerStatus").textContent = "LIVE · Local session"; }, { once: true });
+    video.addEventListener("waiting", () => { if (generation === state.playbackGeneration) $("playerStatus").textContent = "Buffering…"; }, { once: true });
+    if (playback.protocol === "dash") {
+      $("playerStatus").textContent = playback.drm ? "Opening protected stream…" : "Opening stream…";
+      await playDash(video, playback, generation);
+    } else if (window.Hls?.isSupported()) {
       state.hls = new Hls({ enableWorker: true, lowLatencyMode: true, backBufferLength: 30 });
       state.hls.attachMedia(video);
       state.hls.on(Hls.Events.MEDIA_ATTACHED, () => state.hls?.loadSource(playback.url));
@@ -141,7 +190,7 @@ async function playChannel(channelId) {
         video.play().catch(() => { $("playerStatus").textContent = "Press play to start"; });
       });
       state.hls.on(Hls.Events.ERROR, (_, data) => {
-        if (!data.fatal) return;
+        if (!data.fatal || generation !== state.playbackGeneration) return;
         $("playerStatus").textContent = "Unable to play";
         $("playerProgramme").textContent = `Stream error: ${data.details || data.type || "unknown"}`;
       });
@@ -163,7 +212,14 @@ function stepChannel(delta) {
   playChannel(state.channels[next].id);
 }
 
-$("accountButton").onclick = () => { setStatus(""); $("loginDialog").showModal(); };
+function openLogin() {
+  setStatus("");
+  $("loginDialog").showModal();
+  requestAnimationFrame(() => (state.connected ? $("logoutButton") : state.otpSent ? $("otp") : $("mobile")).focus());
+}
+
+$("accountButton").onclick = openLogin;
+$("closeLogin").onclick = () => $("loginDialog").close();
 $("loginForm").onsubmit = async (event) => {
   event.preventDefault();
   if (state.connected) return;
@@ -176,14 +232,16 @@ $("loginForm").onsubmit = async (event) => {
       state.otpSent = true;
       $("mobileField").classList.add("hidden");
       $("otpField").classList.remove("hidden");
-      $("otp").focus();
       action.textContent = "Connect and open guide";
       setStatus(`OTP sent to ${result.destination}.`);
+      requestAnimationFrame(() => $("otp").focus());
     } else {
       const result = await api("/api/auth/otp/verify", { method: "POST", body: JSON.stringify({ otp: $("otp").value }) });
+      state.focusGuideAfterLoad = true;
       setConnected(true, result.mobile);
       state.otpSent = false;
       action.textContent = "Send OTP";
+      setStatus("");
       $("loginDialog").close();
       $("browse").scrollIntoView({ behavior: "smooth", block: "start" });
     }

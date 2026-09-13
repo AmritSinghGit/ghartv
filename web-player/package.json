@@ -8,6 +8,7 @@
     "test": "node --test test/server.test.mjs"
   },
   "dependencies": {
-    "hls.js": "^1.6.13"
+    "hls.js": "^1.6.13",
+    "shaka-player": "^5.2.10"
   }
 }

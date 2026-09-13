@@ -7,6 +7,7 @@
   <title>GharTV · Local web player</title>
   <link rel="stylesheet" href="/styles.css">
   <script defer src="/vendor/hls.min.js"></script>
+  <script defer src="/shaka-player.compiled.js"></script>
   <script defer src="/app.js"></script>
 </head>
 <body>
@@ -46,13 +47,13 @@
   </main>
 
   <dialog id="loginDialog" class="modal">
-    <form method="dialog" class="modal-card" id="loginForm">
-      <button class="close" value="cancel" aria-label="Close">×</button>
+    <form class="modal-card" id="loginForm">
+      <button id="closeLogin" class="close" type="button" aria-label="Close">×</button>
       <p class="eyebrow">PRIVATE CONNECTION</p>
       <h2 id="loginTitle">Connect JioTV</h2>
       <p id="loginCopy" class="modal-copy">Enter the 10-digit mobile number that receives your Jio OTP.</p>
-      <label id="mobileField">Mobile number<input id="mobile" inputmode="numeric" autocomplete="tel" maxlength="12" placeholder="10-digit Jio number"></label>
-      <label id="otpField" class="hidden">One-time password<input id="otp" inputmode="numeric" autocomplete="one-time-code" maxlength="8" placeholder="OTP from Jio"></label>
+      <label id="mobileField">Mobile number<input id="mobile" inputmode="numeric" autocomplete="tel" enterkeyhint="send" maxlength="12" placeholder="10-digit Jio number"></label>
+      <label id="otpField" class="hidden">One-time password<input id="otp" inputmode="numeric" autocomplete="one-time-code" enterkeyhint="go" maxlength="8" placeholder="OTP from Jio"></label>
       <button id="loginAction" class="primary" type="submit">Send OTP</button>
       <button id="logoutButton" class="secondary hidden" type="button">Disconnect this browser</button>
       <p id="loginStatus" class="status"></p>

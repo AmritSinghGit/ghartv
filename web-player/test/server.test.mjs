@@ -28,15 +28,15 @@ test("blocks non-HTTPS and private-network media targets", () => {
 });
 
 test("inherits the Jio stream authorization onto protected child media", () => {
-  const authorization = "__hdnea__=st=1~exp=2~acl=/*~hmac=test";
+  const authorization = "__hdnea__=fixture";
   assert.match(authorizedMediaUrl("https://tv.media.jio.com/live/aes128.key", authorization).href, /__hdnea__=/);
   assert.doesNotMatch(authorizedMediaUrl("https://media.example/live.key", authorization).href, /__hdnea__=/);
 });
 
 test("promotes a manifest response token for protected child media", () => {
   const ticket = { headers: { cookie: "existing=1" }, authorization: "" };
-  mergeTicketCookies(ticket, ["__hdnea__=st=1~exp=2~hmac=test; Path=/; Secure"]);
-  assert.equal(ticket.authorization, "__hdnea__=st=1~exp=2~hmac=test");
+  mergeTicketCookies(ticket, ["__hdnea__=fixture; Path=/; Secure"]);
+  assert.equal(ticket.authorization, "__hdnea__=fixture");
   assert.match(ticket.headers.cookie, /existing=1/);
   assert.match(ticket.headers.cookie, /__hdnea__=/);
 });

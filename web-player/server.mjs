@@ -107,6 +107,17 @@ async function readJson(req) {
   return JSON.parse(Buffer.concat(chunks).toString("utf8"));
 }
 
+async function readBytes(req, limit = 2 * 1024 * 1024) {
+  const chunks = [];
+  let size = 0;
+  for await (const chunk of req) {
+    size += chunk.length;
+    if (size > limit) throw Object.assign(new Error("License request is too large."), { status: 413 });
+    chunks.push(chunk);
+  }
+  return Buffer.concat(chunks);
+}
+
 function assertLocalOrigin(req) {
   const origin = req.headers.origin;
   if (!origin) return;
@@ -338,13 +349,25 @@ async function authorizePlayback(session, channel, retry = true) {
   if (!response.ok) throw Object.assign(new Error(providerMessage(payload, `Jio playback returned HTTP ${response.status}.`)), { status: response.status });
   const hls = value(payload.result);
   const dash = value(payload.mpd?.result);
-  if (!hls && dash) throw Object.assign(new Error("This channel supplied only a protected DASH stream. Browser DRM support is not enabled in this first local candidate."), { status: 422 });
-  if (!hls) throw Object.assign(new Error(providerMessage(payload, "Jio returned no browser-playable HLS stream.")), { status: 422 });
+  const license = value(payload.mpd?.key);
+  if (!hls && !dash) throw Object.assign(new Error(providerMessage(payload, "Jio returned no browser-playable stream.")), { status: 422 });
+  const protocol = dash ? "dash" : "hls";
+  const selected = dash || hls;
   const ticket = id();
   const streamHeaders = { ...headers, "user-agent": PLAYER_USER_AGENT };
-  const cookie = signedCookie(hls);
+  const cookie = signedCookie(selected);
   if (cookie) streamHeaders.cookie = cookie;
-  const streamUrl = new URL(hls);
+  const streamUrl = new URL(selected);
+  const licenseHeaders = license ? {
+    "content-type": "application/octet-stream",
+    appName: "RJIL_JioTV",
+    "x-platform": "android",
+    os: "android",
+    devicetype: "phone",
+    versionCode: "389",
+    srno: randomUUID(),
+    channelid: channel.id,
+  } : null;
   streamTickets.set(ticket, {
     sessionId: session.id,
     createdAt: now(),
@@ -352,8 +375,21 @@ async function authorizePlayback(session, channel, retry = true) {
     headers: streamHeaders,
     authorization: cookie,
     allowedHosts: new Set([streamUrl.hostname]),
+    licenseUrl: license,
+    licenseHeaders,
   });
-  return { ticket, url: `/api/stream/${ticket}`, channel: { id: channel.id, number: channel.number, name: channel.name } };
+  const baseUrl = new URL(".", streamUrl);
+  baseUrl.search = "";
+  baseUrl.hash = "";
+  return {
+    ticket,
+    url: protocol === "dash" ? `/api/stream/${ticket}/manifest.mpd` : `/api/stream/${ticket}`,
+    protocol,
+    drm: Boolean(license),
+    licenseUrl: license ? `/api/license/${ticket}` : "",
+    baseUrl: baseUrl.href,
+    channel: { id: channel.id, number: channel.number, name: channel.name },
+  };
 }
 
 export function safeMediaUrl(input) {
@@ -406,7 +442,7 @@ function mergeSetCookies(ticket, response) {
 }
 
 async function proxyStream(req, res, session, pathname, searchParams) {
-  const match = pathname.match(/^\/api\/stream\/([A-Za-z0-9_-]+)$/);
+  const match = pathname.match(/^\/api\/stream\/([A-Za-z0-9_-]+)(?:\/(.*))?$/);
   if (!match) return false;
   const ticketId = match[1];
   const ticket = streamTickets.get(ticketId);
@@ -418,13 +454,17 @@ async function proxyStream(req, res, session, pathname, searchParams) {
   if (searchParams.get("u")) {
     try { target = Buffer.from(searchParams.get("u"), "base64url").toString("utf8"); }
     catch { return apiError(res, 400, "Invalid media URL."); }
+  } else if (match[2] && match[2] !== "manifest.mpd") {
+    target = new URL(match[2], new URL(".", ticket.streamUrl)).href;
   }
   let url;
   try { url = authorizedMediaUrl(target, ticket.authorization); } catch (error) { apiError(res, 400, error.message); return true; }
-  if (!ticket.allowedHosts.has(url.hostname)) {
+  const providerMediaHost = url.hostname === "jio.com" || url.hostname.endsWith(".jio.com");
+  if (!ticket.allowedHosts.has(url.hostname) && !providerMediaHost) {
     apiError(res, 403, "This media host was not declared by the selected channel.", "media_host_blocked");
     return true;
   }
+  if (providerMediaHost) ticket.allowedHosts.add(url.hostname);
   const headers = { ...ticket.headers };
   delete headers["content-type"];
   if (req.headers.range) headers.range = req.headers.range;
@@ -477,6 +517,48 @@ async function proxyStream(req, res, session, pathname, searchParams) {
   return true;
 }
 
+async function proxyLicense(req, res, session, pathname) {
+  const match = pathname.match(/^\/api\/license\/([A-Za-z0-9_-]+)$/);
+  if (!match) return false;
+  if (req.method !== "POST") {
+    apiError(res, 405, "License requests must use POST.", "method_not_allowed");
+    return true;
+  }
+  const ticket = streamTickets.get(match[1]);
+  if (!ticket || ticket.createdAt + STREAM_TTL_MS < now() || ticket.sessionId !== session?.id) {
+    apiError(res, 404, "This stream session expired. Choose the channel again.", "stream_expired");
+    return true;
+  }
+  if (!ticket.licenseUrl || !ticket.licenseHeaders) {
+    apiError(res, 422, "This channel did not provide a Widevine license endpoint.", "license_unavailable");
+    return true;
+  }
+  let licenseUrl;
+  try { licenseUrl = safeMediaUrl(ticket.licenseUrl); }
+  catch (error) { apiError(res, 502, error.message, "license_url_invalid"); return true; }
+  const challenge = await readBytes(req);
+  const response = await fetch(licenseUrl, {
+    method: "POST",
+    headers: { ...ticket.headers, ...ticket.licenseHeaders },
+    body: challenge,
+    redirect: "follow",
+    signal: AbortSignal.timeout(30_000),
+  });
+  const body = Buffer.from(await response.arrayBuffer());
+  if (!response.ok) {
+    apiError(res, response.status, `Jio license request returned HTTP ${response.status}.`, "license_response");
+    return true;
+  }
+  res.writeHead(200, {
+    "content-type": response.headers.get("content-type") || "application/octet-stream",
+    "content-length": body.length,
+    "cache-control": "no-store",
+    "x-content-type-options": "nosniff",
+  });
+  res.end(body);
+  return true;
+}
+
 async function serveStatic(res, pathname) {
   const requested = pathname === "/" ? "/index.html" : pathname;
   const vendor = requested === "/vendor/hls.min.js";
@@ -503,6 +585,7 @@ async function serveStatic(res, pathname) {
 
 async function handleApi(req, res, url) {
   const session = sessionFor(req, res, true);
+  if (await proxyLicense(req, res, session, url.pathname)) return;
   if (await proxyStream(req, res, session, url.pathname, url.searchParams)) return;
   if (req.method === "GET" && url.pathname === "/api/health") {
     json(res, 200, { ok: true, service: "ghartv-web-player", version: APP_VERSION, commit: process.env.GHARTV_WEB_SHA || "working-tree", host: HOST, port: PORT });
