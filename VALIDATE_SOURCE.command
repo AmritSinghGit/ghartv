@@ -18,7 +18,7 @@ for photo in ['family_dad_simrat_splash.webp','family_dad_simrat_backdrop.webp']
     if not p.is_file() or p.stat().st_size < 5000: raise SystemExit('Missing family photo asset: '+photo)
 for xml in (app/'src/main').rglob('*.xml'): ET.parse(xml)
 gradle=(app/'build.gradle.kts').read_text()
-assert 'versionCode = 15' in gradle and 'versionName = "0.5.4-rc6-guide-safe"' in gradle, gradle
+assert 'versionCode = 16' in gradle and 'versionName = "0.5.4-rc7-startup-safe"' in gradle, gradle
 manifest=(app/'src/main/AndroidManifest.xml').read_text()
 assert 'android.software.leanback' in manifest and 'android.hardware.touchscreen' in manifest
 assert 'android:required="false"' in manifest

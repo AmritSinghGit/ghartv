@@ -835,9 +835,7 @@ private void showAccountMenu() {
             "Sign out of JioTV"
     };
     new AlertDialog.Builder(this)
-            .setTitle("JioTV account")
-            .setMessage("Connected as " + masked + "\n\nGharTV keeps internal RC labels out of the living-room screen. "
-                    + "Build details remain available here for owner review.")
+            .setTitle("JioTV account  •  " + masked)
             .setItems(actions, (dialog, which) -> {
                 if (which == 0) refreshCatalogue(true);
                 else if (which == 1) UpdateManager.check(this, true);
