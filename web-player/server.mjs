@@ -625,7 +625,10 @@ async function handleApi(req, res, url) {
     if (!session.account) return apiError(res, 401, "Connect your Jio number first.", "auth_required");
     const channelId = String(url.searchParams.get("channel_id") || "");
     if (!/^\d{1,8}$/.test(channelId)) return apiError(res, 400, "Invalid channel.");
-    const { payload } = await upstreamJson(`${JIO.epg}${encodeURIComponent(channelId)}&langId=6`, { headers: { "user-agent": MOBILE_USER_AGENT }, timeout: 18_000 });
+    const offset = Number(url.searchParams.get("offset") || 0);
+    if (!Number.isInteger(offset) || offset < -7 || offset > 1) return apiError(res, 400, "Invalid programme-guide day.");
+    const endpoint = JIO.epg.replace("offset=0", `offset=${offset}`);
+    const { payload } = await upstreamJson(`${endpoint}${encodeURIComponent(channelId)}&langId=6`, { headers: { "user-agent": MOBILE_USER_AGENT }, timeout: 18_000 });
     json(res, 200, { ok: true, programs: Array.isArray(payload.epg) ? payload.epg : [] });
     return;
   }

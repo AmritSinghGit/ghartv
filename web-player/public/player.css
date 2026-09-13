@@ -1,0 +1,188 @@
+.hero-connect {
+  min-height: calc(100vh - 82px);
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: flex-start;
+  max-width: 780px;
+  gap: 0;
+}
+
+.hero-connect .lead { margin: 24px 0 20px; }
+.hero-connect-button { width: auto; min-width: 180px; padding: 0 24px; }
+.connection-note { color: var(--muted); font-size: 12px; margin: 13px 2px 0; }
+.browse:not(.hidden) { padding-top: 48px; }
+
+.player-console {
+  position: absolute;
+  z-index: 3;
+  left: clamp(22px, 4vw, 66px);
+  right: clamp(22px, 4vw, 66px);
+  bottom: 24px;
+  padding: 18px 20px 16px;
+  border: 1px solid rgba(255, 255, 255, .14);
+  border-radius: 22px;
+  background: linear-gradient(145deg, rgba(2, 8, 13, .9), rgba(5, 20, 27, .82));
+  box-shadow: 0 22px 70px rgba(0, 0, 0, .48);
+  backdrop-filter: blur(22px);
+}
+
+.player-heading {
+  display: grid;
+  grid-template-columns: minmax(190px, .7fr) minmax(300px, 1.5fr) auto;
+  align-items: end;
+  gap: 24px;
+}
+
+.player-channel p,
+.programme-kicker {
+  margin: 0 0 5px;
+  color: var(--mint);
+  font-size: 10px;
+  font-weight: 900;
+  letter-spacing: .13em;
+}
+
+.player-channel h2 {
+  margin: 0;
+  font-size: clamp(21px, 2.2vw, 34px);
+  line-height: 1.05;
+  letter-spacing: -.035em;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+}
+
+.player-programme-copy h3 {
+  margin: 0;
+  font-size: clamp(18px, 1.7vw, 27px);
+  line-height: 1.15;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.programme-time { margin: 4px 0 0; color: #d3e0e5; font-size: 12px; }
+.programme-description { margin: 3px 0 0; color: var(--muted); font-size: 11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 70ch; }
+.player-console .player-status { position: static; align-self: center; white-space: nowrap; background: rgba(0, 0, 0, .4); }
+
+.timeline-row {
+  display: grid;
+  grid-template-columns: 62px 1fr 72px;
+  align-items: center;
+  gap: 12px;
+  margin-top: 13px;
+  color: #b8c8ce;
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+
+.timeline-row span:last-child { text-align: right; color: var(--mint); font-weight: 850; }
+.timeline-row input { width: 100%; height: 4px; accent-color: var(--mint); cursor: pointer; }
+.timeline-row input:disabled { opacity: .4; cursor: not-allowed; }
+.player-actions { display: flex; align-items: center; gap: 8px; margin-top: 12px; }
+
+.player-actions button {
+  min-width: 46px;
+  height: 38px;
+  border: 1px solid rgba(255, 255, 255, .16);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, .07);
+  color: #fff;
+  padding: 0 14px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.player-actions button:hover,
+.player-actions button:focus-visible { outline: none; border-color: var(--cyan); background: rgba(83, 228, 255, .16); }
+.player-actions .play-pause { font-size: 17px; }
+.player-actions .live-button { color: var(--mint); margin-left: 4px; }
+.player-actions .live-button.behind { color: #fff; border-color: var(--mint); }
+.player-actions .guide-button { margin-left: auto; min-width: 160px; }
+.programme-guide { margin-top: 13px; padding-top: 12px; border-top: 1px solid rgba(255, 255, 255, .12); }
+.programme-guide.collapsed { display: none; }
+.guide-title { display: flex; justify-content: space-between; gap: 16px; align-items: center; margin-bottom: 9px; font-size: 12px; }
+.guide-title span { color: var(--muted); font-size: 10px; }
+
+.programme-rail {
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  padding: 1px 1px 7px;
+  scrollbar-color: rgba(115, 245, 194, .35) transparent;
+  scrollbar-width: thin;
+}
+
+.programme-card {
+  flex: 0 0 210px;
+  min-height: 78px;
+  text-align: left;
+  border: 1px solid rgba(255, 255, 255, .12);
+  border-radius: 13px;
+  background: rgba(255, 255, 255, .055);
+  color: #fff;
+  padding: 9px 11px;
+  cursor: pointer;
+}
+
+.programme-card-time { display: block; color: #a7bac1; font-size: 10px; }
+.programme-card strong { display: block; margin: 4px 0; font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.programme-card small { color: var(--muted); font-size: 9px; font-weight: 850; letter-spacing: .07em; }
+.programme-card.current { border-color: var(--mint); background: rgba(115, 245, 194, .13); }
+.programme-card.current small,
+.programme-card:not(:disabled) small { color: var(--mint); }
+.programme-card:disabled { cursor: default; opacity: .55; }
+.guide-empty { color: var(--muted); margin: 8px 0; }
+
+.channel-step {
+  z-index: 4;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  width: auto;
+  min-width: 62px;
+  padding: 0 10px;
+}
+
+.channel-step span { font-size: 44px; }
+.channel-step small { display: none; font-size: 9px; line-height: 1.2; text-transform: uppercase; letter-spacing: .07em; }
+
+@media (min-width: 1250px) {
+  .channel-step:hover small,
+  .channel-step:focus-visible small { display: block; }
+  .channel-step:hover,
+  .channel-step:focus-visible { min-width: 108px; }
+}
+
+@media (max-width: 900px) {
+  .hero-connect { min-height: calc(100vh - 68px); padding: 40px 0; }
+  .player-console { left: 14px; right: 14px; bottom: 12px; padding: 14px; }
+  .player-heading { grid-template-columns: 1fr auto; gap: 10px; }
+  .player-channel { grid-column: 1; }
+  .player-programme-copy { grid-column: 1 / -1; grid-row: 2; }
+  .player-console .player-status { grid-column: 2; grid-row: 1; }
+  .programme-description { display: none; }
+  .programme-guide { max-height: 126px; }
+  .guide-title span { display: none; }
+  .programme-card { flex-basis: 180px; }
+  .channel-step { top: 42%; min-width: 48px; padding: 0 5px; }
+  .channel-step span { font-size: 36px; }
+  .channel-step.previous { left: 8px; }
+  .channel-step.next { right: 8px; }
+}
+
+@media (max-width: 560px) {
+  .player-channel h2 { font-size: 20px; }
+  .player-programme-copy h3 { font-size: 17px; }
+  .player-console .player-status { display: none; }
+  .player-heading { grid-template-columns: 1fr; }
+  .player-programme-copy { grid-row: auto; }
+  .player-actions { gap: 5px; }
+  .player-actions button { padding: 0 10px; }
+  .player-actions .guide-button { min-width: 0; }
+  .programme-guide { display: none; }
+  .timeline-row { grid-template-columns: 48px 1fr 52px; }
+}

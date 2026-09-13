@@ -4,8 +4,9 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <meta name="referrer" content="no-referrer">
-  <title>GharTV · Local web player</title>
+  <title>GharTV · Live television</title>
   <link rel="stylesheet" href="/styles.css">
+  <link rel="stylesheet" href="/player.css">
   <script defer src="/vendor/hls.min.js"></script>
   <script defer src="/shaka-player.compiled.js"></script>
   <script defer src="/app.js"></script>
@@ -15,29 +16,23 @@
   <header class="topbar">
     <a class="brand" href="#">GHAR<span>TV</span></a>
     <div class="top-actions">
-      <span class="pill review">LOCAL OWNER REVIEW</span>
       <button id="accountButton" class="account" type="button">Connect JioTV</button>
     </div>
   </header>
 
   <main>
-    <section class="hero">
-      <div class="hero-copy">
-        <p class="eyebrow">WEB PLAYER · CANDIDATE 01</p>
-        <h1>Your live television,<br><em>now in the browser.</em></h1>
-        <p class="lead">Connect the mobile number attached to your Jio account, choose a channel, and watch it here. This candidate runs only on this Mac.</p>
-        <div class="trust-row"><span>● Credentials stay in memory</span><span>● No TV session extraction</span><span>● Not published</span></div>
-      </div>
-      <div class="signal-card">
-        <div class="signal-top"><span class="live-dot">● LIVE</span><span id="heroState">Waiting to connect</span></div>
-        <div class="signal-screen"><div class="rings"></div><div class="signal-mark">G</div></div>
-        <p id="heroNote">Use your own Jio number and OTP. Nothing is saved when the local server stops.</p>
-      </div>
+    <section id="hero" class="hero hero-connect">
+      <p class="eyebrow">LIVE TELEVISION</p>
+      <h1>Watch what feels<br><em>like home.</em></h1>
+      <p class="lead">Connect your JioTV account to open the channel guide.</p>
+      <button id="connectHeroButton" class="primary hero-connect-button" type="button">Connect JioTV</button>
+      <p id="heroState" class="connection-note">Waiting to connect</p>
+      <p id="heroNote" class="hidden"></p>
     </section>
 
     <section id="browse" class="browse hidden" aria-live="polite">
       <div class="browse-head">
-        <div><p class="eyebrow">CHANNEL GUIDE</p><h2>What do you want to watch?</h2></div>
+        <div><p class="eyebrow">LIVE &amp; PROGRAMMES</p><h2>Channel guide</h2></div>
         <label class="search"><span>⌕</span><input id="search" type="search" placeholder="Search channel, language or category"></label>
       </div>
       <div id="categoryBar" class="categories"></div>
@@ -57,19 +52,48 @@
       <button id="loginAction" class="primary" type="submit">Send OTP</button>
       <button id="logoutButton" class="secondary hidden" type="button">Disconnect this browser</button>
       <p id="loginStatus" class="status"></p>
-      <p class="fine">The number, OTP and provider tokens never enter browser storage or Git. This is an experimental owner-only connector.</p>
+      <p class="fine">The number, OTP and provider tokens never enter browser storage or Git.</p>
     </form>
   </dialog>
 
   <dialog id="playerDialog" class="player-modal">
     <div class="player-shell">
-      <video id="video" controls autoplay playsinline></video>
+      <video id="video" autoplay playsinline></video>
       <div class="player-gradient"></div>
-      <div class="player-top"><div><span class="live-dot">● LIVE</span><span class="source-badge">JioTV · LOCAL</span></div><button id="closePlayer" type="button">×</button></div>
-      <div class="player-info"><p id="playerNumber"></p><h2 id="playerTitle">Loading channel…</h2><p id="playerProgramme">Requesting an eligible stream from your connected account.</p></div>
-      <button id="previousChannel" class="channel-step previous" type="button" aria-label="Previous channel">‹</button>
-      <button id="nextChannel" class="channel-step next" type="button" aria-label="Next channel">›</button>
-      <div id="playerStatus" class="player-status">Connecting…</div>
+      <div class="player-top"><div><span class="live-dot">● LIVE</span><span class="source-badge">JioTV</span></div><button id="closePlayer" type="button">×</button></div>
+      <button id="previousChannel" class="channel-step previous" type="button" aria-label="Previous channel"><span>‹</span><small>Previous<br>channel</small></button>
+      <button id="nextChannel" class="channel-step next" type="button" aria-label="Next channel"><small>Next<br>channel</small><span>›</span></button>
+      <section class="player-console" aria-label="Player and programme guide">
+        <div class="player-heading">
+          <div class="player-channel">
+            <p id="playerNumber"></p>
+            <h2 id="playerTitle">Loading channel…</h2>
+          </div>
+          <div class="player-programme-copy">
+            <p class="programme-kicker">NOW PLAYING</p>
+            <h3 id="playerProgramme">Requesting an eligible stream from your connected account.</h3>
+            <p id="playerProgrammeTime" class="programme-time">Live</p>
+            <p id="playerProgrammeDescription" class="programme-description"></p>
+          </div>
+          <div id="playerStatus" class="player-status">Connecting…</div>
+        </div>
+        <div class="timeline-row">
+          <span id="timelineStart">–:––</span>
+          <input id="playerTimeline" type="range" min="0" max="1" value="1" step="1" disabled aria-label="Live television timeline">
+          <span id="timelineNow">LIVE</span>
+        </div>
+        <div class="player-actions" aria-label="Playback controls">
+          <button id="rewindButton" type="button" aria-label="Rewind 15 seconds">↶ <span>15s</span></button>
+          <button id="playPauseButton" class="play-pause" type="button" aria-label="Pause">Ⅱ</button>
+          <button id="forwardButton" type="button" aria-label="Forward 15 seconds"><span>15s</span> ↷</button>
+          <button id="liveButton" class="live-button" type="button">● LIVE</button>
+          <button id="guideButton" class="guide-button" type="button" aria-expanded="true">Hide programme guide</button>
+        </div>
+        <div id="programmeGuide" class="programme-guide" aria-label="Programmes">
+          <div class="guide-title"><strong>Today on <span id="guideChannelName">this channel</span></strong><span>Available past programmes can be opened from here</span></div>
+          <div id="programmeRail" class="programme-rail"></div>
+        </div>
+      </section>
     </div>
   </dialog>
 

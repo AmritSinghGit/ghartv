@@ -42,7 +42,7 @@ test("promotes a manifest response token for protected child media", () => {
   assert.match(ticket.headers.cookie, /__hdnea__=/);
 });
 
-test("serves the local health and review page", async (context) => {
+test("serves the local health and programme-player page", async (context) => {
   const server = createAppServer();
   await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
   context.after(() => server.close());
@@ -50,5 +50,9 @@ test("serves the local health and review page", async (context) => {
   const health = await fetch(`http://127.0.0.1:${address.port}/api/health`).then((response) => response.json());
   assert.equal(health.service, "ghartv-web-player");
   const page = await fetch(`http://127.0.0.1:${address.port}/`).then((response) => response.text());
-  assert.match(page, /Your live television/);
+  assert.match(page, /Channel guide/);
+  assert.match(page, /id="playerTimeline"/);
+  assert.match(page, /id="programmeRail"/);
+  const playerStyles = await fetch(`http://127.0.0.1:${address.port}/player.css`).then((response) => response.text());
+  assert.match(playerStyles, /\.programme-card\.current/);
 });

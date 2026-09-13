@@ -1,5 +1,5 @@
 const $ = (id) => document.getElementById(id);
-const state = { connected: false, otpSent: false, channels: [], filtered: [], category: "All", currentIndex: -1, hls: null, shaka: null, busy: false, playbackGeneration: 0, focusGuideAfterLoad: false };
+const state = { connected: false, otpSent: false, channels: [], filtered: [], category: "All", currentIndex: -1, currentChannel: null, programs: [], hls: null, shaka: null, ticker: null, busy: false, playbackGeneration: 0, focusGuideAfterLoad: false };
 
 async function api(path, options = {}) {
   const response = await fetch(path, {
@@ -23,6 +23,7 @@ function setConnected(connected, mobile = "") {
   $("heroState").textContent = connected ? `Connected ${mobile}` : "Waiting to connect";
   $("heroNote").textContent = connected ? "Choose a channel below. Playback permission is checked when you press play." : "Use your own Jio number and OTP. Nothing is saved when the local server stops.";
   $("browse").classList.toggle("hidden", !connected);
+  $("hero").classList.toggle("hidden", connected);
   $("logoutButton").classList.toggle("hidden", !connected);
   $("mobileField").classList.toggle("hidden", connected);
   $("otpField").classList.add("hidden");
@@ -95,7 +96,7 @@ function renderChannels() {
     fragment.append(node);
   }
   $("channelGrid").replaceChildren(fragment);
-  $("resultCount").textContent = `${state.filtered.length.toLocaleString()} of ${state.channels.length.toLocaleString()} channels · JioTV experimental local connector`;
+  $("resultCount").textContent = `${state.filtered.length.toLocaleString()} of ${state.channels.length.toLocaleString()} channels`;
   if (state.focusGuideAfterLoad) {
     state.focusGuideAfterLoad = false;
     requestAnimationFrame(() => $("channelGrid").querySelector(".channel-card")?.focus());
@@ -104,12 +105,161 @@ function renderChannels() {
 
 function destroyPlayback() {
   state.playbackGeneration += 1;
+  if (state.ticker) { clearInterval(state.ticker); state.ticker = null; }
   if (state.hls) { state.hls.destroy(); state.hls = null; }
   if (state.shaka) { state.shaka.destroy().catch(() => {}); state.shaka = null; }
   const video = $("video");
   video.pause();
   video.removeAttribute("src");
   video.load();
+}
+
+function epochMs(value) {
+  const number = Number(value || 0);
+  if (!Number.isFinite(number) || number <= 0) return 0;
+  return number < 10_000_000_000 ? number * 1000 : number;
+}
+
+function programmeStart(program) {
+  return epochMs(program?.startEpoch ?? program?.startTime ?? program?.start);
+}
+
+function programmeEnd(program) {
+  return epochMs(program?.endEpoch ?? program?.endTime ?? program?.end);
+}
+
+function programmeTitle(program) {
+  return program?.showname || program?.title || "Programme information unavailable";
+}
+
+function programmeDescription(program) {
+  return program?.description || program?.synopsis || program?.desc || "";
+}
+
+function formatTime(value) {
+  const date = new Date(value);
+  if (!Number.isFinite(date.getTime())) return "";
+  return date.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+}
+
+function currentProgramme(now = Date.now()) {
+  return state.programs.find((program) => programmeStart(program) <= now && programmeEnd(program) > now) || null;
+}
+
+function seekRange() {
+  if (state.shaka) {
+    const range = state.shaka.seekRange();
+    if (Number.isFinite(range.start) && Number.isFinite(range.end) && range.end > range.start) return range;
+  }
+  const ranges = $("video").seekable;
+  if (ranges?.length) return { start: ranges.start(0), end: ranges.end(ranges.length - 1) };
+  return null;
+}
+
+function canSeekProgramme(program) {
+  const range = seekRange();
+  if (!range) return false;
+  const start = programmeStart(program) / 1000;
+  return start >= range.start - 2 && start < range.end - 2;
+}
+
+function seekTo(value) {
+  const range = seekRange();
+  if (!range) return;
+  const target = Math.max(range.start, Math.min(range.end - 1, Number(value)));
+  $("video").currentTime = target;
+  $("video").play().catch(() => {});
+  updatePlayerClock();
+}
+
+function renderProgrammeInfo() {
+  const current = currentProgramme();
+  $("playerProgramme").textContent = current ? programmeTitle(current) : "Live now";
+  $("playerProgrammeTime").textContent = current
+    ? `${formatTime(programmeStart(current))} – ${formatTime(programmeEnd(current))}`
+    : "Live";
+  $("playerProgrammeDescription").textContent = current ? programmeDescription(current) : "";
+}
+
+function renderProgrammeGuide() {
+  const now = Date.now();
+  const programs = [...state.programs].sort((a, b) => programmeStart(a) - programmeStart(b));
+  const currentIndex = programs.findIndex((program) => programmeStart(program) <= now && programmeEnd(program) > now);
+  const visible = currentIndex >= 0
+    ? programs.slice(Math.max(0, currentIndex - 5), currentIndex + 7)
+    : programs.slice(0, 12);
+  const nodes = visible.map((program) => {
+    const start = programmeStart(program);
+    const end = programmeEnd(program);
+    const isCurrent = start <= now && end > now;
+    const isPast = end <= now;
+    const seekable = isPast && canSeekProgramme(program);
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = `programme-card${isCurrent ? " current" : ""}${isPast ? " past" : " upcoming"}`;
+    button.disabled = !isCurrent && !seekable;
+    button.replaceChildren();
+    const time = document.createElement("span");
+    time.className = "programme-card-time";
+    time.textContent = `${formatTime(start)} – ${formatTime(end)}`;
+    const title = document.createElement("strong");
+    title.textContent = programmeTitle(program);
+    const badge = document.createElement("small");
+    badge.textContent = isCurrent ? "ON NOW" : seekable ? "WATCH FROM START" : isPast ? "PAST · OUTSIDE LIVE WINDOW" : "UP NEXT";
+    button.append(time, title, badge);
+    if (isCurrent) button.onclick = () => $("liveButton").click();
+    if (seekable) button.onclick = () => seekTo(start / 1000 + 2);
+    return button;
+  });
+  if (!nodes.length) {
+    const empty = document.createElement("p");
+    empty.className = "guide-empty";
+    empty.textContent = "Jio has not listed programme information for this channel yet.";
+    nodes.push(empty);
+  }
+  $("programmeRail").replaceChildren(...nodes);
+  requestAnimationFrame(() => $("programmeRail").querySelector(".current")?.scrollIntoView({ inline: "center", block: "nearest" }));
+}
+
+function updatePlayerClock() {
+  const video = $("video");
+  const range = seekRange();
+  const timeline = $("playerTimeline");
+  if (range && range.end - range.start > 5) {
+    timeline.disabled = false;
+    timeline.min = String(range.start);
+    timeline.max = String(range.end);
+    timeline.value = String(Math.max(range.start, Math.min(range.end, video.currentTime || range.end)));
+    $("timelineStart").textContent = formatTime(range.start * 1000);
+    const behind = Math.max(0, Math.round(range.end - (video.currentTime || range.end)));
+    $("timelineNow").textContent = behind < 8 ? "LIVE" : `−${Math.floor(behind / 60)}:${String(behind % 60).padStart(2, "0")}`;
+    $("liveButton").classList.toggle("behind", behind >= 8);
+  } else {
+    timeline.disabled = true;
+    $("timelineStart").textContent = "LIVE";
+    $("timelineNow").textContent = "LIVE";
+  }
+  $("playPauseButton").textContent = video.paused ? "▶" : "Ⅱ";
+  $("playPauseButton").setAttribute("aria-label", video.paused ? "Play" : "Pause");
+}
+
+function startPlayerClock() {
+  if (state.ticker) clearInterval(state.ticker);
+  updatePlayerClock();
+  renderProgrammeGuide();
+  state.ticker = setInterval(updatePlayerClock, 1000);
+}
+
+async function fetchProgrammeGuide(channelId) {
+  const results = await Promise.all([-1, 0, 1].map((offset) =>
+    api(`/api/epg?channel_id=${encodeURIComponent(channelId)}&offset=${offset}`).catch(() => ({ programs: [] }))
+  ));
+  const unique = new Map();
+  for (const program of results.flatMap((result) => result.programs || [])) {
+    const key = `${program.srno || program.showId || programmeTitle(program)}:${programmeStart(program)}`;
+    unique.set(key, program);
+  }
+  return { programs: [...unique.values()].sort((a, b) => programmeStart(a) - programmeStart(b)) };
 }
 
 function base64Url(input) {
@@ -155,6 +305,8 @@ async function playChannel(channelId) {
   if (state.busy) return;
   const channel = state.channels.find((item) => item.id === String(channelId));
   if (!channel) return;
+  state.currentChannel = channel;
+  state.programs = [];
   state.currentIndex = state.channels.indexOf(channel);
   state.busy = true;
   destroyPlayback();
@@ -162,21 +314,22 @@ async function playChannel(channelId) {
   $("playerNumber").textContent = `CHANNEL ${String(channel.number).padStart(3, "0")} · ${channel.language} · ${channel.category}`;
   $("playerTitle").textContent = channel.name;
   $("playerProgramme").textContent = "Checking this account and preparing the live stream…";
+  $("playerProgrammeTime").textContent = "Live";
+  $("playerProgrammeDescription").textContent = "";
+  $("guideChannelName").textContent = channel.name;
+  $("programmeRail").replaceChildren();
   $("playerStatus").textContent = "Connecting…";
   if (!$("playerDialog").open) $("playerDialog").showModal();
   try {
     const [playback, epg] = await Promise.all([
       api("/api/playback", { method: "POST", body: JSON.stringify({ channelId: channel.id }) }),
-      api(`/api/epg?channel_id=${encodeURIComponent(channel.id)}`).catch(() => ({ programs: [] })),
+      fetchProgrammeGuide(channel.id),
     ]);
-    const current = (epg.programs || []).find((program) => {
-      const start = Number(program.startEpoch || program.startTime || program.start || 0) * (String(program.startEpoch || program.startTime || program.start || "").length <= 10 ? 1000 : 1);
-      const end = Number(program.endEpoch || program.endTime || program.end || 0) * (String(program.endEpoch || program.endTime || program.end || "").length <= 10 ? 1000 : 1);
-      return start <= Date.now() && end >= Date.now();
-    });
-    $("playerProgramme").textContent = current?.showname || current?.title || "Live now";
+    state.programs = epg.programs || [];
+    renderProgrammeInfo();
+    renderProgrammeGuide();
     const video = $("video");
-    video.addEventListener("playing", () => { if (generation === state.playbackGeneration) $("playerStatus").textContent = "LIVE · Local session"; }, { once: true });
+    video.addEventListener("playing", () => { if (generation === state.playbackGeneration) $("playerStatus").textContent = "LIVE"; }, { once: true });
     video.addEventListener("waiting", () => { if (generation === state.playbackGeneration) $("playerStatus").textContent = "Buffering…"; }, { once: true });
     if (playback.protocol === "dash") {
       $("playerStatus").textContent = playback.drm ? "Opening protected stream…" : "Opening stream…";
@@ -199,6 +352,7 @@ async function playChannel(channelId) {
       $("playerStatus").textContent = "Starting video…";
       await video.play().catch(() => { $("playerStatus").textContent = "Press play to start"; });
     } else throw new Error("This browser does not support HLS playback.");
+    startPlayerClock();
   } catch (error) {
     $("playerProgramme").textContent = error.message;
     $("playerStatus").textContent = error.status === 403 ? "Not included for this account" : "Unable to play";
@@ -219,6 +373,7 @@ function openLogin() {
 }
 
 $("accountButton").onclick = openLogin;
+$("connectHeroButton").onclick = openLogin;
 $("closeLogin").onclick = () => $("loginDialog").close();
 $("loginForm").onsubmit = async (event) => {
   event.preventDefault();
@@ -258,6 +413,29 @@ $("search").oninput = filterChannels;
 $("closePlayer").onclick = () => { destroyPlayback(); $("playerDialog").close(); };
 $("previousChannel").onclick = () => stepChannel(-1);
 $("nextChannel").onclick = () => stepChannel(1);
+$("playerTimeline").oninput = (event) => {
+  $("timelineNow").textContent = formatTime(Number(event.currentTarget.value) * 1000);
+};
+$("playerTimeline").onchange = (event) => seekTo(event.currentTarget.value);
+$("rewindButton").onclick = () => seekTo($("video").currentTime - 15);
+$("forwardButton").onclick = () => seekTo($("video").currentTime + 15);
+$("playPauseButton").onclick = () => {
+  const video = $("video");
+  if (video.paused) video.play().catch(() => {}); else video.pause();
+  updatePlayerClock();
+};
+$("liveButton").onclick = () => {
+  const range = seekRange();
+  if (range) seekTo(range.end - 1);
+};
+$("guideButton").onclick = () => {
+  const guide = $("programmeGuide");
+  const hidden = guide.classList.toggle("collapsed");
+  $("guideButton").setAttribute("aria-expanded", String(!hidden));
+  $("guideButton").textContent = hidden ? "Show programme guide" : "Hide programme guide";
+};
+$("video").addEventListener("play", updatePlayerClock);
+$("video").addEventListener("pause", updatePlayerClock);
 $("playerDialog").addEventListener("close", destroyPlayback);
 document.addEventListener("keydown", (event) => {
   if (!$("playerDialog").open) return;

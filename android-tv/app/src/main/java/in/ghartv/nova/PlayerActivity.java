@@ -102,6 +102,7 @@ public final class PlayerActivity extends Activity implements ChannelNavigator.L
     private int automaticBufferRecoveries;
     private Program currentProgram;
     private Program nextProgram;
+    private List<Program> guidePrograms = new ArrayList<>();
     private String guideStatus = "Starting live television…";
 
     private final Runnable progressTicker = new Runnable() {
@@ -288,8 +289,8 @@ public final class PlayerActivity extends Activity implements ChannelNavigator.L
         pictureButton.setOnClickListener(view -> PictureShape.show(this, playerView,
                 channel == null ? "" : channel.id));
         actions.addView(pictureButton, actionParams());
-        guideButton = TvUi.button(this, "Guide", false);
-        guideButton.setOnClickListener(view -> finish());
+        guideButton = TvUi.button(this, "Programmes", false);
+        guideButton.setOnClickListener(view -> showProgrammeSchedule());
         actions.addView(guideButton, actionParams());
         nextButton = TvUi.button(this, "Next ▶", true);
         nextButton.setOnClickListener(view -> changeChannel(1));
@@ -493,7 +494,19 @@ public final class PlayerActivity extends Activity implements ChannelNavigator.L
     private void loadEpg(Channel selected) {
         executor.execute(() -> {
             try {
-                List<Program> programs = repository.api().fetchEpg(selected.id, 0);
+                List<Program> programs = new ArrayList<>(repository.api().fetchEpg(selected.id, 0));
+                for (Program programme : repository.api().fetchEpg(selected.id, 1)) {
+                    boolean duplicate = false;
+                    for (Program existing : programs) {
+                        if (existing.startEpochMs == programme.startEpochMs
+                                && existing.title.equals(programme.title)) {
+                            duplicate = true;
+                            break;
+                        }
+                    }
+                    if (!duplicate) programs.add(programme);
+                }
+                programs.sort((left, right) -> Long.compare(left.startEpochMs, right.startEpochMs));
                 long now = System.currentTimeMillis();
                 Program current = null;
                 Program next = null;
@@ -505,6 +518,7 @@ public final class PlayerActivity extends Activity implements ChannelNavigator.L
                 Program finalNext = next;
                 mainHandler.post(() -> {
                     if (channel == null || !channel.id.equals(selected.id)) return;
+                    guidePrograms = new ArrayList<>(programs);
                     currentProgram = finalCurrent;
                     nextProgram = finalNext;
                     refreshGuideContent();
@@ -514,6 +528,63 @@ public final class PlayerActivity extends Activity implements ChannelNavigator.L
                 mainHandler.post(this::refreshGuideContent);
             }
         });
+    }
+
+    private void showProgrammeSchedule() {
+        if (guidePrograms.isEmpty()) {
+            Toast.makeText(this, "Programme guide is still loading", Toast.LENGTH_SHORT).show();
+            loadEpg(channel);
+            return;
+        }
+        long now = System.currentTimeMillis();
+        int currentIndex = -1;
+        for (int i = 0; i < guidePrograms.size(); i++) {
+            if (guidePrograms.get(i).isLive(now)) {
+                currentIndex = i;
+                break;
+            }
+        }
+        int from = Math.max(0, currentIndex < 0 ? 0 : currentIndex - 6);
+        int to = Math.min(guidePrograms.size(), currentIndex < 0 ? 18 : currentIndex + 12);
+        int selectedIndex = currentIndex;
+        List<Program> visible = new ArrayList<>(guidePrograms.subList(from, to));
+        String[] rows = new String[visible.size()];
+        for (int i = 0; i < visible.size(); i++) {
+            Program programme = visible.get(i);
+            String badge = programme.isLive(now) ? "NOW" : programme.endEpochMs <= now ? "PAST" : "UP NEXT";
+            rows[i] = badge + "  •  " + timeRange(programme) + "\n" + programme.title;
+        }
+        AlertDialog dialog = new AlertDialog.Builder(this)
+                .setTitle(channel.name + " programmes")
+                .setItems(rows, (ignored, which) -> showProgrammeDetails(visible.get(which)))
+                .setNegativeButton("Channel guide", (ignored, which) -> finish())
+                .setPositiveButton("Close", null)
+                .create();
+        dialog.setOnShowListener(ignored -> {
+            if (selectedIndex >= from && selectedIndex < to) {
+                dialog.getListView().setSelection(selectedIndex - from);
+            }
+        });
+        dialog.show();
+    }
+
+    private void showProgrammeDetails(Program programme) {
+        long now = System.currentTimeMillis();
+        String availability = programme.isLive(now)
+                ? "Playing now."
+                : programme.endEpochMs <= now
+                ? "Past programme. Historical playback is not enabled in this candidate yet."
+                : "Upcoming programme.";
+        String details = timeRange(programme) + "\n\n"
+                + (programme.description == null || programme.description.trim().isEmpty()
+                ? "No description supplied by JioTV."
+                : programme.description.trim())
+                + "\n\n" + availability;
+        new AlertDialog.Builder(this)
+                .setTitle(programme.title)
+                .setMessage(details)
+                .setPositiveButton("Close", null)
+                .show();
     }
 
     private void refreshGuideContent() {
