@@ -8,6 +8,12 @@
     <uses-feature android:name="android.software.leanback" android:required="true" />
     <uses-feature android:name="android.hardware.touchscreen" android:required="false" />
 
+    <queries>
+        <package android:name="video.laminar.tv.chaupal.android" />
+        <package android:name="com.graymatrix.did" />
+        <package android:name="in.startv.hotstar" />
+    </queries>
+
     <application
         android:name=".NovaApp"
         android:allowBackup="false"
@@ -43,6 +49,10 @@
         <activity
             android:name=".PlayerActivity"
             android:configChanges="keyboard|keyboardHidden|navigation|orientation|screenSize|smallestScreenSize|uiMode"
+            android:exported="false"
+            android:screenOrientation="landscape" />
+        <activity
+            android:name=".MovieHubActivity"
             android:exported="false"
             android:screenOrientation="landscape" />
 

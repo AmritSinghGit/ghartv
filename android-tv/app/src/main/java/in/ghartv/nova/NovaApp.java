@@ -14,6 +14,7 @@ public final class NovaApp extends Application {
     @Override public void onCreate() {
         super.onCreate();
         Telemetry.initialize(this);
+        RemoteControl.register(this);
         Constraints constraints = new Constraints.Builder()
                 .setRequiredNetworkType(NetworkType.CONNECTED)
                 .build();

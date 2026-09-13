@@ -21,8 +21,8 @@ android {
         applicationId = "in.ghartv.nova"
         minSdk = 26
         targetSdk = 35
-        versionCode = 17
-        versionName = "0.5.4-rc8-pre-birthday-recovery"
+        versionCode = 18
+        versionName = "0.6.0-rc1-observed-preview"
     }
 
     buildFeatures {

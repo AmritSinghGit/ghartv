@@ -39,10 +39,10 @@ public final class FamilyTheme {
         register("mom", "Mom", 1, 4, "With love from everyone at home");
         register("amrit", "Amrit", 3, 7, "A day for the person who built GharTV");
         register("harjas", "Harjas", 7, 1, "A bright day for our second son");
-        register("wifey", "Wifey", 8, 18, "Celebrating the heart of the family");
-        register("sis", "Sis", 8, 22, "A special day for our sister");
+        register("rajvinder", "Rajvinder", 8, 18, "Celebrating the heart of the family");
+        register("manu", "Manu", 8, 22, "A special day for our sister");
         register("dad", "Dad", 9, 12, "A birthday tribute on his favourite television");
-        register("simrat", "Simrat", 10, 4, "A joyful day for our son");
+        register("simrit", "Simrit", 10, 4, "A joyful day for our son");
     }
 
     private FamilyTheme() {}
@@ -79,8 +79,7 @@ public final class FamilyTheme {
     }
 
     public static void setBirthdayPreview(Context context, String key) {
-        String legacy = "sim" + "rath";
-        String requested = legacy.equals(key) ? "simrat" : key;
+        String requested = migrateLegacyKey(key);
         String safe = BIRTHDAYS.containsKey(requested) ? requested : "dad";
         prefs(context).edit()
                 .putString(KEY_MODE, MODE_BIRTHDAY)
@@ -97,8 +96,7 @@ public final class FamilyTheme {
         if (MODE_STANDARD.equals(mode)) return null;
         if (MODE_BIRTHDAY.equals(mode)) {
             String stored = prefs(context).getString(KEY_PERSON, "dad");
-            String legacy = "sim" + "rath";
-            if (legacy.equals(stored)) stored = "simrat";
+            stored = migrateLegacyKey(stored);
             return BIRTHDAYS.getOrDefault(stored, BIRTHDAYS.get("dad"));
         }
         MonthDay today = MonthDay.from(LocalDate.now());
@@ -134,14 +132,14 @@ public final class FamilyTheme {
     public static int splashPhotoRes(Context context) {
         Birthday birthday = activeBirthday(context);
         if (birthday == null) return 0;
-        return "dad".equals(birthday.key) || "simrat".equals(birthday.key)
+        return "dad".equals(birthday.key) || "simrit".equals(birthday.key)
                 ? R.drawable.family_dad_simrat_splash : 0;
     }
 
     public static int backdropPhotoRes(Context context) {
         Birthday birthday = activeBirthday(context);
         if (birthday == null) return 0;
-        return "dad".equals(birthday.key) || "simrat".equals(birthday.key)
+        return "dad".equals(birthday.key) || "simrit".equals(birthday.key)
                 ? R.drawable.family_dad_simrat_backdrop : 0;
     }
 
@@ -260,6 +258,14 @@ public final class FamilyTheme {
 
     private static SharedPreferences prefs(Context context) {
         return context.getSharedPreferences(PREFS, Context.MODE_PRIVATE);
+    }
+
+    private static String migrateLegacyKey(String key) {
+        if (key == null) return "dad";
+        if ("wifey".equals(key)) return "rajvinder";
+        if ("sis".equals(key)) return "manu";
+        if ("simrat".equals(key) || ("sim" + "rath").equals(key)) return "simrit";
+        return key;
     }
 
     public static final class Birthday {

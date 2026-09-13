@@ -1,7 +1,7 @@
 {
   "name": "ghartv-telemetry-worker",
   "private": true,
-  "version": "0.5.3",
+  "version": "0.6.0-rc1",
   "type": "module",
   "scripts": {
     "check": "node --check src/index.js",

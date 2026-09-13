@@ -7,13 +7,14 @@ import json,re,sys,xml.etree.ElementTree as ET
 root=Path(sys.argv[1]).resolve(); app=root/'android-tv/app'; java=app/'src/main/java/in/ghartv/nova'; res=app/'src/main/res'
 required=[
  'MainActivity.java','PlayerActivity.java','Channel.java','ChannelRepository.java','ChannelIndex.java',
- 'WatchHistoryStore.java','Telemetry.java','UpdateManager.java','JioApiClient.java','Program.java'
+ 'WatchHistoryStore.java','Telemetry.java','UpdateManager.java','JioApiClient.java','Program.java',
+ 'HeroPreviewController.java','MovieHubActivity.java','PictureShape.java','RemoteControl.java'
 ]
 missing=[name for name in required if not (java/name).is_file()]
 if missing: raise SystemExit('Missing required source: '+', '.join(missing))
 for xml in (app/'src/main').rglob('*.xml'): ET.parse(xml)
 gradle=(app/'build.gradle.kts').read_text()
-assert 'versionCode = 17' in gradle and 'versionName = "0.5.4-rc8-pre-birthday-recovery"' in gradle, gradle
+assert 'versionCode = 18' in gradle and 'versionName = "0.6.0-rc1-observed-preview"' in gradle, gradle
 manifest=(app/'src/main/AndroidManifest.xml').read_text()
 assert 'android.software.leanback' in manifest and 'android.hardware.touchscreen' in manifest
 assert 'android:required="false"' in manifest
@@ -23,7 +24,8 @@ for forbidden in ['youtube.com','youtu.be','Fastway','WAVES']:
     if forbidden.lower() in all_text.lower(): raise SystemExit('Jio-only boundary failed: '+forbidden)
 for marker in [
  'Update live guide', 'EXTRA_SCOPE_NUMBERS', 'Next working channel', 'KEY_PREVIOUS_CHANNEL',
- 'previousChannel()', 'public synchronized int indexedCount()'
+ 'previousChannel()', 'public synchronized int indexedCount()', 'previous_launch_incomplete',
+ 'RESIZE_MODE_FIT', 'Rajvinder', 'Manu', 'Simrit', 'Owner messages'
 ]:
     if marker not in all_text: raise SystemExit('Missing RC5 marker: '+marker)
 # Check the active product surface only. Historical delivery scripts may retain
@@ -69,5 +71,5 @@ for path in java.glob('*.java'):
             if depth<0: raise SystemExit(f'Brace underflow: {path}')
         i+=1
     if depth or quote or block: raise SystemExit(f'Lexical balance failed: {path}')
-print(f'GHARTV_SOURCE_VALIDATION=PASS · {len(list(java.glob("*.java")))} Java files · RC8 pre-birthday recovery source')
+print(f'GHARTV_SOURCE_VALIDATION=PASS · {len(list(java.glob("*.java")))} Java files · 0.6.0 RC1 observed preview candidate')
 PY

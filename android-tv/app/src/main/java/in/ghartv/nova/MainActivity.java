@@ -28,6 +28,7 @@ import android.widget.Toast;
 import androidx.recyclerview.widget.GridLayoutManager;
 import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
+import androidx.media3.ui.PlayerView;
 
 import com.bumptech.glide.Glide;
 
@@ -58,6 +59,7 @@ public final class MainActivity extends Activity implements ChannelNavigator.Lis
     private String searchQuery = "";
     private boolean catalogueBusy;
     private boolean redirectingToLogin;
+    private boolean guideHealthyReported;
 
     private TextView heroNumber;
     private ImageView heroLogo;
@@ -74,6 +76,10 @@ public final class MainActivity extends Activity implements ChannelNavigator.Lis
     private TextView numberOverlay;
     private TextView emptyState;
     private ProgressBar guideLoading;
+    private PlayerView heroPreviewView;
+    private ProgressBar heroPreviewLoading;
+    private TextView heroPreviewStatus;
+    private HeroPreviewController heroPreviewController;
 
     private ChannelNavigator navigator;
     private Runnable pendingEpgLoad;
@@ -90,17 +96,25 @@ public final class MainActivity extends Activity implements ChannelNavigator.Lis
         getWindow().setFlags(WindowManager.LayoutParams.FLAG_FULLSCREEN, WindowManager.LayoutParams.FLAG_FULLSCREEN);
         getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
         TvUi.immersive(this);
+        Telemetry.beginLaunch(this, "main_created");
+        Telemetry.launchStage(this, "session_check");
 
         if (!JioSession.load(this).isPresent()) {
+            Telemetry.launchStage(this, "route_login");
+            Telemetry.markLaunchHealthy(this);
             routeToLogin();
             return;
         }
 
+        Telemetry.launchStage(this, "repository_create");
         repository = new ChannelRepository(this);
         navigator = new ChannelNavigator(this);
         selectedCategory = repository.lastCategory();
+        FamilyTheme.applyPreviewIntent(this);
+        Telemetry.launchStage(this, "ui_build");
         setContentView(buildUi());
         Telemetry.screen(this, "guide");
+        Telemetry.launchStage(this, "guide_content_set");
         mainHandler.postDelayed(() -> Telemetry.maybeRequestConsent(this), 1200L);
         mainHandler.post(clockTicker);
         loadFromDisk(true);
@@ -115,9 +129,15 @@ public final class MainActivity extends Activity implements ChannelNavigator.Lis
         else loadFromDisk(false);
     }
 
+    @Override protected void onPause() {
+        if (heroPreviewController != null) heroPreviewController.stop(false);
+        super.onPause();
+    }
+
     @Override protected void onDestroy() {
         if (pendingEpgLoad != null) mainHandler.removeCallbacks(pendingEpgLoad);
         mainHandler.removeCallbacks(clockTicker);
+        if (heroPreviewController != null) heroPreviewController.release();
         executor.shutdownNow();
         super.onDestroy();
     }
@@ -140,6 +160,12 @@ public final class MainActivity extends Activity implements ChannelNavigator.Lis
         shell.setPadding(TvUi.dp(this, 28), TvUi.dp(this, 14), TvUi.dp(this, 28), TvUi.dp(this, 14));
         root.addView(shell, new FrameLayout.LayoutParams(-1, -1));
         shell.addView(buildHeader(), new LinearLayout.LayoutParams(-1, TvUi.dp(this, 54)));
+
+        View celebration = FamilyTheme.banner(this);
+        LinearLayout.LayoutParams celebrationParams = new LinearLayout.LayoutParams(
+                -1, FamilyTheme.isBirthday(this) ? TvUi.dp(this, 40) : 0);
+        celebrationParams.bottomMargin = FamilyTheme.isBirthday(this) ? TvUi.dp(this, 4) : 0;
+        shell.addView(celebration, celebrationParams);
 
         catalogueStatus = TvUi.label(this, "Connecting to JioTV…", 13, TvUi.MUTED, true);
         catalogueStatus.setGravity(Gravity.CENTER_VERTICAL);
@@ -192,6 +218,10 @@ public final class MainActivity extends Activity implements ChannelNavigator.Lis
         refresh.setOnClickListener(view -> refreshCatalogue(true));
         header.addView(refresh, headerButtonParams());
 
+        Button movies = actionButton("Punjabi +");
+        movies.setOnClickListener(view -> startActivity(new Intent(this, MovieHubActivity.class)));
+        header.addView(movies, headerButtonParams());
+
         accountButton = actionButton("Jio account");
         accountButton.setOnClickListener(view -> showAccountMenu());
         LinearLayout.LayoutParams accountParams = new LinearLayout.LayoutParams(TvUi.dp(this, 145), TvUi.dp(this, 38));
@@ -230,14 +260,44 @@ public final class MainActivity extends Activity implements ChannelNavigator.Lis
         top.addView(heroNumber, new LinearLayout.LayoutParams(-2, TvUi.dp(this, 30)));
         hero.addView(top, new LinearLayout.LayoutParams(-1, TvUi.dp(this, 32)));
 
+        FrameLayout previewHost = new FrameLayout(this);
+        previewHost.setClipToOutline(true);
+        previewHost.setBackground(TvUi.rounded(Color.rgb(2, 9, 15), 18,
+                Color.argb(70, 110, 231, 255), 1, this));
+        previewHost.setOnClickListener(view -> play(selectedChannel));
+
+        heroPreviewView = new PlayerView(this);
+        previewHost.addView(heroPreviewView, new FrameLayout.LayoutParams(-1, -1));
+
         heroLogo = new ImageView(this);
         heroLogo.setScaleType(ImageView.ScaleType.FIT_CENTER);
-        heroLogo.setBackground(TvUi.rounded(Color.argb(48, 255, 255, 255), 22, Color.argb(38, 255, 255, 255), 1, this));
-        LinearLayout.LayoutParams logoParams = new LinearLayout.LayoutParams(TvUi.dp(this, 76), TvUi.dp(this, 76));
-        logoParams.topMargin = TvUi.dp(this, 8);
-        hero.addView(heroLogo, logoParams);
+        heroLogo.setPadding(TvUi.dp(this, 8), TvUi.dp(this, 8), TvUi.dp(this, 8), TvUi.dp(this, 8));
+        heroLogo.setBackground(TvUi.rounded(Color.argb(46, 255, 255, 255), 18,
+                Color.argb(38, 255, 255, 255), 1, this));
+        previewHost.addView(heroLogo, new FrameLayout.LayoutParams(
+                TvUi.dp(this, 88), TvUi.dp(this, 88), Gravity.CENTER));
 
-        heroTitle = TvUi.label(this, "Your live television", 27, TvUi.TEXT, true);
+        heroPreviewLoading = new ProgressBar(this);
+        previewHost.addView(heroPreviewLoading, new FrameLayout.LayoutParams(
+                TvUi.dp(this, 34), TvUi.dp(this, 34), Gravity.CENTER));
+
+        heroPreviewStatus = TvUi.label(this,
+                "Muted preview  •  correct proportions  •  OK for full screen",
+                9, Color.WHITE, true);
+        heroPreviewStatus.setGravity(Gravity.CENTER_VERTICAL);
+        heroPreviewStatus.setPadding(TvUi.dp(this, 9), 0, TvUi.dp(this, 9), 0);
+        heroPreviewStatus.setBackground(TvUi.rounded(Color.argb(180, 0, 0, 0), 12,
+                Color.TRANSPARENT, 0, this));
+        FrameLayout.LayoutParams previewStatusParams = new FrameLayout.LayoutParams(
+                -1, TvUi.dp(this, 25), Gravity.BOTTOM);
+        previewStatusParams.setMargins(TvUi.dp(this, 6), 0, TvUi.dp(this, 6), TvUi.dp(this, 6));
+        previewHost.addView(heroPreviewStatus, previewStatusParams);
+
+        LinearLayout.LayoutParams previewParams = new LinearLayout.LayoutParams(-1, TvUi.dp(this, 142));
+        previewParams.topMargin = TvUi.dp(this, 6);
+        hero.addView(previewHost, previewParams);
+
+        heroTitle = TvUi.label(this, "Your live television", 22, TvUi.TEXT, true);
         heroTitle.setMaxLines(2);
         heroTitle.setEllipsize(TextUtils.TruncateAt.END);
         LinearLayout.LayoutParams titleParams = new LinearLayout.LayoutParams(-1, -2);
@@ -288,6 +348,8 @@ public final class MainActivity extends Activity implements ChannelNavigator.Lis
         LinearLayout.LayoutParams hintsParams = new LinearLayout.LayoutParams(-1, TvUi.dp(this, 24));
         hintsParams.topMargin = TvUi.dp(this, 4);
         hero.addView(hints, hintsParams);
+        heroPreviewController = new HeroPreviewController(
+                this, repository, heroPreviewView, heroLogo, heroPreviewLoading, heroPreviewStatus);
         return hero;
     }
 
@@ -365,6 +427,7 @@ public final class MainActivity extends Activity implements ChannelNavigator.Lis
         String suffix = mobile.length() >= 4 ? mobile.substring(mobile.length() - 4) : "connected";
         accountButton.setText("Jio ••••" + suffix);
         allChannels = repository.loadAll();
+        Telemetry.launchStage(this, "catalogue_loaded");
         renderGuide(focus);
         updateCatalogueStatus(null);
 
@@ -435,6 +498,12 @@ public final class MainActivity extends Activity implements ChannelNavigator.Lis
             return;
         }
 
+        if (!guideHealthyReported) {
+            guideHealthyReported = true;
+            Telemetry.launchStage(this, "guide_rendered");
+            Telemetry.markLaunchHealthy(this);
+        }
+
         Channel preferred = repository.byNumber(visibleChannels, repository.lastChannel());
         if (preferred == null) preferred = visibleChannels.get(0);
         select(preferred);
@@ -451,6 +520,7 @@ public final class MainActivity extends Activity implements ChannelNavigator.Lis
 
     private void select(Channel channel) {
         selectedChannel = channel;
+        if (heroPreviewController != null) heroPreviewController.select(channel);
         if (channel == null) {
             heroNumber.setText("---");
             heroTitle.setText("No channel selected");
@@ -584,6 +654,8 @@ public final class MainActivity extends Activity implements ChannelNavigator.Lis
         String[] actions = new String[]{
                 "Update live guide",
                 "Check for GharTV update",
+                "Appearance  •  " + FamilyTheme.modeLabel(this),
+                "Owner messages  •  " + RemoteControl.status(this),
                 "Diagnostics & privacy  •  " + diagnostics,
                 "Sign out of JioTV"
         };
@@ -594,8 +666,10 @@ public final class MainActivity extends Activity implements ChannelNavigator.Lis
                 .setItems(actions, (dialog, which) -> {
                     if (which == 0) refreshCatalogue(true);
                     else if (which == 1) UpdateManager.check(this, true);
-                    else if (which == 2) DiagnosticsDialog.show(this);
-                    else if (which == 3) confirmSignOut();
+                    else if (which == 2) FamilyTheme.showPicker(this);
+                    else if (which == 3) RemoteControl.showPairing(this);
+                    else if (which == 4) DiagnosticsDialog.show(this);
+                    else if (which == 5) confirmSignOut();
                 })
                 .setNegativeButton("Close", null)
                 .show();

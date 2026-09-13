@@ -77,6 +77,7 @@ public final class PlayerActivity extends Activity implements ChannelNavigator.L
     private Button liveButton;
     private Button forwardButton;
     private Button previousButton;
+    private Button pictureButton;
     private Button guideButton;
     private Button nextButton;
     private TextView numberOverlay;
@@ -283,6 +284,10 @@ public final class PlayerActivity extends Activity implements ChannelNavigator.L
         previousButton = TvUi.button(this, "◀ Previous", false);
         previousButton.setOnClickListener(view -> changeChannel(-1));
         actions.addView(previousButton, actionParams());
+        pictureButton = TvUi.button(this, "Picture", false);
+        pictureButton.setOnClickListener(view -> PictureShape.show(this, playerView,
+                channel == null ? "" : channel.id));
+        actions.addView(pictureButton, actionParams());
         guideButton = TvUi.button(this, "Guide", false);
         guideButton.setOnClickListener(view -> finish());
         actions.addView(guideButton, actionParams());
@@ -290,7 +295,8 @@ public final class PlayerActivity extends Activity implements ChannelNavigator.L
         nextButton.setOnClickListener(view -> changeChannel(1));
         actions.addView(nextButton, actionParams());
 
-        for (View action : new View[]{rewindButton, pauseButton, liveButton, forwardButton, previousButton, guideButton, nextButton}) {
+        for (View action : new View[]{rewindButton, pauseButton, liveButton, forwardButton,
+                previousButton, pictureButton, guideButton, nextButton}) {
             bindActionFocus(action);
         }
         panel.addView(actions, new LinearLayout.LayoutParams(-1, TvUi.dp(this, 35)));
@@ -406,6 +412,7 @@ public final class PlayerActivity extends Activity implements ChannelNavigator.L
         DefaultMediaSourceFactory mediaSourceFactory = new DefaultMediaSourceFactory(dataSourceFactory);
         player = new ExoPlayer.Builder(this).setMediaSourceFactory(mediaSourceFactory).build();
         playerView.setPlayer(player);
+        PictureShape.apply(this, playerView, channel == null ? "" : channel.id);
         player.addListener(new Player.Listener() {
             @Override public void onPlaybackStateChanged(int state) {
                 if (state == Player.STATE_READY) {

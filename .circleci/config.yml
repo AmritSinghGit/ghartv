@@ -1,0 +1,34 @@
+version: 2.1
+
+jobs:
+  portable_validation:
+    docker:
+      - image: cimg/android:2026.08-node
+    resource_class: large
+    environment:
+      GRADLE_OPTS: "-Dorg.gradle.daemon=false -Dorg.gradle.jvmargs=-Xmx3g"
+    steps:
+      - checkout
+      - restore_cache:
+          keys:
+            - ghartv-gradle-v1-{{ checksum "android-tv/gradle/wrapper/gradle-wrapper.properties" }}-{{ checksum "android-tv/app/build.gradle.kts" }}
+            - ghartv-gradle-v1-
+      - run:
+          name: Validate GharTV candidate
+          command: ./ci/run.sh
+      - save_cache:
+          key: ghartv-gradle-v1-{{ checksum "android-tv/gradle/wrapper/gradle-wrapper.properties" }}-{{ checksum "android-tv/app/build.gradle.kts" }}
+          paths:
+            - ~/.gradle/caches
+            - ~/.gradle/wrapper
+      - store_artifacts:
+          path: ci/artifacts
+          destination: candidate-receipts
+      - store_artifacts:
+          path: android-tv/app/build/outputs/apk/debug/app-debug.apk
+          destination: app-debug.apk
+
+workflows:
+  candidate_validation:
+    jobs:
+      - portable_validation
