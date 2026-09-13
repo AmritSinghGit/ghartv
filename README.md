@@ -1,6 +1,6 @@
 # GharTV
 
-**Current review candidate:** v0.5.4 RC5 Family Preview — vertical channel tile, explicit Watch Live playback, family themes, voice/programme search and capability-gated transport controls. · Jio Live
+**Current review candidate:** v0.5.4 RC6 Guide Safe — RC5 recovery with explicit Watch Live playback, family themes, voice/programme search and capability-gated transport controls. · Jio Live
 
 A remote-first Android TV / Google TV client for live television available to a connected JioTV account.
 

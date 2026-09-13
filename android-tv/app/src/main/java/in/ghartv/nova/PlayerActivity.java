@@ -60,7 +60,6 @@ public final class PlayerActivity extends Activity implements ChannelNavigator.L
     private List<Channel> allChannels = new ArrayList<>();
     private List<Channel> playbackScope = new ArrayList<>();
     private Channel channel;
-    String pictureChannelId() { return channel == null ? "" : channel.id; }
     private String scopeLabel = "All channels";
 
     private ExoPlayer player;
