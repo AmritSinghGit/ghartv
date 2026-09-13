@@ -1,17 +1,8 @@
 {
-  "versionCode": 15,
-  "versionName": "0.5.4-rc6-guide-safe",
-  "apkUrl": "https://github.com/AmritSinghGit/ghartv/releases/download/v0.5.4-rc6/app-release.apk",
-  "sha256": "857791a3af7cced2ed193cec257f6a43d136502a957235743727bb23964b4f72",
-  "notes": "Guide-safe RC6 recovery: removes automatic muted preview from the guide while retaining explicit WATCH LIVE playback. This signed in-place update keeps your existing GharTV data.",
-  "publishedAt": "2026-09-13T10:34:00Z",
-  "channel": "production",
-  "artifactTag": "v0.5.4-rc6",
-  "sourceCommit": "d0f91a7be1936a79570ca70a71c80993174928b0",
-  "ownerDecision": "OWNER_AUTHORIZED_RC6_LIVE_FEED_2026_09_13",
-  "distributionMode": "promote-signed-guide-safe-recovery",
-  "mandatoryUpdateSupported": false,
-  "silentInstallSupported": false,
-  "previousVersionCode": 14,
-  "previousArtifactSha256": "6f60d18a78e4b1692d6591d04bcef6e1cfda4252dba976d160a12cef03930199"
+  "versionCode": 10,
+  "versionName": "0.5.3-observability",
+  "apkUrl": "https://github.com/AmritSinghGit/ghartv/releases/latest/download/GharTV-Jio-Live.apk",
+  "sha256": "2d64fe5dac4fc03dd49b9dfe472288af5d5f2ecedd18e105f1fd3d9fe72151fc",
+  "notes": "Opt-in privacy-filtered diagnostics and error reporting, local preview/delete controls, 30-day retention and owner telemetry report. No mobile number, OTP, Jio credentials, stream URLs or successful channel viewing history are sent.",
+  "publishedAt": "2026-09-02T04:02:15.628382+00:00"
 }
