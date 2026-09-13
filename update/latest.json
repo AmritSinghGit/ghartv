@@ -1,17 +1,1 @@
-{
-  "versionCode": 14,
-  "versionName": "0.5.4-rc5-family-photo",
-  "apkUrl": "https://github.com/AmritSinghGit/ghartv/releases/download/v0.5.4-rc5/GharTV-Jio-Live-v0.5.4-rc5.apk",
-  "sha256": "6f60d18a78e4b1692d6591d04bcef6e1cfda4252dba976d160a12cef03930199",
-  "notes": "Owner-approved family celebration update: birthday launch screen and photo, automatic bounded muted channel preview, programme search and playback recovery. This is the exact reviewed RC5 APK, not a rebuild. In-app microphone behaviour remains a known follow-up. Android asks you to confirm installation; existing login and settings are retained by an in-place update.",
-  "publishedAt": "2026-09-12T07:00:48Z",
-  "channel": "production",
-  "artifactTag": "v0.5.4-rc5",
-  "sourceCommit": "b46b2cd607c309d364d531b5fd9da618cd007f6c",
-  "ownerDecision": "APPROVED_FOR_PRODUCTION_DISTRIBUTION_2026_09_12",
-  "distributionMode": "promote-exact-reviewed-binary",
-  "mandatoryUpdateSupported": false,
-  "silentInstallSupported": false,
-  "previousVersionCode": 10,
-  "previousArtifactSha256": "2d64fe5dac4fc03dd49b9dfe472288af5d5f2ecedd18e105f1fd3d9fe72151fc"
-}
+{"versionCode":16,"versionName":"0.5.4-rc7-startup-safe","apkUrl":"https://github.com/AmritSinghGit/ghartv/releases/download/v0.5.4-rc7/app-release.apk","sha256":"b062b5723b48d01f80031b91d09ae363711dda004955be8dfcfd8412d2ef4882","notes":"Corrected RC7 recovery: fixes the RC6 startup packaging defect, removes automatic muted guide preview, and restores the visible Check for GharTV update menu. This signed in-place update keeps existing GharTV data.","publishedAt":"2026-09-13T11:03:00Z","channel":"production","artifactTag":"v0.5.4-rc7","sourceCommit":"43d1c21cc322a7c56607cbf4595fad5f92ad5675","ownerDecision":"OWNER_AUTHORIZED_CORRECTED_LIVE_UPDATE_2026_09_13","distributionMode":"promote-qemu-validated-recovery","mandatoryUpdateSupported":false,"silentInstallSupported":false,"previousVersionCode":14,"previousArtifactSha256":"6f60d18a78e4b1692d6591d04bcef6e1cfda4252dba976d160a12cef03930199"}
