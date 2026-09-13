@@ -27,7 +27,7 @@ for marker in [
  'previousChannel()', 'public synchronized int indexedCount()', 'previous_launch_incomplete',
  'RESIZE_MODE_FIT', 'Rajvinder', 'Manu', 'Simrit', 'Owner messages'
 ]:
-    if marker not in all_text: raise SystemExit('Missing RC5 marker: '+marker)
+    if marker not in all_text: raise SystemExit('Missing RC1 marker: '+marker)
 # Check the active product surface only. Historical delivery scripts may retain
 # frozen evidence from earlier candidates and must not block the current source.
 spell_paths = list(java.glob('*.java'))
@@ -42,13 +42,24 @@ for p in spell_paths:
     try: text=p.read_text()
     except UnicodeDecodeError: continue
     old_name='Sim'+'rath'
-    if old_name in text: raise SystemExit('Old spelling remains in active RC5 surface: '+str(p))
+    if old_name in text: raise SystemExit('Old spelling remains in active RC1 surface: '+str(p))
 for marker in ['GHARTV_TELEMETRY_ADMIN_TOKEN','collector.env','Authorization: Bearer']:
     if marker in all_text: raise SystemExit('Secret boundary failed: '+marker)
 update=json.loads((root/'update/latest.json').read_text())
-assert update['versionCode']==14 and update['versionName']=='0.5.4-rc5-family-photo', update
-assert update['sha256']=='6f60d18a78e4b1692d6591d04bcef6e1cfda4252dba976d160a12cef03930199', update
-assert update['sourceCommit']=='b46b2cd607c309d364d531b5fd9da618cd007f6c', update
+# A branch runner sees the historical RC5 snapshot; GitHub's PR merge runner
+# sees main's separately approved RC8 feed. Reject everything except those two
+# exact immutable identities, and never infer that this RC1 candidate is live.
+approved_feeds = {
+    (14, '0.5.4-rc5-family-photo',
+     '6f60d18a78e4b1692d6591d04bcef6e1cfda4252dba976d160a12cef03930199',
+     'b46b2cd607c309d364d531b5fd9da618cd007f6c'),
+    (17, '0.5.4-rc8-pre-birthday-recovery',
+     '8cff8f85403da5924865fddc687dbff11089d7c498f9863e483a7d8123c1ce13',
+     'de3106e3e97a9147b06347a3d66c4e5923cdbbcc'),
+}
+identity = (update['versionCode'], update['versionName'], update['sha256'], update['sourceCommit'])
+assert identity in approved_feeds, update
+assert update['channel']=='production', update
 # Lexical balance supplements the real Android build; it is not a compiler.
 for path in java.glob('*.java'):
     s=path.read_text(); depth=0; quote=None; esc=False; line=False; block=False; i=0
