@@ -404,6 +404,16 @@ export function authorizedMediaUrl(input, authorization = "") {
   return safeMediaUrl(`${url.href}${url.search ? "&" : "?"}${authorization}`);
 }
 
+export function mediaUrlCandidates(input, authorization = "") {
+  const direct = safeMediaUrl(input);
+  if (!authorization || direct.searchParams.has("__hdnea__") || !(direct.hostname === "jio.com" || direct.hostname.endsWith(".jio.com"))) return [direct];
+  // Jio's Android player authenticates child HLS requests with the signed
+  // cookie. Some CDN edges return 404 when that same token is also copied to
+  // a child playlist's query string, so try the Android-compatible request
+  // first and retain the query form as a fallback for edges that require it.
+  return [direct, authorizedMediaUrl(direct.href, authorization)];
+}
+
 function mediaRoute(ticket, target) {
   return `/api/stream/${ticket}?u=${Buffer.from(target).toString("base64url")}`;
 }
@@ -453,23 +463,32 @@ async function proxyStream(req, res, session, pathname, searchParams) {
   } else if (match[2] && match[2] !== "manifest.mpd") {
     target = new URL(match[2], new URL(".", ticket.streamUrl)).href;
   }
-  let url;
-  try { url = authorizedMediaUrl(target, ticket.authorization); } catch (error) { apiError(res, 400, error.message); return true; }
-  const providerMediaHost = url.hostname === "jio.com" || url.hostname.endsWith(".jio.com");
-  if (!ticket.allowedHosts.has(url.hostname) && !providerMediaHost) {
-    apiError(res, 403, "This media host was not declared by the selected channel.", "media_host_blocked");
-    return true;
+  let candidates;
+  try { candidates = mediaUrlCandidates(target, ticket.authorization); } catch (error) { apiError(res, 400, error.message); return true; }
+  for (const candidate of candidates) {
+    const providerMediaHost = candidate.hostname === "jio.com" || candidate.hostname.endsWith(".jio.com");
+    if (!ticket.allowedHosts.has(candidate.hostname) && !providerMediaHost) {
+      apiError(res, 403, "This media host was not declared by the selected channel.", "media_host_blocked");
+      return true;
+    }
+    if (providerMediaHost) ticket.allowedHosts.add(candidate.hostname);
   }
-  if (providerMediaHost) ticket.allowedHosts.add(url.hostname);
   const headers = { ...ticket.headers };
   delete headers["content-type"];
   if (req.headers.range) headers.range = req.headers.range;
   let upstream;
+  let url = candidates[0];
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 30_000);
   timeout.unref();
   try {
-    upstream = await fetch(url, { headers, redirect: "follow", signal: controller.signal });
+    for (let index = 0; index < candidates.length; index += 1) {
+      url = candidates[index];
+      upstream = await fetch(url, { headers, redirect: "follow", signal: controller.signal });
+      const retryableAuthorizationMiss = [401, 403, 404].includes(upstream.status) && index + 1 < candidates.length;
+      if (!retryableAuthorizationMiss) break;
+      await upstream.body?.cancel().catch(() => {});
+    }
   } catch {
     apiError(res, 502, "The channel media could not be reached.", "media_unreachable");
     return true;
