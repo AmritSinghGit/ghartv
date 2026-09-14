@@ -535,6 +535,7 @@ async function proxyStream(req, res, session, pathname, searchParams) {
   if (req.headers.range) headers.range = req.headers.range;
   let upstream;
   let url = candidates[0];
+  const attemptStatuses = [];
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 30_000);
   timeout.unref();
@@ -542,6 +543,7 @@ async function proxyStream(req, res, session, pathname, searchParams) {
     for (let index = 0; index < candidates.length; index += 1) {
       url = candidates[index];
       upstream = await fetch(url, { headers, redirect: "follow", signal: controller.signal });
+      attemptStatuses.push(upstream.status);
       const retryableAuthorizationMiss = [401, 403, 404].includes(upstream.status) && index + 1 < candidates.length;
       if (!retryableAuthorizationMiss) break;
       await upstream.body?.cancel().catch(() => {});
@@ -557,6 +559,13 @@ async function proxyStream(req, res, session, pathname, searchParams) {
   ticket.allowedHosts.add(finalUrl.hostname);
   mergeSetCookies(ticket, upstream);
   if (!upstream.ok && upstream.status !== 206) {
+    console.warn(JSON.stringify({
+      event: "stream_proxy_failure",
+      requestKind: searchParams.get("u") ? "manifest_child" : "root_manifest",
+      attempts: attemptStatuses,
+      authorizationCookie: Boolean(ticket.headers.cookie),
+      providerHost: finalUrl.hostname.endsWith(".jio.com"),
+    }));
     apiError(res, upstream.status, `The channel media returned HTTP ${upstream.status}.`, "media_response");
     return true;
   }
