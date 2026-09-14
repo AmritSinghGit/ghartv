@@ -5,6 +5,8 @@ import { dirname, extname, join, normalize } from "node:path";
 import { fileURLToPath } from "node:url";
 import { randomBytes, randomUUID } from "node:crypto";
 import { Readable } from "node:stream";
+import { execFile } from "node:child_process";
+import { promisify } from "node:util";
 
 const ROOT = dirname(fileURLToPath(import.meta.url));
 const PUBLIC = join(ROOT, "public");
@@ -16,6 +18,9 @@ const STREAM_TTL_MS = 4 * 60 * 60 * 1000;
 const MAX_BODY = 16 * 1024;
 const MOBILE_USER_AGENT = "okhttp/4.2.2";
 const PLAYER_USER_AGENT = "plaYtv/7.1.5 (Linux;Android 9) ExoPlayerLib/2.11.7";
+const execFileAsync = promisify(execFile);
+const KEYCHAIN_SERVICE = "in.ghartv.nova.web-player.jio-session";
+const KEYCHAIN_ACCOUNT = "local-owner";
 
 const JIO = Object.freeze({
   channels14: "https://jiotvapi.cdn.jio.com/apis/v1.4/getMobileChannelList/get/?langId=6&devicetype=phone&os=android&usertype=JIO&version=396",
@@ -33,6 +38,8 @@ const JIO = Object.freeze({
 const sessions = new Map();
 const streamTickets = new Map();
 let catalogueCache = { expiresAt: 0, channels: [] };
+let persistedAccount = null;
+let persistedAccountLoaded = false;
 
 function now() { return Date.now(); }
 function id(bytes = 24) { return randomBytes(bytes).toString("base64url"); }
@@ -78,6 +85,55 @@ function cleanup() {
   for (const [ticket, item] of streamTickets) if (item.createdAt + STREAM_TTL_MS < now()) streamTickets.delete(ticket);
 }
 setInterval(cleanup, 60_000).unref();
+
+function validPersistedAccount(account) {
+  return account && typeof account === "object"
+    && /^\d{10}$/.test(value(account.mobile))
+    && Boolean(value(account.authToken))
+    && Boolean(value(account.ssoToken))
+    && Boolean(value(account.deviceId));
+}
+
+async function readKeychainAccount() {
+  if (process.platform !== "darwin" || process.env.GHARTV_DISABLE_KEYCHAIN === "1") return null;
+  try {
+    const { stdout } = await execFileAsync("security", ["find-generic-password", "-a", KEYCHAIN_ACCOUNT, "-s", KEYCHAIN_SERVICE, "-w"], { timeout: 5_000, maxBuffer: 64 * 1024 });
+    const account = JSON.parse(stdout.trim());
+    return validPersistedAccount(account) ? account : null;
+  } catch {
+    return null;
+  }
+}
+
+async function restorePersistedAccount(session) {
+  if (session.account) return;
+  if (!persistedAccountLoaded) {
+    persistedAccount = await readKeychainAccount();
+    persistedAccountLoaded = true;
+  }
+  if (persistedAccount) session.account = { ...persistedAccount };
+}
+
+async function savePersistedAccount(account) {
+  persistedAccount = validPersistedAccount(account) ? { ...account } : null;
+  persistedAccountLoaded = true;
+  if (!persistedAccount || process.platform !== "darwin" || process.env.GHARTV_DISABLE_KEYCHAIN === "1") return false;
+  try {
+    await execFileAsync("security", ["add-generic-password", "-a", KEYCHAIN_ACCOUNT, "-s", KEYCHAIN_SERVICE, "-w", JSON.stringify(persistedAccount), "-U"], { timeout: 5_000, maxBuffer: 64 * 1024 });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+async function deletePersistedAccount() {
+  persistedAccount = null;
+  persistedAccountLoaded = true;
+  if (process.platform !== "darwin" || process.env.GHARTV_DISABLE_KEYCHAIN === "1") return;
+  try {
+    await execFileAsync("security", ["delete-generic-password", "-a", KEYCHAIN_ACCOUNT, "-s", KEYCHAIN_SERVICE], { timeout: 5_000, maxBuffer: 64 * 1024 });
+  } catch {}
+}
 
 function json(res, status, payload) {
   const body = JSON.stringify(payload);
@@ -312,6 +368,7 @@ async function refreshAccount(account) {
       account.authToken = payload.authToken;
       account.refreshToken = payload.refreshToken || account.refreshToken;
       account.expiryEpochSeconds = jwtExpiry(payload.authToken) || Math.floor(now() / 1000) + 864000;
+      await savePersistedAccount(account);
     }
   } catch {}
   return account;
@@ -600,6 +657,7 @@ async function serveStatic(res, pathname) {
 
 async function handleApi(req, res, url) {
   const session = sessionFor(req, res, true);
+  await restorePersistedAccount(session);
   if (await proxyLicense(req, res, session, url.pathname)) return;
   if (await proxyStream(req, res, session, url.pathname, url.searchParams)) return;
   if (req.method === "GET" && url.pathname === "/api/health") {
@@ -623,13 +681,15 @@ async function handleApi(req, res, url) {
     if (!session.pendingMobile) return apiError(res, 409, "Send an OTP first.", "otp_not_sent");
     const body = await readJson(req);
     session.account = await verifyOtp(session.pendingMobile, body.otp);
+    const persisted = await savePersistedAccount(session.account);
     session.pendingMobile = "";
-    json(res, 200, { ok: true, connected: true, mobile: `••••••${session.account.mobile.slice(-4)}` });
+    json(res, 200, { ok: true, connected: true, persistentLogin: persisted, mobile: `••••••${session.account.mobile.slice(-4)}` });
     return;
   }
   if (req.method === "POST" && url.pathname === "/api/auth/logout") {
     session.account = null;
     session.pendingMobile = "";
+    await deletePersistedAccount();
     for (const [ticket, item] of streamTickets) if (item.sessionId === session.id) streamTickets.delete(ticket);
     json(res, 200, { ok: true });
     return;

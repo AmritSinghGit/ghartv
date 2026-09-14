@@ -65,3 +65,8 @@ test("serves the local health and programme-player page", async (context) => {
   const playerStyles = await fetch(`http://127.0.0.1:${address.port}/player.css`).then((response) => response.text());
   assert.match(playerStyles, /\.programme-card\.current/);
 });
+
+test("keeps provider credentials out of browser-facing source", async () => {
+  const source = await import("node:fs/promises").then(({ readFile }) => readFile(new URL("../public/app.js", import.meta.url), "utf8"));
+  assert.doesNotMatch(source, /localStorage|sessionStorage|document\.cookie/);
+});
