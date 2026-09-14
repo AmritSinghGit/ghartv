@@ -1,5 +1,5 @@
 const $ = (id) => document.getElementById(id);
-const state = { connected: false, otpSent: false, channels: [], filtered: [], category: "All", currentIndex: -1, currentChannel: null, programs: [], hls: null, shaka: null, ticker: null, busy: false, playbackGeneration: 0, focusGuideAfterLoad: false };
+const state = { connected: false, otpSent: false, channels: [], filtered: [], category: "All", currentIndex: -1, currentChannel: null, programs: [], hls: null, shaka: null, ticker: null, busy: false, playbackGeneration: 0, focusGuideAfterLoad: false, widevineSupport: null };
 
 async function api(path, options = {}) {
   const response = await fetch(path, {
@@ -269,10 +269,43 @@ function base64Url(input) {
   return btoa(binary).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/g, "");
 }
 
+async function supportsWidevine() {
+  if (state.widevineSupport !== null) return state.widevineSupport;
+  if (!navigator.requestMediaKeySystemAccess) {
+    state.widevineSupport = false;
+    return false;
+  }
+  try {
+    await navigator.requestMediaKeySystemAccess("com.widevine.alpha", [{
+      initDataTypes: ["cenc"],
+      distinctiveIdentifier: "optional",
+      persistentState: "optional",
+      sessionTypes: ["temporary"],
+      audioCapabilities: [{ contentType: 'audio/mp4; codecs="mp4a.40.2"' }],
+      videoCapabilities: [{ contentType: 'video/mp4; codecs="avc1.42E01E"' }],
+    }]);
+    state.widevineSupport = true;
+  } catch {
+    state.widevineSupport = false;
+  }
+  return state.widevineSupport;
+}
+
+function protectedPlaybackMessage(error) {
+  const code = Number(error?.code || error?.detail?.code || error?.detail?.data?.[0]);
+  if (error?.code === "widevine_unavailable" || code === 6001 || code === 6020) {
+    return "This channel uses Widevine protection. Open GharTV in Google Chrome on this Mac.";
+  }
+  return error?.message || (Number.isFinite(code) ? `Protected stream error ${code}.` : "The protected stream could not be opened.");
+}
+
 async function playDash(video, playback, generation) {
   if (!window.shaka) throw new Error("The browser TV engine did not load.");
   shaka.polyfill.installAll();
   if (!shaka.Player.isBrowserSupported()) throw new Error("This browser does not support protected live television.");
+  if (playback.drm && !(await supportsWidevine())) {
+    throw Object.assign(new Error("This channel uses Widevine protection. Open GharTV in Google Chrome on this Mac."), { code: "widevine_unavailable" });
+  }
   const player = new shaka.Player();
   state.shaka = player;
   await player.attach(video);
@@ -293,9 +326,9 @@ async function playDash(video, playback, generation) {
   }
   player.addEventListener("error", (event) => {
     if (generation !== state.playbackGeneration) return;
-    const code = event.detail?.code || "unknown";
-    $("playerStatus").textContent = "Unable to play";
-    $("playerProgramme").textContent = `Protected stream error: ${code}`;
+    const message = protectedPlaybackMessage(event.detail);
+    $("playerStatus").textContent = message.includes("Google Chrome") ? "Open in Chrome" : "Unable to play";
+    $("playerProgrammeDescription").textContent = message;
   });
   await player.load(playback.url, null, "application/dash+xml");
   await video.play().catch(() => { $("playerStatus").textContent = "Press play to start"; });
@@ -354,8 +387,9 @@ async function playChannel(channelId) {
     } else throw new Error("This browser does not support HLS playback.");
     startPlayerClock();
   } catch (error) {
-    $("playerProgramme").textContent = error.message;
-    $("playerStatus").textContent = error.status === 403 ? "Not included for this account" : "Unable to play";
+    const message = protectedPlaybackMessage(error);
+    $("playerProgrammeDescription").textContent = message;
+    $("playerStatus").textContent = error.status === 403 ? "Not included for this account" : message.includes("Google Chrome") ? "Open in Chrome" : "Unable to play";
     if (error.status === 401) setConnected(false);
   } finally { state.busy = false; }
 }

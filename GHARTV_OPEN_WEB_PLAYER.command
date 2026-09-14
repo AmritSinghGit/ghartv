@@ -5,7 +5,7 @@ PROJECT="${GHARTV_PROJECT:-$HOME/Downloads/GharTV_Nova_v0.4.2}"
 STATE="$HOME/Library/Application Support/GharTV/web-player"
 HOST="127.0.0.1"
 PORT="${GHARTV_WEB_PORT:-8790}"
-URL="http://$HOST:$PORT/"
+URL="http://$HOST:$PORT"
 
 fail(){ printf '\nGharTV web player could not start: %s\n' "$1" >&2; exit 1; }
 [[ -d "$PROJECT/.git" ]] || fail "The canonical GharTV checkout was not found."
@@ -37,6 +37,10 @@ else
   curl -fsS --max-time 2 "$URL/api/health" >/dev/null || fail "The local server did not become ready. See $STATE/server.log"
 fi
 
-printf 'GharTV local web player: %s\n' "$URL"
+printf 'GharTV local web player: %s/\n' "$URL"
 printf 'Private runtime state: %s\n' "$STATE"
-open "$URL"
+if [[ -d "/Applications/Google Chrome.app" ]]; then
+  open -a "Google Chrome" "$URL/"
+else
+  open "$URL/"
+fi
