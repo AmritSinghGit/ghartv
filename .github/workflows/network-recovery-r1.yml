@@ -1,0 +1,95 @@
+name: GharTV RC4 network recovery R1
+on:
+  push:
+    paths: ['.github/workflows/network-recovery-r1.yml']
+permissions:
+  contents: write
+jobs:
+  package-only:
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v5
+      - name: Patch only the exact prior delivery and run focused downloader checks
+        run: |
+          set -euo pipefail
+          cp GHARTV_SYNC_CURRENT_AND_REPORT.command tools/network-recovery-r1/original.command
+          python tools/network-recovery-r1/repair_network.py tools/network-recovery-r1/original.command tools/network-recovery-r1/GHARTV_SYNC_CURRENT_AND_REPORT.command
+          printf '%s  %s\n' 22fba74fae70ff7523543669d8362dc7661882efa225397eb28037462aa64456 tools/network-recovery-r1/GHARTV_SYNC_CURRENT_AND_REPORT.command | sha256sum -c -
+          python tools/network-recovery-r1/check_network.py
+      - name: Obtain unchanged public installation files, never signing keys
+        run: |
+          set -euo pipefail
+          d=tools/network-recovery-r1/assets
+          mkdir -p "$d"
+          curl --proto '=https' --proto-redir '=https' -fLsS --retry 2 --retry-delay 1 --connect-timeout 20 --max-time 90 https://github.com/AmritSinghGit/ghartv/releases/download/v0.6.0-rc4/GharTV-review-companion.zip -o "$d/GharTV-review-companion.zip"
+          curl --proto '=https' --proto-redir '=https' -fLsS --retry 2 --retry-delay 1 --connect-timeout 20 --max-time 90 https://github.com/AmritSinghGit/ghartv/releases/download/v0.6.0-rc4/GharTV-review-unsigned.apk -o "$d/GharTV-review-unsigned.apk"
+          curl --proto '=https' --proto-redir '=https' -fLsS --retry 2 --retry-delay 1 --connect-timeout 20 --max-time 90 https://github.com/AmritSinghGit/ghartv/releases/download/v0.5.4-rc8/GharTV-Jio-Live-v0.5.4-rc8-pre-birthday-recovery.apk -o "$d/GharTV-Jio-Live-v0.5.4-rc8-pre-birthday-recovery.apk"
+          python - <<'PY'
+          import sys
+          from pathlib import Path
+          sys.path.insert(0,'tools/network-recovery-r1')
+          from repair_network import MANIFEST
+          Path('tools/network-recovery-r1/assets/review-manifest.json').write_text(MANIFEST)
+          PY
+          python tools/network-recovery-r1/package_network.py
+      - name: Verify real bundled payload preparation does not call the network
+        run: |
+          python - <<'PY'
+          import ast,json,tempfile,subprocess
+          from pathlib import Path
+          from types import SimpleNamespace
+          pack=Path('/tmp/ghartv-network-release/GHARTV_RC4_NETWORK_RECOVERY_R1')
+          script=pack/'GHARTV_SYNC_CURRENT_AND_REPORT.command'
+          text=script.read_text().split("<<'PY'\n",1)[1].split('\nPY\n',1)[0]
+          tree=ast.parse(text); scope={}
+          exec(compile(ast.Module(body=[n for n in tree.body if isinstance(n,(ast.Import,ast.ImportFrom,ast.FunctionDef,ast.ClassDef))],type_ignores=[]),'network-recovery-functions','exec'),scope)
+          manifest=(pack/'assets/review-manifest.json').read_text();m=json.loads(manifest)
+          with tempfile.TemporaryDirectory(prefix='ghartv-bundled-contract-') as tmp:
+            root=Path(tmp)
+            for n in ('current','run','home/Documents/Amrit Executive Memory'): (root/n).mkdir(parents=True)
+            scope.update(SELF=script,STATE=root,CURRENT=root/'current',CACHE=root/'cache',RUN=root/'run',HOME=root/'home',RUN_ID='BUNDLED_CONTRACT_ONLY',RUNTIME=root/'runtime',SOURCE=m['source_sha'],REPO='AmritSinghGit/ghartv',TAG='v0.6.0-rc4',UNSIGNED=m['unsigned_sha256'],MANIFEST_SHA='52ec393fb49268f368eb2ce44d209aa433ceac3f4ed18ad5eb135248ac7265d7',NETWORK_RECOVERY='CYAN6-NETWORK-R1',EMBEDDED_MANIFEST=manifest,ARTIFACTS=json.loads(Path('/tmp/ghartv-network-release/NETWORK_RECOVERY_R1.json').read_text())['artifact_sha256'],manifest={},args=SimpleNamespace(bundled_review=True),r={})
+            def forbidden(*a,**k):raise AssertionError('Network/command called during bundled preparation')
+            scope['call']=forbidden
+            note=scope['reconcile']()
+            assert 'ghartv' in note.lower()
+            for name in ('GharTV-review-unsigned.apk','GharTV-Jio-Live-v0.5.4-rc8-pre-birthday-recovery.apk'):
+              tag='v0.6.0-rc4' if name=='GharTV-review-unsigned.apk' else 'v0.5.4-rc8'
+              scope['download']('https://github.com/AmritSinghGit/ghartv/releases/download/'+tag+'/'+name,root/name)
+            scope['note_sync'](note)
+            assert scope['r']['obsidian']=='WRITTEN_AND_READBACK_VERIFIED'
+            assert (root/'runtime/web-player/server.mjs').is_file()
+            assert (root/'runtime/docs/owner.html').is_file()
+          subprocess.run(['bash','-n',str(pack/'RUN_GHARTV_REVIEW.command')],check=True)
+          print('REAL_BUNDLED_MANIFEST_COMPANION_APKS_AND_NOTE_WITH_NETWORK_FORBIDDEN=PASS')
+          PY
+      - name: Publish a recovery asset and current control record, no APK rebuild or production change
+        run: |
+          set -euo pipefail
+          test "$(git ls-remote origin refs/heads/main | cut -f1)" = "$GITHUB_SHA"
+          cp tools/network-recovery-r1/GHARTV_SYNC_CURRENT_AND_REPORT.command GHARTV_SYNC_CURRENT_AND_REPORT.command
+          cp /tmp/ghartv-network-release/NETWORK_RECOVERY_R1.json docs/network-recovery-r1.json
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          p=Path('.ghartv-owner-state.json');d=json.loads(p.read_text());d['owner_command_sha256']='22fba74fae70ff7523543669d8362dc7661882efa225397eb28037462aa64456';d['owner_command_mode']='CYAN6_NETWORK_R1_VERIFIED_BUNDLE_OR_CACHE_FIRST';d['mac_sync']='AWAITING_NETWORK_R1_OWNER_RECEIPT';p.write_text(json.dumps(d,indent=2)+'\n')
+          p=Path('CURRENT_HANDOFF.md');text=p.read_text();p.write_text('# Delivery correction — Cyan6 Network R1\n\nThe Sept15 owner run GHARTV-CYAN-6-20260915T111739Z-35925 timed out before manifest/companion preparation completed. Its receipt does not identify the stalled endpoint or network stage. No signing, emulator change or Obsidian write occurred in that run.\n\nCurrent recovery command hash: `22fba74fae70ff7523543669d8362dc7661882efa225397eb28037462aa64456`. SAME RC4 Android code20 and immutable APK/companion bytes. Recovery ZIP `GHARTV_RC4_NETWORK_RECOVERY_R1.zip` on existing v0.6.0-rc4 includes the manifest, unsigned APK, companion and accepted RC8 signer-reference APK. It installs the known canonical launcher and verifies all bundled bytes. No source checkout change, new key or new runtime. Bundled review skips GitHub requests/publication and collector deployment; those remain explicitly pending. Live playback/telemetry still require network. Failed network attempts now get named file/host and safe timing diagnostics, max two attempts, no TLS/checksum bypass, and an Obsidian failure note.\n\nPackaging and focused offline-preparation checks are not owner-Mac signing or foreground evidence. The current command is a delivery correction, not an Android enhancement or production promotion.\n\n---\n\n'+text)
+          PY
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add GHARTV_SYNC_CURRENT_AND_REPORT.command docs/network-recovery-r1.json .ghartv-owner-state.json CURRENT_HANDOFF.md
+          git rm .github/workflows/network-recovery-r1.yml
+          test -z "$(git diff --cached --name-only -- android-tv update/latest.json)"
+          git commit -m 'delivery: verified bundled RC4 network recovery and named timeout diagnostics'
+          git push origin HEAD:main
+          gh release upload v0.6.0-rc4 /tmp/ghartv-network-release/GHARTV_RC4_NETWORK_RECOVERY_R1.zip /tmp/ghartv-network-release/GHARTV_RC4_NETWORK_RECOVERY_R1.zip.sha256 /tmp/ghartv-network-release/NETWORK_RECOVERY_R1.json --repo AmritSinghGit/ghartv
+          echo "DELIVERY_COMMIT=$(git rev-parse HEAD)"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: GHARTV_RC4_NETWORK_RECOVERY_R1
+          path: |
+            /tmp/ghartv-network-release/GHARTV_RC4_NETWORK_RECOVERY_R1.zip
+            /tmp/ghartv-network-release/NETWORK_RECOVERY_R1.json
+          retention-days: 3
