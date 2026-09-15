@@ -1,0 +1,9 @@
+{
+  "source": "d2f364982ce2972d6a6c75588f206ef098edd65b",
+  "version": "0.6.0-rc4-owner-convergence",
+  "version_code": 20,
+  "review_only": true,
+  "cloud_build_run": 34960401643,
+  "browser_checks": "controlled local contract; no provider-account or owner-runtime proof",
+  "public_tv_feed_changed": false
+}

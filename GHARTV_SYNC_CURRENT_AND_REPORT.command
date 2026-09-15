@@ -1,26 +1,28 @@
 #!/bin/bash
-# Same RC2. Restore existing configured signing; never generate a key or prompt for passwords.
+# Same RC4. Restore existing configured signing; never generate a key or prompt for passwords.
 set -u
 umask 077
-printf '\033[38;5;51m\nGharTV · CYAN REVIEW 5 · Existing signing + RC2 emulator review\033[0m\n'
+printf '\033[38;5;51m\nGharTV · CYAN REVIEW 6 · 0.6.0 RC4 · artifact review · development checkout preserved\033[0m\n'
 if ! command -v python3 >/dev/null 2>&1; then echo 'Python 3 is required; no TV or source changed.'; exit 1; fi
 CLOSE_MARKER="${TMPDIR:-/tmp}/ghartv-review-close-$$"
 export GHARTV_CLOSE_MARKER="$CLOSE_MARKER"
 python3 - "$0" "$@" <<'PY'
 from __future__ import annotations
-import argparse, datetime as dt, fcntl, hashlib, io, json, os, re, shlex, shutil, socket, stat, subprocess, sys, tempfile, time, zipfile
+import argparse, datetime as dt, fcntl, hashlib, io, json, os, re, shlex, shutil, socket, stat, subprocess, sys, tempfile, time, zipfile, signal, urllib.request, urllib.error
 from pathlib import Path
-REPO='AmritSinghGit/ghartv'; SOURCE='b4d0304441b7d00833e4d475c16e43e1ef92b3f3'
-PROD='b46b2cd607c309d364d531b5fd9da618cd007f6c'; TAG='v0.5.5-rc2'; PACKAGE='in.ghartv.nova'
-VERSION='0.5.5-rc2-movies-picture'; UNSIGNED='32efc94eaa635b3da1d1895570b857e9f5d2dea5b5bed1151818c48d03a7cd21'
-PROD_HASH='6f60d18a78e4b1692d6591d04bcef6e1cfda4252dba976d160a12cef03930199'
-NOTE_HASH='22592678a72f43141602afe2a1d41544dfdb9949e923aa4fb5f358b2be864bea'; AVD='GharTV_Nova_Manual_google_tv_API36'; ASSET='GharTV-review-current.apk'
+REPO='AmritSinghGit/ghartv'; SOURCE='d2f364982ce2972d6a6c75588f206ef098edd65b'
+PROD='de3106e3e97a9147b06347a3d66c4e5923cdbbcc'; TAG='v0.6.0-rc4'; PACKAGE='in.ghartv.nova'
+VERSION='0.6.0-rc4-owner-convergence'; UNSIGNED='a594bc6ddc5d5448c20ac2850c0a3aed432954381c9ce9e840bb8fb56ff8aa5f'
+PROD_HASH='8cff8f85403da5924865fddc687dbff11089d7c498f9863e483a7d8123c1ce13'
+MANIFEST_SHA='52ec393fb49268f368eb2ce44d209aa433ceac3f4ed18ad5eb135248ac7265d7'; AVD='GharTV_Nova_Manual_google_tv_API36'; ASSET='GharTV-review-current.apk'
 HOME=Path.home(); SELF=Path(sys.argv[1]).resolve(); STATE=HOME/'Library/Application Support/GharTV/owner-review'; CURRENT=STATE/'current'
 PROJECT=Path(os.environ.get('GHARTV_PROJECT',str(HOME/'Downloads/GharTV_Nova_v0.4.2'))).expanduser()
-RUN_ID='GHARTV-CYAN-5-'+dt.datetime.now(dt.timezone.utc).strftime('%Y%m%dT%H%M%SZ')+'-'+str(os.getpid()); RUN=STATE/'runs'/RUN_ID
-parser=argparse.ArgumentParser();parser.add_argument('--memory-only',action='store_true');parser.add_argument('--signed-apk',type=Path);parser.add_argument('--noninteractive',action='store_true');args=parser.parse_args(sys.argv[2:])
-r=dict(run_id=RUN_ID,lane_id='ghartv',repository=REPO,operon_session=os.environ.get('OPERON_SESSION_ID','UNBOUND'),
- production_source=PROD,review_source=SOURCE,version=VERSION,version_code=16,unsigned_apk_sha256=UNSIGNED,signed_apk_sha256='NOT_VERIFIED',
+RUNTIME=STATE/'runtime-current';COLLECTOR='https://ghartv-telemetry.ghartv-47d9a0.workers.dev'; manifest={}
+IST=dt.timezone(dt.timedelta(hours=5,minutes=30))
+RUN_ID='GHARTV-CYAN-6-'+dt.datetime.now(dt.timezone.utc).strftime('%Y%m%dT%H%M%SZ')+'-'+str(os.getpid()); RUN=STATE/'runs'/RUN_ID
+parser=argparse.ArgumentParser();parser.add_argument('--memory-only',action='store_true');parser.add_argument('--signed-apk',type=Path);parser.add_argument('--noninteractive',action='store_true');parser.add_argument('--skip-backend-deploy',action='store_true');args=parser.parse_args(sys.argv[2:])
+r=dict(time_ist=dt.datetime.now(IST).isoformat(),time_utc=dt.datetime.now(dt.timezone.utc).isoformat(),checkout='READ_ONLY_NOT_INSPECTED',backend='NOT_CHECKED',web_player='NOT_STARTED',run_id=RUN_ID,lane_id='ghartv',repository=REPO,operon_session=os.environ.get('OPERON_SESSION_ID','UNBOUND'),
+ production_source=PROD,review_source=SOURCE,version=VERSION,version_code=20,unsigned_apk_sha256=UNSIGNED,signed_apk_sha256='NOT_VERIFIED',
  delivery_sha='NOT_READ',local_sha='NOT_READ',production_feed='NOT_CHECKED',obsidian='NOT_WRITTEN',memory_bridge='NOT_RUN',
  review_release='NOT_CHECKED',emulator='UNCHANGED',physical_tv='NOT_VERIFIED',owner_decision='REVIEW_PENDING',
  dashboard='NOT_OPENED',signing_mode='NOT_ATTEMPTED',signing_error_code='NONE',signer_exit_code='NOT_RUN',
@@ -52,7 +54,7 @@ def get(url):
   if p.stat().st_size>2*1024*1024:raise Stop('Public metadata exceeds bound')
   return json.loads(p.read_text())
 def git(*a):return call(['git','-C',PROJECT,*a]).stdout.strip()
-def receipt():return 'GHARTV_CYAN_REVIEW_5_HANDOFF\n'+'\n'.join(k.upper()+'='+str(v) for k,v in r.items())+'\n'
+def receipt():return 'GHARTV_CYAN_REVIEW_6_HANDOFF\n'+'\n'.join(k.upper()+'='+str(v) for k,v in r.items())+'\n'
 def persist():
  r['evidence']=str(RUN)
  write(RUN/'handoff.txt',receipt());write(RUN/'receipt.json',json.dumps(r,indent=2)+'\n');write(CURRENT/'handoff.txt',receipt())
@@ -61,42 +63,78 @@ def note_sync(note_text,transport=True):
  if not vault.is_dir():r['obsidian']='EXISTING_VAULT_NOT_FOUND';return
  dest=vault/'90 System/Operon Portfolio/Handoffs/Terminal Runs/ghartv';mkdir(dest)
  note=dest/'GharTV - Current Progress.md';safe(note)
- marker='<!-- GHARTV-MANAGED-LANE-NOTE:v1 -->'
- if note.exists() and marker not in note.read_text():note=dest/(RUN_ID+'-progress.md')
- body=note_text+'\n\n## Local run evidence\n\n```text\n'+receipt()+'```\n'
+ if note.exists() and '<!-- GHARTV-MANAGED-LANE-NOTE:v1 -->' not in note.read_text():note=dest/(RUN_ID+'-progress.md')
+ body=note_text+'\n\n## Actual local receipt\n\n```text\n'+receipt()+'```\n'
  write(note,body)
  if note.read_bytes()!=body.encode():raise Stop('Obsidian readback differs')
  r['obsidian']='WRITTEN_AND_READBACK_VERIFIED';r['obsidian_note']=str(note)
- bridge=HOME/'bin/amrit-context';bridge_path=str(bridge) if bridge.is_file() and os.access(bridge,os.X_OK) else shutil.which('amrit-context')
- if transport and bridge_path:
-  try:
-   a=call([bridge_path,'handoff','--file',note],60,False);b=call([bridge_path,'sync-once'],60,False)
-   r['memory_bridge']='HANDOFF_EXIT_'+str(a.returncode)+'_SYNC_EXIT_'+str(b.returncode)+'_REPLICA_READBACK_UNVERIFIED'
-  except Exception as e:r['memory_bridge']='FAILED_'+type(e).__name__
- elif not bridge_path:r['memory_bridge']='LOCAL_COMMAND_NOT_FOUND'
  write(dest/(RUN_ID+'-receipt.txt'),receipt())
+
+def bridge_once():
+ bridge=HOME/'bin/amrit-context';path=str(bridge) if bridge.is_file() and os.access(bridge,os.X_OK) else shutil.which('amrit-context')
+ if not path or not r.get('obsidian_note'):r['memory_bridge']='PENDING_LOCAL_BRIDGE_OR_NOTE_UNAVAILABLE';return
+ results=[]
+ for command in ([path,'handoff','--file',r['obsidian_note']],[path,'sync-once']):
+  process=subprocess.Popen(command,stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL,stdin=subprocess.DEVNULL,start_new_session=True)
+  try:results.append('EXIT_'+str(process.wait(timeout=10)))
+  except subprocess.TimeoutExpired:
+   os.killpg(process.pid,signal.SIGTERM)
+   try:process.wait(timeout=2)
+   except subprocess.TimeoutExpired:os.killpg(process.pid,signal.SIGKILL);process.wait()
+   results.append('TIMEOUT_PENDING');break
+ r['memory_bridge']='_'.join(results)+'_REPLICA_UNVERIFIED'
+
 def reconcile():
- meta=get(f'https://api.github.com/repos/{REPO}/branches/main');head=meta['commit']['sha']
- if not re.fullmatch('[a-f0-9]{40}',head):raise Stop('Invalid remote head')
- with tempfile.TemporaryDirectory(prefix='.control-',dir=CURRENT) as t:
-  p=Path(t)/'runner';download(f'https://raw.githubusercontent.com/{REPO}/{head}/GHARTV_SYNC_CURRENT_AND_REPORT.command',p)
-  if digest(p)!=digest(SELF):raise Stop('This runner has been superseded; no checkout changed')
-  n=Path(t)/'note';download(f'https://raw.githubusercontent.com/{REPO}/{head}/GHARTV_LANE_PROGRESS.md',n)
-  if digest(n)!=NOTE_HASH:raise Stop('Lane note digest mismatch')
-  text=n.read_text()
- r['delivery_sha']=head
- return text
+ global manifest
+ with tempfile.TemporaryDirectory(prefix='.release-read-',dir=CURRENT) as t:
+  t=Path(t);meta=t/'manifest.json'
+  download(f'https://github.com/{REPO}/releases/download/{TAG}/review-manifest.json',meta)
+  if digest(meta)!=MANIFEST_SHA:raise Stop('RELEASE_MANIFEST_CHECKSUM_MISMATCH')
+  manifest=json.loads(meta.read_text())
+  if manifest.get('source_sha')!=SOURCE or manifest.get('unsigned_sha256')!=UNSIGNED or manifest.get('version_code')!=20:raise Stop('RELEASE_IDENTITY_MISMATCH')
+  bundle=t/'companion.zip';download(f'https://github.com/{REPO}/releases/download/{TAG}/GharTV-review-companion.zip',bundle)
+  if digest(bundle)!=manifest['companion_sha256']:raise Stop('COMPANION_CHECKSUM_MISMATCH')
+  safe(RUNTIME)
+  marker=RUNTIME/'.ghartv-managed.json'
+  if RUNTIME.exists() and (not marker.is_file() or marker.is_symlink()):raise Stop('Unknown runtime directory preserved')
+  if RUNTIME.exists() and json.loads(marker.read_text()).get('source')==SOURCE:
+   # Check every packaged byte before executing a reused managed runtime.
+   with zipfile.ZipFile(bundle) as z:
+    for item in z.infolist():
+     if item.is_dir():continue
+     p=RUNTIME/item.filename;safe(p)
+     if not p.is_file() or p.read_bytes()!=z.read(item):raise Stop('Managed runtime was edited; preserved for reconciliation')
+  else:
+   stage=CURRENT/('.companion-stage-'+RUN_ID);mkdir(stage)
+   with zipfile.ZipFile(bundle) as z:
+    entries=z.infolist()
+    if len(entries)>8000 or sum(i.file_size for i in entries)>150*1024*1024:raise Stop('Bundle exceeds bound')
+    for item in entries:
+     p=Path(item.filename)
+     if p.is_absolute() or '..' in p.parts or (item.external_attr>>16)&0o170000==0o120000:raise Stop('Unsafe bundle member')
+     if item.is_dir():continue
+     dst=stage/p;dst.parent.mkdir(parents=True,exist_ok=True);dst.write_bytes(z.read(item));dst.chmod(0o600)
+   write(stage/'.ghartv-managed.json',json.dumps({'source':SOURCE,'owner':'ghartv-review-companion-v1'})+'\n')
+   # Stable runtime path may be active. Stop only its proved owned server before replacement.
+   if RUNTIME.exists():stop_owned_web_if_needed()
+   if RUNTIME.exists():
+    prior=STATE/('runtime-preserved-'+RUN_ID);RUNTIME.rename(prior);r['prior_runtime_preserved']=str(prior)
+   stage.rename(RUNTIME)
+  r['delivery_sha']=SOURCE;r['artifact_manifest_sha256']=MANIFEST_SHA
+  return (RUNTIME/'GHARTV_LANE_PROGRESS.md').read_text()
 
 def sync_checkout():
- if not (PROJECT/'.git').exists():raise Stop('Canonical checkout missing; no duplicate clone created')
- if git('remote','get-url','origin').removesuffix('.git') not in ('https://github.com/'+REPO,'git@github.com:'+REPO,'ssh://git@github.com/'+REPO):raise Stop('Unexpected Git origin')
- r['local_sha']=git('rev-parse','HEAD')
- if git('symbolic-ref','--short','HEAD')!='main' or git('status','--porcelain','--untracked-files=normal'):raise Stop('Non-main or dirty checkout preserved; no reset/stash/blind push')
- git('fetch','--no-tags','origin','main');head=git('rev-parse','origin/main')
- if head!=r['delivery_sha']:raise Stop('Remote changed during sync; rerun after reconciliation')
- git('merge-base','--is-ancestor',r['local_sha'],head);git('merge-base','--is-ancestor',SOURCE,head)
- if git('diff','--name-only',SOURCE,head,'--','android-tv'):raise Stop('A different Android candidate is present')
- git('merge','--ff-only',head);r['local_sha']=git('rev-parse','HEAD')
+ # Binary/source provenance comes from the immutable release. This is NOT a source sync.
+ if not (PROJECT/'.git').exists():r['checkout']='NOT_FOUND_ARTIFACT_REVIEW_CONTINUES';return
+ try:
+  origin=git('remote','get-url','origin').removesuffix('.git')
+  if origin not in ('https://github.com/'+REPO,'git@github.com:'+REPO):r['checkout']='OTHER_REPOSITORY_PRESERVED';return
+  r['local_sha']=git('rev-parse','HEAD')
+  r['local_branch']=call(['git','-C',PROJECT,'symbolic-ref','--short','HEAD'],check=False).stdout.strip() or 'DETACHED'
+  status=call(['git','-C',PROJECT,'status','--porcelain','--untracked-files=normal'],check=False).stdout
+  r['local_changed_entries']=len(status.splitlines());r['checkout']='PRESERVED_READ_ONLY_ARTIFACT_REVIEW'
+ except Exception:r['checkout']='INSPECTION_UNAVAILABLE_PRESERVED'
+
 
 def payload(path):
  out={};seen=set()
@@ -206,10 +244,10 @@ def review():
   assets=x.get('assets',[]);u=[v for v in assets if v['name']=='GharTV-review-unsigned.apk'];s=[v for v in assets if v['name']==ASSET]
   if len(u)!=1 or u[0].get('digest')!='sha256:'+UNSIGNED or len(s)>1:raise Stop('Review assets changed')
   return s
- with tempfile.TemporaryDirectory(prefix='.rc2-review-',dir=CURRENT) as t:
+ with tempfile.TemporaryDirectory(prefix='.rc4-review-',dir=CURRENT) as t:
    t=Path(t);u=t/'unsigned.apk';c=t/'candidate.apk';p=t/'production.apk'
    download(f'https://github.com/{REPO}/releases/download/{TAG}/GharTV-review-unsigned.apk',u)
-   download(f'https://github.com/{REPO}/releases/download/v0.5.4-rc5/GharTV-Jio-Live-v0.5.4-rc5.apk',p)
+   download(f'https://github.com/{REPO}/releases/download/v0.5.4-rc8/GharTV-Jio-Live-v0.5.4-rc8-pre-birthday-recovery.apk',p)
    if digest(u)!=UNSIGNED or digest(p)!=PROD_HASH:raise Stop('Release byte digest mismatch')
    published=release();r['review_release']='EXISTING_SIGNED_ASSET_FOUND' if published else 'UNSIGNED_ASSET_VERIFIED'
    if published:
@@ -226,14 +264,14 @@ def review():
      try:
       m=json.loads(meta.read_text());reuse=m.get('source')==SOURCE and m.get('sha256')==digest(prior)
      except (ValueError,OSError):reuse=False
-    if reuse:shutil.copyfile(prior,c);r['signing_mode']='REUSED_LOCAL_RC2_PENDING_VERIFICATION'
+    if reuse:shutil.copyfile(prior,c);r['signing_mode']='REUSED_LOCAL_RC4_PENDING_VERIFICATION'
     else:configured_sign(signer,align,u,c,env)
    if payload(u)!=payload(c) or cert(c)!=cert(p):raise Stop('Payload/signature continuity failed; no upload or installation')
    r['phase']='SIGNED_PAYLOAD_AND_CERTIFICATE_VERIFIED'
    print('3 / 5 · Signed APK payload and original certificate verified. Publish review only.',flush=True)
    badging=call([aapt,'dump','badging',c],env=env).stdout
-   if not all(v in badging for v in ["name='in.ghartv.nova'","versionCode='16'","versionName='0.5.5-rc2-movies-picture'"]):raise Stop('Wrong package or Android version')
-   if git('rev-parse','HEAD')!=r['local_sha'] or git('status','--porcelain','--untracked-files=normal'):raise Stop('Checkout changed during review preparation')
+   if not all(v in badging for v in ["name='in.ghartv.nova'","versionCode='20'","versionName='0.6.0-rc4-owner-convergence'"]):raise Stop('Wrong package or Android version')
+   # Development checkout is intentionally untouched; verified artifact bytes are authoritative.
    h=digest(c);r['signed_apk_sha256']=h;race=release()
    if race and race[0].get('digest')!='sha256:'+h:raise Stop('Another signed artifact exists; no overwrite')
    if not race:
@@ -265,7 +303,7 @@ def review():
     time.sleep(2)
    else:raise Stop('AVD boot incomplete; no installation')
    codes=re.findall(r'versionCode=(\d+)',call([adb,'-s',serial,'shell','dumpsys','package',PACKAGE]).stdout)
-   if codes and int(codes[0])>16:raise Stop('Newer version installed; no downgrade')
+   if codes and int(codes[0])>20:raise Stop('Newer version installed; no downgrade')
    def pull_installed(destination):
     paths=call([adb,'-s',serial,'shell','pm','path',PACKAGE]).stdout.splitlines()
     if len(paths)!=1 or not paths[0].startswith('package:'):raise Stop('Unexpected installed package layout')
@@ -273,17 +311,17 @@ def review():
    if codes:
     old=t/'installed.apk';pull_installed(old)
     if cert(old)!=cert(c):raise Stop('Installed signer differs; no uninstall or storage clearing')
-    if int(codes[0])==16 and digest(old)!=h:raise Stop('Different code-16 APK installed; reconcile first')
-   if not codes or int(codes[0])<16:
+    if int(codes[0])==20 and digest(old)!=h:raise Stop('Different code-20 APK installed; reconcile first')
+   if not codes or int(codes[0])<20:
     result=call([adb,'-s',serial,'install','-r',c],120).stdout
     if 'Success' not in result:raise Stop('Android did not confirm install')
    installed=t/'installed-final.apk';pull_installed(installed)
    if digest(installed)!=h:raise Stop('Installed byte verification failed')
-   r['emulator']='RC2_INSTALLED_BYTES_VERIFIED';r['phase']='OPENING_REVIEW'
+   r['emulator']='RC4_INSTALLED_BYTES_VERIFIED';r['phase']='OPENING_REVIEW'
    call([adb,'-s',serial,'shell','input','keyevent','KEYCODE_WAKEUP'],check=False)
    call([adb,'-s',serial,'shell','am','force-stop',PACKAGE])
    out=call([adb,'-s',serial,'shell','am','start','-W','-n',PACKAGE+'/.MainActivity']).stdout
-   if 'Status: ok' not in out:raise Stop('RC2_INSTALLED_LAUNCH_NOT_CONFIRMED: no data clear or downgrade attempted')
+   if 'Status: ok' not in out:raise Stop('RC4_INSTALLED_LAUNCH_NOT_CONFIRMED: no data clear or downgrade attempted')
    foreground=False
    for _ in range(8):
     time.sleep(1)
@@ -293,17 +331,17 @@ def review():
     if pid and lines:
      match=re.search(r'in\.ghartv\.nova/(?:in\.ghartv\.nova\.)?\.?(MainActivity|LoginActivity|PlayerActivity|MovieHubActivity|SplashActivity)',lines[0])
      r['review_screen']=match.group(1) if match else 'GHARTV_FOREGROUND';foreground=True;break
-   if not foreground:raise Stop('RC2_INSTALLED_FOREGROUND_NOT_CONFIRMED: launch did not settle in GharTV; installed identity retained in this receipt')
+   if not foreground:raise Stop('RC4_INSTALLED_FOREGROUND_NOT_CONFIRMED: launch did not settle in GharTV; installed identity retained in this receipt')
    c.chmod(0o600);os.replace(c,target)
    write(CURRENT/'review-artifact.json',json.dumps({'source':SOURCE,'sha256':h,'unsigned_sha256':UNSIGNED,'version':VERSION},indent=2)+'\n')
-   r['emulator']='RC2_INSTALLED_BYTES_VERIFIED_AND_FOREGROUND';r['phase']='REVIEW_OPEN';r['status']='REVIEW_READY'
-   print('RC2 is installed and GharTV is the foreground Android activity: '+r['review_screen'],flush=True)
+   r['emulator']='RC4_INSTALLED_BYTES_VERIFIED_AND_FOREGROUND';r['phase']='REVIEW_OPEN';r['status']='REVIEW_READY'
+   print('RC4 is installed and GharTV is the foreground Android activity: '+r['review_screen'],flush=True)
    obsolete=CURRENT/'GharTV-review-unsigned.apk'
    if obsolete.is_file() and not obsolete.is_symlink() and digest(obsolete)==UNSIGNED:
     r['cleanup_bytes']+=obsolete.stat().st_size;obsolete.unlink();r['cleanup_count']+=1
 
 def cleanup():
- allowed={'GHARTV_CYAN_REVIEW_4.zip':'9693852663be42086f7b869e3374a37d9f010dc23fcebaefb19724bc8dbd90fe','GHARTV_SYNC_CURRENT_AND_REPORT.command':'e797636a8718a67273ef68ce240c9d5e3bbe5f1201ea96b4864c70e0248654b5','GHARTV_RC2_SOURCE_HANDOFF.zip':'3968480bf420c9e9b4c16eee83a89e171dddf78c7d16eb4bd77031f0b789547d','GHARTV_CYAN_REVIEW_2.zip':'7d8906d5ba84be44bb1546f4f6887e5259f734b61eedb0201c99b263901443b8','GHARTV_RC5_EXACT_STABLE_R1.command':'3d3a6e0a69b0ba4ce105913d92801af4bec6cb895da37f91a5d9383ef5149901'}
+ allowed={'GHARTV_CYAN_REVIEW_5.zip':'41daac68572e83561d7ef7dd4c0b503d890a5e8cec97979b176fa61d289516df','GHARTV_CYAN_REVIEW_4.zip':'9693852663be42086f7b869e3374a37d9f010dc23fcebaefb19724bc8dbd90fe','GHARTV_SYNC_CURRENT_AND_REPORT.command':'e797636a8718a67273ef68ce240c9d5e3bbe5f1201ea96b4864c70e0248654b5','GHARTV_RC4_SOURCE_HANDOFF.zip':'3968480bf420c9e9b4c16eee83a89e171dddf78c7d16eb4bd77031f0b789547d','GHARTV_CYAN_REVIEW_2.zip':'7d8906d5ba84be44bb1546f4f6887e5259f734b61eedb0201c99b263901443b8','GHARTV_RC5_EXACT_STABLE_R1.command':'3d3a6e0a69b0ba4ce105913d92801af4bec6cb895da37f91a5d9383ef5149901'}
  d=HOME/'Downloads'
  if not d.is_dir() or d.is_symlink():return
  for p in d.iterdir():
@@ -311,10 +349,101 @@ def cleanup():
    stem,ext=name.rsplit('.',1)
    if re.fullmatch(re.escape(stem)+r'(?: \(\d+\))?\.'+re.escape(ext),p.name) and p.is_file() and not p.is_symlink() and p!=SELF and digest(p)==h:
     r['cleanup_bytes']+=p.stat().st_size;p.unlink();r['cleanup_count']+=1
+def local_json(url):
+ with urllib.request.urlopen(url,timeout=3) as response:return json.loads(response.read(32768))
+
+def stop_owned_web_if_needed():
+ state=HOME/'Library/Application Support/GharTV/web-player';pidfile=state/'server.pid'
+ try:health=local_json('http://127.0.0.1:8790/api/health')
+ except Exception:
+  occupied=call(['lsof','-nP','-iTCP:8790','-sTCP:LISTEN','-t'],check=False).stdout.strip()
+  if occupied:raise Stop('WEB_PORT_8790_OWNERSHIP_UNVERIFIED: preserved existing listener')
+  return
+ if health.get('service')!='ghartv-web-player':raise Stop('PORT_8790_OTHER_SERVICE_PRESERVED')
+ if health.get('commit')==SOURCE:return
+ if not pidfile.is_file() or pidfile.is_symlink():raise Stop('EXISTING_WEB_PID_NOT_OWNED: no process killed')
+ value=pidfile.read_text().strip()
+ if not value.isdigit():raise Stop('EXISTING_WEB_PID_INVALID')
+ pid=int(value);cmd=call(['ps','-p',str(pid),'-o','command='],check=False).stdout
+ valid_paths=(str(PROJECT/'web-player/server.mjs'),str(RUNTIME/'web-player/server.mjs'))
+ if not any(p in cmd for p in valid_paths):raise Stop('EXISTING_WEB_PROCESS_NOT_OWNED')
+ listening=call(['lsof','-nP','-iTCP:8790','-sTCP:LISTEN','-t'],check=False).stdout.split()
+ if str(pid) not in listening:raise Stop('EXISTING_WEB_PORT_PID_MISMATCH')
+ os.kill(pid,signal.SIGTERM)
+ for _ in range(30):
+  if not call(['ps','-p',str(pid),'-o','pid='],check=False).stdout.strip():break
+  time.sleep(.1)
+ else:raise Stop('OWNED_WEB_PROCESS_DID_NOT_STOP: no forced kill')
+
 def open_dashboard():
- local=CURRENT/'owner.html'
- destination=str(local) if local.is_file() and not local.is_symlink() else 'https://amritsinghgit.github.io/ghartv/owner.html'
- opened=call(['open',destination],check=False);r['dashboard']='OPEN_REQUESTED_AUTH_NOT_VERIFIED' if opened.returncode==0 else 'OPEN_FAILED'
+ if not RUNTIME.is_dir():raise Stop('Companion runtime not prepared')
+ if not shutil.which('node'):r['web_player']='NODE_NOT_AVAILABLE';return
+ try:health=local_json('http://127.0.0.1:8790/api/health')
+ except Exception:health={}
+ if health.get('commit')!=SOURCE:
+  stop_owned_web_if_needed();state=HOME/'Library/Application Support/GharTV/web-player';mkdir(state)
+  env=dict(os.environ,GHARTV_WEB_HOST='127.0.0.1',GHARTV_WEB_PORT='8790',GHARTV_WEB_SHA=SOURCE,TZ='Asia/Kolkata')
+  with open(state/'server.log','a') as log:
+   process=subprocess.Popen([shutil.which('node'),str(RUNTIME/'web-player/server.mjs')],stdin=subprocess.DEVNULL,stdout=log,stderr=log,env=env,start_new_session=True)
+  write(state/'server.pid',str(process.pid)+'\n')
+  for _ in range(25):
+   time.sleep(.2)
+   try:health=local_json('http://127.0.0.1:8790/api/health')
+   except Exception:continue
+   if health.get('commit')==SOURCE:break
+  if health.get('commit')!=SOURCE:raise Stop('WEB_RUNTIME_DID_NOT_START: private server.log retained')
+ r['web_player']='HEALTH_AND_SOURCE_VERIFIED_PROVIDER_PLAYBACK_UNVERIFIED'
+ r['web_url']='http://127.0.0.1:8790/';r['owner_url']='http://127.0.0.1:8790/owner.html'
+ call(['open',r['owner_url']],check=False);call(['open',r['web_url']],check=False)
+ r['dashboard']='LOCAL_OWNER_READER_OPEN_REQUESTED'
+ prior=r.get('prior_runtime_preserved')
+ if prior:
+  p=Path(prior)
+  if p.parent==STATE and p.name=='runtime-preserved-'+RUN_ID and (p/'.ghartv-managed.json').is_file() and json.loads((p/'.ghartv-managed.json').read_text()).get('owner')=='ghartv-review-companion-v1':
+   shutil.rmtree(p);r['old_managed_runtime_cleanup']='REMOVED_AFTER_NEW_WEB_HEALTH_VERIFIED'
+
+def collector_check_and_deploy():
+ # Updating the already-configured collector is separate from promoting the TV APK.
+ cfg=HOME/'Library/Application Support/GharTV/telemetry/collector.env';safe(cfg)
+ if not cfg.is_file():r['backend']='EXISTING_COLLECTOR_CONFIG_MISSING';return
+ st=cfg.stat()
+ if st.st_uid!=os.getuid() or st.st_mode&0o077 or st.st_size>16384:r['backend']='PRIVATE_CONFIG_REQUIRED';return
+ values={}
+ for line in cfg.read_text().splitlines():
+  line=line.strip().removeprefix('export ');key,sep,val=line.partition('=')
+  if key in ('GHARTV_TELEMETRY_ENDPOINT','GHARTV_TELEMETRY_D1_ID','GHARTV_TELEMETRY_D1_NAME','GHARTV_TELEMETRY_WORKER','GHARTV_TELEMETRY_ADMIN_TOKEN') and sep:
+   parts=shlex.split(val,comments=True)
+   if len(parts)==1:values[key]=parts[0]
+ if values.get('GHARTV_TELEMETRY_ENDPOINT','').rstrip('/')!=COLLECTOR:r['backend']='CONFIGURED_COLLECTOR_DIFFERS_PRESERVED';return
+ class NoRedirect(urllib.request.HTTPRedirectHandler):
+  def redirect_request(self,*a,**k):return None
+ opener=urllib.request.build_opener(NoRedirect())
+ def read(path,private=False):
+  req=urllib.request.Request(COLLECTOR+path,headers={'Authorization':'Bearer '+values['GHARTV_TELEMETRY_ADMIN_TOKEN']} if private else {})
+  with opener.open(req,timeout=12) as response:return json.loads(response.read(2*1024*1024))
+ try:health=read('/health')
+ except Exception:health={}
+ if health.get('revision')!=VERSION and not args.skip_backend_deploy:
+  db=values.get('GHARTV_TELEMETRY_D1_ID','')
+  if not re.fullmatch('[a-f0-9-]{36}',db) or values.get('GHARTV_TELEMETRY_D1_NAME')!='ghartv-telemetry' or values.get('GHARTV_TELEMETRY_WORKER')!='ghartv-telemetry':r['backend']='EXISTING_BACKEND_IDENTITY_NOT_VERIFIED';return
+  if not shutil.which('npx'):r['backend']='WRANGLER_RUNTIME_UNAVAILABLE';return
+  worker=RUNTIME/'telemetry/worker';template=(worker/'wrangler.toml.template').read_text();config=worker/'wrangler.toml'
+  write(config,template.replace('__D1_DATABASE_ID__',db))
+  env=dict(os.environ,CI='true',WRANGLER_SEND_METRICS='false')
+  prefix=['npx','--yes','wrangler@4.119.0','--config',str(config)]
+  info=json.loads(call(prefix+['d1','info','ghartv-telemetry','--json'],90,env=env).stdout)
+  if isinstance(info,dict) and isinstance(info.get('result'),dict):info=info['result']
+  if not isinstance(info,dict) or (info.get('uuid') or info.get('id') or info.get('database_id'))!=db:raise Stop('D1_ACCOUNT_OR_DATABASE_MISMATCH: no deployment')
+  r['backend']='APPLYING_ADDITIVE_SCHEMA_TO_EXISTING_DB'
+  call(prefix+['d1','execute','ghartv-telemetry','--remote','--file',str(worker/'schema.sql'),'--yes'],90,env=env)
+  call(prefix+['deploy','--keep-vars'],120,env=env)
+  health=read('/health')
+ if health.get('revision')!=VERSION:r['backend']='MATCHING_BACKEND_NOT_DEPLOYED';return
+ summary=read('/v1/admin/summary?days=1',True);devices=read('/v1/admin/devices',True);commands=read('/v1/admin/commands',True)
+ if not all(x.get('ok') is True for x in (summary,devices,commands)):raise Stop('COLLECTOR_AUTHENTICATED_READ_FAILED')
+ r['backend']='REVISION_AND_AUTHENTICATED_READS_VERIFIED';r['collector_events_24h']=summary.get('totals',{}).get('events','UNAVAILABLE');r['collector_read_at_ist']=dt.datetime.now(IST).isoformat()
+ values.clear()
+
 
 note_text='';lock_acquired=False
 try:
@@ -325,22 +454,30 @@ try:
  try:note_sync(note_text)
  except Exception as e:r['obsidian']='FAILED_'+type(e).__name__
  persist()
- r['phase']='SOURCE_SYNC';sync_checkout()
+ r['phase']='CHECKOUT_OBSERVATION_ONLY';sync_checkout()
  m=get(f'https://raw.githubusercontent.com/{REPO}/main/update/latest.json')
- if m.get('versionCode')!=14 or m.get('sourceCommit')!=PROD or m.get('sha256')!=PROD_HASH:raise Stop('Production feed changed; not overwritten')
- r['production_feed']='RC5_CODE14_ADVERTISED';r['status']='MEMORY_UPDATED' if r['obsidian']=='WRITTEN_AND_READBACK_VERIFIED' else 'CONTINUITY_REQUIRES_ATTENTION';cleanup()
+ r['production_feed']=str(m.get('versionName','UNKNOWN'))+' / code '+str(m.get('versionCode','UNKNOWN'))
+ r['observed_production_source']=m.get('sourceCommit','UNKNOWN')
+ if int(m.get('versionCode',0))>=20:raise Stop('Production has caught up or advanced; review identity needs reconciliation')
+ r['status']='MEMORY_UPDATED' if r['obsidian']=='WRITTEN_AND_READBACK_VERIFIED' else 'CONTINUITY_REQUIRES_ATTENTION';cleanup()
  if not args.memory_only:review()
 except Exception as e:
  r['status']='ACTION_REQUIRED';r['blocker']=str(e) if isinstance(e,Stop) else type(e).__name__
 finally:
  try:
   if lock_acquired:
-   try:open_dashboard()
-   except Exception:r['dashboard']='OPEN_FAILED'
+   try:
+    if note_text:open_dashboard()
+   except Exception as e:r['dashboard']='OPEN_FAILED_'+(str(e) if isinstance(e,Stop) else type(e).__name__)
+   try:
+    if note_text and not args.memory_only:collector_check_and_deploy()
+   except Exception as e:r['backend']='ATTENTION_'+(str(e) if isinstance(e,Stop) else type(e).__name__)
    print('5 / 5 · Save exact outcome and current memory; no secrets in handoff.',flush=True)
    if note_text:
     try:note_sync(note_text)
     except Exception as e:r['obsidian']='FAILED_'+type(e).__name__
+   persist()
+   bridge_once()
    persist()
  except Exception as e:print('Continuity receipt issue: '+type(e).__name__)
  print('\n'+receipt())
