@@ -1,0 +1,29 @@
+{
+  "schema": "ghartv.rc6-validation.v1",
+  "source_sha": "1cbf03d50a2b706e901af5cc975183be1dd3566e",
+  "version": "0.6.0-rc6-family-focus",
+  "version_code": 22,
+  "native_and_browser_workflow_run": 34989970299,
+  "job": 104451782038,
+  "result": "SUCCESS",
+  "checks": [
+    "actual Android release compilation and aapt code22 identity",
+    "real typed APK verification; public reference and signed fixture accepted; unsigned/tampered rejected",
+    "JVM family Unicode/length/calendar rules and selected-channel order",
+    "mock-CLI safe receipt allowlist, idempotent comment update, exact readback and newer-run preservation",
+    "actual HTTP/Chromium top-bar search, keyboard arrows/Enter, category/search channel scope",
+    "browser first-open Next focus and real fullscreen enter/exit with accessible label",
+    "owner manual-only summary/details; no initial D1 or tab-change reads",
+    "private feedback saved with exact run identity in local and temporary Obsidian paths; lock clears UI",
+    "mobile horizontal overflow and JS errors",
+    "existing SQLite pairing/broadcast/revoke contracts"
+  ],
+  "owner_data_or_provider_accounts_used": false,
+  "real_owner_github_cli_mirror": "NOT_EXECUTED_HERE_MOCK_TRANSPORT_CHECKED",
+  "native_owner_tv_focus_test": "NOT_EXECUTED_SOURCE_FIX_AND_COMPILE_ONLY",
+  "new_owner_mac_run": "NOT_EXECUTED",
+  "public_update_promoted": false,
+  "owner_signed_apk_sha256": null,
+  "full_bundle_sha256": "4ae2585a64eaa0a589e20c99a1fe2059204ea2fda2dc791be0407a1b87b23d8b",
+  "previous_owner_code21_run_confirmed": true
+}

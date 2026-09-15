@@ -1,7 +1,7 @@
 # GharTV continuation rules
 
 - Read `CURRENT_HANDOFF.md`, `.ghartv-owner-state.json`, `RELEASE_MANIFEST.json`, live `update/latest.json`, and actual Git refs before implementation.
-- Continue `AmritSinghGit/ghartv`, lane `ghartv`, main, package `in.ghartv.nova`, existing checkout and existing AVD. No duplicate project, branch, worktree, account or runtime.
+- Continue `AmritSinghGit/ghartv`, lane `ghartv`, existing review branch `codex/ghartv-remove-auto-preview` / PR1; main is public control/distribution, package `in.ghartv.nova`, existing checkout and existing AVD. No duplicate project, branch, worktree, account or runtime.
 - Keep reviewed app source SHA, APK SHA-256 and delivery/control SHA distinct. Never infer an APK's source from current main HEAD.
 - The owner approved exact RC5 binary production distribution on 2026-09-12. The microphone fix is nonblocking. Future code changes are not automatically approved for production.
 - Never rebuild with a replacement signing key or wipe app storage to solve an update mismatch. Preserve Jio login and household data.
@@ -14,3 +14,7 @@
 - Analytics remains tenant `ghartv` in existing Operon Analytics lane and PR #61; no second control surface/service. Unknown/missing data must not appear as zero or certified live data.
 - Keep validation minimal and relevant. No long test-suite gates for owner review. Test and disclose actual local/helper checks separately from physical-TV UAT.
 - A notification, a download, an installer prompt and a confirmed running version are different states. Do not claim silent or mandatory updates exist in the current APK.
+
+## Current review continuity
+
+Read the existing PR1 managed `GHARTV_SAFE_RECEIPT_V1` comment and CURRENT_HANDOFF.md before asking for a missing handoff. The owner already supplied five screenshots, code21 installation proof, and the requests tracked in OWNER_REVIEW_REQUIREMENTS.json on the review branch. Do not ask for those inputs again. Distinguish published source, the actual installed signed APK, and overall approval. A mirrored receipt can be pending; private feedback and screenshots are not automatically uploaded. No physical-TV or public promotion from REVIEW_READY. Preserve manual D1 refresh; no polling while redesigning the owner page.

@@ -1,30 +1,23 @@
+---
+lane: ghartv
+entity_type: project
+analytics_tenant: ghartv
+updated: 2026-09-15
+status: RC6_REVIEW_PENDING_RC5_RUNNING_BASELINE_CONFIRMED
+---
 <!-- GHARTV-MANAGED-LANE-NOTE:v1 -->
-# GharTV 0.6.0 RC5 — navigation & Now/Next review
+# GharTV — current progress and screenshot acceptance
 
-Continue the existing GharTV project, PR1 and `codex/ghartv-remove-auto-preview`. No new checkout, runtime, provider or tenant. Public `0.5.4-rc8-pre-birthday-recovery`/code17 remains unchanged. This code21 candidate is review only.
+The owner's five screenshots, written UI feedback and successful RC5 receipt are received. No repeated upload or handoff is required for that evidence. Continue existing GharTV repo/PR1/branch, independent of VCNow; existing Analytics tenant ghartv/PR61 and owner-control39 remain the authorities for their respective lanes.
 
-## Last actual owner receipt
+Confirmed baseline: 0.6.0-rc5-navigation-review/code21, source7915a279e78f3490fc599c4b7f0447d7a9f18ceb, signed APK776495e2154a50e7f3460ba9b8e349678217f7c750d15061439894b015848472. Run GHARTV-CYAN-7-20260915T131648Z-51264 reported installed bytes verified, MainActivity foreground and REVIEW_READY. Owner confirms selected-category navigation works. Keep it. Owner decision remains REVIEW_PENDING, not promotion approval.
 
-`GHARTV-CYAN-6-NET-R1-20260915T115027Z-40855`: local signing exit0, followed by "APK certificate unavailable"; no installation. Local browser health/source and Obsidian readback succeeded. Bridge handoff0, sync timed out. No private playback logs were supplied or remotely accessible. These facts must not be converted into a working APK or a diagnosed provider outage.
+New RC6/code22 implementation: first-open Next button focus; Simrat display spelling with stable legacy identity/date; local family edit/add/confirmed remove; browser topbar search, arrow/Enter navigation, scoped PageUp/PageDown, F/fullscreen and Escape, lighter translucent controls; clearer owner tabs/connection/messages/review desk. Manual D1 reporting is intentional and remains. OWNER_REVIEW_REQUIREMENTS.json maps each screenshot request to explicit acceptance.
 
-## This candidate
+New handoff transport: persist the local receipt and Obsidian automatically, then attempt safe technical receipt mirroring to the existing GharTV PR using existing authenticated gh CLI. Exact run/body readback is required for GITHUB_READBACK_VERIFIED. Network/CLI failure becomes PENDING, leaves local receipt and does not block playback. A managed single mirror comment, local pending state and newer-run protection prevent duplicate/current-record confusion. Private family names/dates, raw logs, paths, device/account identities, free feedback and screenshots are never auto-uploaded. Owner feedback can be saved privately in the existing vault against the actual candidate; that local write is not a chat submission.
 
-- Certificate identity uses Android's native ApkVerifier API and hashes verified X.509 bytes. No dependency on English apksigner stdout or a loosened signature check. Native signature validity, compiled-payload equality, expected public RC8 certificate and existing installed certificate all remain gates. Missing/bad signatures and mismatched keys stop; no key replacement, uninstallation or data clear.
-- Guide CH+/CH- use the actual filtered list, not the all-channel catalogue. Player preserves the exact ordered scope across Activity recreation; explicit number tuning does not silently widen subsequent next/previous navigation. Retry/next-working uses the same scope. Web captures the visible category/search list when playback starts and steps only through that snapshot.
-- Android tiles now have actual NOW and NEXT rows. A bounded visible-card EPG fetch updates those rows without reloading logos or the grid. Epoch seconds/milliseconds/microseconds are normalised; programme order and day rollover are handled. Empty/upstream-missing data is labelled, never made up.
-- Player reads today's schedule without waiting for tomorrow. Metadata failure is not a playback failure. Stale responses after changing channels cannot overwrite the current channel. The browser opens playback independently of the EPG response rather than waiting for three schedule calls first.
-- Nested Media3 error causes/status codes are examined so transient transport failures receive a bounded retry and terminal provider/DRM errors remain explicit. Duplicate error dialogs are suppressed. Browser retries a transient fatal HLS network failure once; access denial is not bypassed. No claim all channels are fixed or a measured speedup exists without device/account evidence.
-- Refined midnight/cyan/lilac surfaces, restrained focus motion, explicit UP NEXT programme text separate from NEXT CHANNEL controls, readable card/overlay sizing, static backgrounds, and no CSS backdrop blur over video. Automatic guide video previews stay OFF as requested previously; the channel spotlight opens playback on OK.
-- Local owner console automatically checks the saved collector config, reports present/missing/private-permission/origin states, and keeps the credential server-side. The expected file is `~/Library/Application Support/GharTV/telemetry/collector.env`, key `GHARTV_TELEMETRY_ADMIN_TOKEN`. Do not ask the owner to paste it into chat or invent/rotate a replacement. Public hosted owner shell still requires its own authentication.
+On each continuation, retrieve the current PR mirror and requirements before asking the owner to paste anything. An interruption is not evidence the feedback was lost. Publication/readback and another chat actually retrieving content are distinct. Never claim every replica is synced because a local write or bridge handoff returned zero.
 
-## Review route
+Public update stays RC8/code17/source de3106e3e97a9147b06347a3d66c4e5923cdbbcc. New app and companion hashes live in the v0.6.0-rc6 review manifest. No production promotion, PR merge, physical-TV action, collector deployment or commercial approval is performed here. RC6 native signing/install/screenshot review and new local Obsidian/receipt publication await owner execution.
 
-Use the full release kit and its RUN_GHARTV_REVIEW.command. It seeds only checksum-verified public artifacts and replaces the known canonical launcher. Exact source/manifest/companion/APK values come from the generated release record. The existing local signing.env supplies the same key without password prompts. The launcher does not change the development checkout. One existing AVD, one service at127.0.0.1:8790, owner page /owner.html. Bundled installation skips GitHub publication/Worker deployment; live provider playback and collector reads still need connectivity. A subsequent normal networked launcher run can publish the same locally signed review APK and check the existing backend. Never promote without owner acceptance.
-
-The installer opens and verifies the app's foreground activity; that is not visual or physical Hisense playback validation. Compare two channels in Devotional, News or a language filter, use Next/Previous and retry, then inspect NOW/NEXT. Check owner credential presence and actual fresh events separately. No global TV log harvesting; private player/collector logs remain on the Mac and must not be pushed to GitHub.
-
-## Continuity and limits
-
-GharTV stays independent of VCNow; Analytics tenant `ghartv` stays on Operon PR61 and owner-control39. Update the existing managed Obsidian lane note with each actual receipt. Do not claim every replica synced when the bridge timed out. Cleanup only known redundant lane downloads and a verified superseded managed companion after replacement health; do not sweep source, keys, saved sessions or histories.
-
-AI super-resolution, universal provider entitlement checks and native licensed movie aggregation are not implemented. Other requested RC4 features (local family-date editing, paired owner messages, hardware opt-in and IST) remain. No automatic/silent mandatory-update policy or code21 production deployment is performed by this release.
+Use existing full-bundle launcher and signing key, same AVD, same browser8790. Never reset/switch/clean the development checkout to review binaries, uninstall to solve signer mismatch, generate a replacement key, create another lane/service or sweep unknown files. Exact previous owner-state and future requests are preserved in CURRENT_HANDOFF.md. Account-aware discovery and AI super-resolution remain pending, not delivered by this UI candidate.
