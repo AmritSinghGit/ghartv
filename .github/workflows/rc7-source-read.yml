@@ -1,0 +1,18 @@
+name: GharTV RC7 source read
+on:
+  push:
+    paths: ['.github/workflows/rc7-source-read.yml']
+permissions:
+  contents: read
+jobs:
+  source:
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - uses: actions/checkout@v5
+      - run: git archive --format=zip HEAD -o /tmp/ghartv-rc7-source.zip
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ghartv-rc7-source
+          path: /tmp/ghartv-rc7-source.zip
+          retention-days: 2
