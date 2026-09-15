@@ -44,7 +44,11 @@ jobs:
           subprocess.run(['git','apply',str(patch)],check=True)
           for name,expected in data['targets'].items():assert hashlib.sha256(Path(name).read_bytes()).hexdigest()==expected,name
           Path('/tmp/ghartv-rc5-targets.json').write_text(json.dumps(list(data['targets'])))
-          print('EXACT_SOURCE_PATCH_VERIFIED=28_FILES')
+          p=Path('tools/rc5_browser_check.mjs');s=p.read_text()
+          old='const now=Date.now();const channels=';assert s.count(old)==1;s=s.replace(old,'const now=Math.floor(Date.now()/1000)*1000;const channels=')
+          old="await page.getByRole('button',{name:'Next channel',exact:true}).click();assert.equal(requested.at(-1),'33');";assert s.count(old)==1;s=s.replace(old,"await page.getByRole('button',{name:'Next channel',exact:true}).click();await page.waitForFunction(()=>document.querySelector('#playerNext').textContent.includes('Next 33'));assert.equal(requested.at(-1),'33');")
+          p.write_text(s)
+          print('EXACT_SOURCE_PATCH_VERIFIED=28_FILES; SYNTHETIC_SCHEDULE_BOUNDARIES_CORRECTED=YES')
           PY
       - name: Focused navigation, timeline and message contract checks
         run: |
@@ -56,12 +60,6 @@ jobs:
           node --check web-player/public/app.js
           node --check web-player/owner-gateway.mjs
           node tools/owner-convergence-check.mjs
-      - name: Prepare existing web dependency and bounded browser test
-        run: |
-          npm --prefix web-player ci --ignore-scripts --no-audit --no-fund
-          npm --prefix /tmp/ghartv-browser install --ignore-scripts --no-audit --no-fund playwright@1.55.1
-          /tmp/ghartv-browser/node_modules/.bin/playwright install --with-deps chromium
-          node tools/rc5_browser_check.mjs
       - name: Compile the actual release APK
         run: |
           set -euo pipefail
@@ -80,6 +78,12 @@ jobs:
           set -euo pipefail
           curl --proto '=https' --proto-redir '=https' -fLsS --max-time 90 https://github.com/AmritSinghGit/ghartv/releases/download/v0.5.4-rc8/GharTV-Jio-Live-v0.5.4-rc8-pre-birthday-recovery.apk -o /tmp/ghartv-public-reference.apk
           python tools/rc5_native_verify.py
+      - name: Prepare existing web dependency and bounded browser test
+        run: |
+          npm --prefix web-player ci --ignore-scripts --no-audit --no-fund
+          npm --prefix /tmp/ghartv-browser install --ignore-scripts --no-audit --no-fund playwright@1.55.1
+          /tmp/ghartv-browser/node_modules/.bin/playwright install --with-deps chromium
+          node tools/rc5_browser_check.mjs
       - name: Publish checked source on the same review branch
         run: |
           set -euo pipefail
@@ -89,8 +93,7 @@ jobs:
           python - <<'PY'
           import json,subprocess
           from pathlib import Path
-          paths=json.loads(Path('/tmp/ghartv-rc5-targets.json').read_text())
-          subprocess.run(['git','add','--',*paths],check=True)
+          subprocess.run(['git','add','--',*json.loads(Path('/tmp/ghartv-rc5-targets.json').read_text())],check=True)
           PY
           git rm -r .rc5-prep .github/workflows/owner-rc5-prepare.yml .github/workflows/owner-rc5-evidence.yml
           test -z "$(git diff --cached --name-only -- update/latest.json)"
