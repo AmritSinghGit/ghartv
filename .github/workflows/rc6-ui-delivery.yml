@@ -44,8 +44,12 @@ jobs:
               text=text[:lo]+replacement+text[hi:]
             assert hashlib.sha256(text.encode()).hexdigest()==data['targets'][name],name
             p.parent.mkdir(parents=True,exist_ok=True);p.write_text(text)
+          p=Path('docs/owner.html');s=p.read_text();old='On demand · no automatic D1 polling';assert s.count(old)==1
+          s=s.replace(old,'Manual refresh only. Detailed event rows load only when you request them.')
+          old='<p class="privacy-note">Reported recently';assert s.count(old)==1
+          s=s.replace(old,'<p class="section-note">This page can run on your Mac, but report data is read from the existing Cloudflare collector and D1 database.</p>'+old);p.write_text(s)
           Path('/tmp/ghartv-rc6-targets.json').write_text(json.dumps(list(data['targets'])))
-          print('EXACT_SOURCE_OPERATIONS_VERIFIED=26_FILES')
+          print('EXACT_SOURCE_OPERATIONS_VERIFIED=26_FILES; MANUAL_REPORTING_NOTICES_RETAINED=YES')
       - name: Focused family, scope, receipt and message checks
         run: |
           set -euo pipefail
