@@ -1,16 +1,18 @@
 # GharTV continuation rules
 
-- Read `CURRENT_HANDOFF.md`, `.ghartv-owner-state.json`, `RELEASE_MANIFEST.json`, live `update/latest.json`, and actual Git refs before implementation.
-- Continue `AmritSinghGit/ghartv`, lane `ghartv`, main, package `in.ghartv.nova`, existing checkout and existing AVD. No duplicate project, branch, worktree, account or runtime.
-- Keep reviewed app source SHA, APK SHA-256 and delivery/control SHA distinct. Never infer an APK's source from current main HEAD.
-- The owner approved exact RC5 binary production distribution on 2026-09-12. The microphone fix is nonblocking. Future code changes are not automatically approved for production.
-- Never rebuild with a replacement signing key or wipe app storage to solve an update mismatch. Preserve Jio login and household data.
-- GitHub is durable authority for source and safe handoffs. A public commit is not proof of Mac sync, Obsidian replication, provider action, running frontend or TV installation.
-- Use one verified download-and-run command, cyan terminal identity and run-specific receipts including failure states. Preserve global Operon session identity; do not perform terminal-global repairs.
-- Fast-forward only clean canonical checkouts. No force pushes, reset, clean, prune, bulk rebase, unrequested branch/worktree creation or blind commit/upload of local files.
-- Remove only provably redundant, checksum-matched lane installers and current-run owned temporary files. Do not sweep unknown Downloads/Desktop directories, repositories, state, signed keys, credentials, completed reports or logs.
-- Reports and diagnostics remain private. No tokens, raw logs, IPs, account IDs, household locations or collected TV identities in GitHub. Preserve the current opt-in diagnostics and non-uploaded viewing-history boundary.
-- Read the existing local collector configuration without transmitting its admin token to an arbitrary endpoint or redirected origin. Do not collect whole-system TV logs by default.
-- Analytics remains tenant `ghartv` in existing Operon Analytics lane and PR #61; no second control surface/service. Unknown/missing data must not appear as zero or certified live data.
-- Keep validation minimal and relevant. No long test-suite gates for owner review. Test and disclose actual local/helper checks separately from physical-TV UAT.
-- A notification, a download, an installer prompt and a confirmed running version are different states. Do not claim silent or mandatory updates exist in the current APK.
+- Read CURRENT_HANDOFF.md, REVIEW_CANDIDATE.json on main, OWNER_REVIEW_REQUIREMENTS.json on this branch, live update/latest.json and actual Git refs. Older release/state records may be historical; reconcile rather than silently selecting an old candidate.
+- Continue AmritSinghGit/ghartv, lane ghartv, existing implementation branch codex/ghartv-remove-auto-preview / PR1, package in.ghartv.nova, existing checkout and AVD. Main is public control/distribution. No duplicate project, branch, worktree, account, service or runtime.
+- Keep exact application source, signed/unsigned APK digest, companion and metadata/control SHA distinct. The compiled RC6 source is 1cbf03d50a2b706e901af5cc975183be1dd3566e; later documentation commits do not change its APK. Full review is v0.6.0-rc6, code22. Read the live feed separately before describing production.
+- Owner receipt GHARTV-CYAN-7-20260915T131648Z-51264 proves prior RC5/code21 installation and foreground; category-scoped navigation was accepted. The five screenshots and feedback were received and implemented in the RC6 source. Do not ask for those inputs again or call the accepted baseline unsigned/unopened.
+- Before asking for a handoff paste, read the existing PR1 managed comment marked GHARTV_SAFE_RECEIPT_V1. Match run ID, source and signed APK. New launcher mirrors only an allowlisted technical receipt with exact readback. Pending transport is not successful sync; absence of a mirror does not prove local execution failed. Private feedback/screenshots stay local unless explicitly shared.
+- Existing Obsidian note and local receipt are written before copy prompts. New local Review tab ties feedback to the actual run. Never claim Obsidian/all-chat replication from repository publication or exit0 alone. No additional controller/daemon is created.
+- Public production approval is separate from REVIEW_READY. No PR merge, public-feed change, physical-TV installation, forced update or silent installation without the required owner decision. An approved old APK does not approve future code.
+- Reuse the original signing identity and saved configuration; never create a replacement key, uninstall or clear user data for a signature mismatch. No secrets in argv/logs/public files.
+- Owner review is from exact bundled release artifacts; development checkout is read-only and must not gate binary review. No reset, stash, clean, prune, force push, bulk rebase, source switch, clone or blind upload of local files.
+- Keep one verified command, cyan terminal and explicit receipts, including failures. Preserve global Operon session ID if supplied; otherwise UNBOUND. No terminal-global repairs.
+- Cleanup only checksum-matched obsolete installers and proven superseded managed runtime/temp files after replacement verification. Preserve unknown Downloads/Desktop files, sources, keys, settings, historical handoffs and other lanes.
+- Reports/diagnostics/household details remain private. No token, raw log, IP, account/device identifier, names/dates or screenshots in safe technical receipt uploads. Do not collect whole-system TV logs by default.
+- Collector admin credential stays server-side, loaded from the existing private local config. Do not transmit it to a redirected or arbitrary origin. Preserve optional diagnostics and no successful programme-history upload.
+- Preserve intentional manual D1 reporting. Owner-tab changes and styling must not add report polling. Local receipt/config reads are not D1 reads. Stale/missing is not zero/current/live.
+- Analytics stays tenant ghartv in existing Operon Analytics lane/PR61; owner-control stays PR39. No duplicate database, tenant or analytics service.
+- Keep checks focused. Actual cloud compile/browser/mock transport evidence is not owner-Mac/native-TV UX, live provider authorization or a measured speedup. No long test-suite gates.
