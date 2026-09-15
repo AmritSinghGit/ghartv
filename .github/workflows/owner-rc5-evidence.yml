@@ -1,0 +1,36 @@
+name: GharTV focused RC5 evidence
+on:
+  push:
+    paths: ['.github/workflows/owner-rc5-evidence.yml']
+permissions:
+  contents: read
+jobs:
+  evidence:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: android-actions/setup-android@v3
+        with:
+          packages: platform-tools
+          log-accepted-android-sdk-licenses: false
+      - name: Snapshot source and inspect the public RC8 signature, no owner data
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/ghartv-focused-evidence
+          git archive --format=zip HEAD -o /tmp/ghartv-focused-evidence/source.zip
+          sdkmanager 'build-tools;36.0.0'
+          curl --proto '=https' --proto-redir '=https' -fLsS --max-time 90 https://github.com/AmritSinghGit/ghartv/releases/download/v0.5.4-rc8/GharTV-Jio-Live-v0.5.4-rc8-pre-birthday-recovery.apk -o /tmp/ghartv-public-reference.apk
+          echo '8cff8f85403da5924865fddc687dbff11089d7c498f9863e483a7d8123c1ce13  /tmp/ghartv-public-reference.apk' | sha256sum -c -
+          "$ANDROID_HOME/build-tools/36.0.0/apksigner" verify --verbose --print-certs /tmp/ghartv-public-reference.apk > /tmp/ghartv-focused-evidence/public-signature.txt
+          cat /tmp/ghartv-focused-evidence/public-signature.txt
+          echo "SOURCE_SNAPSHOT_SHA=$(git rev-parse HEAD)"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ghartv-focused-source
+          path: /tmp/ghartv-focused-evidence/*
+          retention-days: 2
