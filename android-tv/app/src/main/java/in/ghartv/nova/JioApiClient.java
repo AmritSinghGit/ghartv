@@ -261,7 +261,11 @@ public final class JioApiClient {
         JSONArray epg = payload.optJSONArray("epg");
         List<Program> programs = new ArrayList<>();
         if (epg == null) return programs;
-        for (int i = 0; i < epg.length(); i++) programs.add(Program.fromJson(epg.getJSONObject(i)));
+        for (int i = 0; i < epg.length(); i++) {
+            JSONObject row=epg.optJSONObject(i);if(row==null)continue;
+            Program p=Program.fromJson(row);if(p.startEpochMs>0&&p.endEpochMs>p.startEpochMs)programs.add(p);
+        }
+        programs.sort((a,b)->Long.compare(a.startEpochMs,b.startEpochMs));
         return programs;
     }
 

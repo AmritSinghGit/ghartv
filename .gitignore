@@ -37,9 +37,11 @@ SOURCE_VALIDATION.json
 *.before-*
 .backups/
 PUBLISHED_URLS.txt
+ci/artifacts/
 
 # Telemetry deployment local state
 telemetry/worker/node_modules/
 telemetry/worker/.wrangler/
+web-player/node_modules/
 collector.env
 telemetry-admin*.json

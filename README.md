@@ -1,6 +1,6 @@
 # GharTV
 
-**Current review candidate:** v0.5.4 RC5 Family Preview — vertical channel tile, on-demand muted preview, family themes, voice/programme search and capability-gated transport controls. · Jio Live
+**Current review candidate:** v0.5.4 RC8 Pre-Birthday Recovery — restores the last stable pre-birthday guide flow as an in-place recovery update. · Jio Live
 
 A remote-first Android TV / Google TV client for live television available to a connected JioTV account.
 
@@ -66,9 +66,23 @@ The direct account/catalogue/playback architecture was informed by the MIT-licen
 
 GharTV now includes an explicit opt-in, first-party technical diagnostics system. Users can preview, send, disable or delete queued reports from the TV. Mobile numbers, OTPs, Jio credentials/tokens/cookies, stream/licence URLs, successful channel viewing history and hardware identifiers are excluded. See [TELEMETRY.md](TELEMETRY.md) and [PRIVACY.md](PRIVACY.md).
 
+## Local web-player owner review
+
+`GHARTV_OPEN_WEB_PLAYER.command` starts a loopback-only browser candidate at
+`http://127.0.0.1:8790`. It supports Jio phone-number/OTP connection, the live
+channel catalogue, categories/search, programme lookup and HLS playback through a
+bounded local proxy. Account and playback credentials remain only in process memory
+and are discarded when the server stops. The browser receives an HttpOnly local
+session cookie, never the provider tokens.
+
+This is an owner-only experimental connector and is not published by GitHub Pages.
+The first candidate reports DRM/DASH-only channels as unsupported instead of bypassing
+content protection. Do not represent local technical compatibility as provider
+authorization or general distribution clearance.
+
 ## v0.5.4 RC5 review candidate
 
-RC5 keeps the long selected-channel tile, adds an explicit muted 15-second preview,
+The guide keeps the long selected-channel tile and starts playback only after Watch Live,
 fixes vertical spacing so **Watch Live** remains visible, and provides local family
 birthday themes for Mom, Amrit, Harjas, Wifey, Sis, Dad and Simrat. The normal
 living-room screen hides internal RC labels.

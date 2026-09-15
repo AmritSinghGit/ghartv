@@ -1,0 +1,25 @@
+import assert from 'node:assert/strict';
+import {DatabaseSync} from 'node:sqlite';
+import {readFile} from 'node:fs/promises';
+import worker from '../telemetry/worker/src/index.js';
+const db=new DatabaseSync(':memory:');db.exec(await readFile('telemetry/worker/schema.sql','utf8'));
+const DB={prepare(sql){let args=[];const stmt=db.prepare(sql);return {bind(...a){args=a;return this},async first(){return stmt.get(...args)||null},async all(){return {results:stmt.all(...args)}},async run(){const r=stmt.run(...args);return{meta:{changes:r.changes}}}}},async batch(rows){db.exec('BEGIN');try{const result=[];for(const row of rows)result.push(await row.run());db.exec('COMMIT');return result}catch(e){db.exec('ROLLBACK');throw e}}};
+const env={DB,ADMIN_TOKEN:'fixture-admin-not-real',INGEST_KEY:'fixture-ingest-not-real'};
+async function request(path,body,auth='Bearer '+env.ADMIN_TOKEN){const r=await worker.fetch(new Request('https://collector.invalid'+path,{method:body?'POST':'GET',headers:{Authorization:auth,'Content-Type':'application/json','X-GharTV-Ingest-Key':env.INGEST_KEY},body:body?JSON.stringify(body):undefined}),env);return [r.status,await r.json()]}
+const id='a'.repeat(32),secret='b'.repeat(64);
+assert.equal((await request('/v1/device/register',{device_id:id,device_secret:secret,pairing_code:'123456',version_code:20,app_version:'0.6.0-rc4-owner-convergence'}))[0],200);
+assert.equal((await request('/v1/device/register',{device_id:id,device_secret:'c'.repeat(64),pairing_code:'123456'}))[0],403);
+assert.equal((await request('/v1/admin/devices/claim',{pairing_code:'123456',display_name:'fixture TV'}))[0],200);
+const message={request_id:'11111111-1111-4111-a111-111111111111',device_ids:[id],message:'Fixture message',expires_in_seconds:3600};
+assert.equal((await request('/v1/admin/broadcast',message,'Bearer wrong'))[0],401);
+const [code,result]=await request('/v1/admin/broadcast',message);assert.equal(code,200);assert.equal(result.queued,1);
+assert.equal((await request('/v1/admin/broadcast',message))[0],200);assert.equal(db.prepare('SELECT COUNT(*) AS n FROM tv_commands').get().n,1);
+assert.equal((await request('/v1/admin/broadcast',{...message,message:'Different payload'}))[0],409);
+let history=(await request('/v1/admin/commands'))[1];assert.equal(history.commands[0].status,'queued');
+assert.equal((await request('/v1/device/commands/ack',{device_id:id,command_id:result.commands[0].command_id},'Device '+secret))[0],200);
+history=(await request('/v1/admin/commands'))[1];assert.equal(history.commands[0].status,'shown');
+assert.equal((await request('/v1/admin/devices/revoke',{device_id:id}))[0],200);
+assert.equal((await request('/v1/device/commands?device_id='+id,null,'Device '+secret))[1].paired,false);
+const stamp=new Intl.DateTimeFormat('en-IN',{timeZone:'Asia/Kolkata',dateStyle:'medium',timeStyle:'medium',hour12:false}).format(new Date('2026-09-15T00:00:00Z'));assert.match(stamp,/05:30:00/);
+const html=await readFile('docs/owner.html','utf8');for(const block of html.matchAll(/<script(?:\s[^>]*)?>([\s\S]*?)<\/script>/g))new Function(block[1]);assert.ok(html.includes('Asia/Kolkata'));
+console.log('SQLITE_BROADCAST_PAIRING_IDEMPOTENCY_REVOCATION_AND_IST=PASS');db.close();

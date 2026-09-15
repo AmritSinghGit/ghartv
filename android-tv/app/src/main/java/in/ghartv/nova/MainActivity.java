@@ -6,7 +6,6 @@ import android.content.Intent;
 import android.graphics.Color;
 import android.graphics.Typeface;
 import android.os.Bundle;
-import android.speech.RecognizerIntent;
 import android.os.Handler;
 import android.os.Looper;
 import android.text.InputType;
@@ -33,26 +32,25 @@ import androidx.media3.ui.PlayerView;
 
 import com.bumptech.glide.Glide;
 
-import org.json.JSONArray;
-
 import java.text.DateFormat;
 import java.util.ArrayList;
 import java.util.Date;
+import java.util.HashMap;
 import java.util.List;
-import java.util.LinkedHashMap;
 import java.util.Locale;
 import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
 public final class MainActivity extends Activity implements ChannelNavigator.Listener {
-    private static final int REQUEST_VOICE_SEARCH = VoiceSearchController.REQUEST_CODE;
-
     private final Handler mainHandler = new Handler(Looper.getMainLooper());
     private final ExecutorService executor = Executors.newFixedThreadPool(3);
-    private final Map<String, List<Program>> epgCache = new ConcurrentHashMap<>();
-    private final Map<String, Long> epgCacheTime = new ConcurrentHashMap<>();
+    private final ExecutorService epgExecutor = Executors.newFixedThreadPool(2);
+    private final java.util.Set<String> epgPending = new java.util.HashSet<>();
+    private final Map<String, List<Program>> epgCache = new HashMap<>();
+    private final Runnable visibleEpgTask = this::loadVisibleEpg;
+    private boolean guideActive;
+    private final Map<String, Long> epgCacheTime = new HashMap<>();
 
     private ChannelRepository repository;
     private List<Channel> allChannels = new ArrayList<>();
@@ -61,20 +59,11 @@ public final class MainActivity extends Activity implements ChannelNavigator.Lis
     private ChipAdapter chipAdapter;
     private RecyclerView channelGrid;
     private Channel selectedChannel;
-    private String selectedCategory = ChannelIndex.VIEW_FOR_YOU;
+    private String selectedCategory = "All";
     private String searchQuery = "";
-    private List<Channel> programmeSearchResults;
-    private boolean programmeSearchBusy;
-    private Button voiceButton;
-    private View celebrationBanner;
-    private PlayerView heroPreviewView;
-    private ProgressBar heroPreviewLoading;
-    private TextView heroPreviewStatus;
-    private FrameLayout heroPreviewHost;
-    private HeroPreviewController heroPreviewController;
-
     private boolean catalogueBusy;
     private boolean redirectingToLogin;
+    private boolean guideHealthyReported;
 
     private TextView heroNumber;
     private ImageView heroLogo;
@@ -91,14 +80,16 @@ public final class MainActivity extends Activity implements ChannelNavigator.Lis
     private TextView numberOverlay;
     private TextView emptyState;
     private ProgressBar guideLoading;
-    private TextView viewTitle;
-    private TextView viewSummary;
+    private PlayerView heroPreviewView;
+    private ProgressBar heroPreviewLoading;
+    private TextView heroPreviewStatus;
+    private HeroPreviewController heroPreviewController;
 
     private ChannelNavigator navigator;
     private Runnable pendingEpgLoad;
     private final Runnable clockTicker = new Runnable() {
         @Override public void run() {
-            if (clock != null) clock.setText(DateFormat.getTimeInstance(DateFormat.SHORT).format(new Date()));
+            if (clock != null) clock.setText(TvUi.istTime(System.currentTimeMillis()));
             mainHandler.postDelayed(this, 30_000L);
         }
     };
@@ -109,18 +100,25 @@ public final class MainActivity extends Activity implements ChannelNavigator.Lis
         getWindow().setFlags(WindowManager.LayoutParams.FLAG_FULLSCREEN, WindowManager.LayoutParams.FLAG_FULLSCREEN);
         getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
         TvUi.immersive(this);
+        Telemetry.beginLaunch(this, "main_created");
+        Telemetry.launchStage(this, "session_check");
 
         if (!JioSession.load(this).isPresent()) {
+            Telemetry.launchStage(this, "route_login");
+            Telemetry.markLaunchHealthy(this);
             routeToLogin();
             return;
         }
 
+        Telemetry.launchStage(this, "repository_create");
         repository = new ChannelRepository(this);
         navigator = new ChannelNavigator(this);
         selectedCategory = repository.lastCategory();
         FamilyTheme.applyPreviewIntent(this);
+        Telemetry.launchStage(this, "ui_build");
         setContentView(buildUi());
         Telemetry.screen(this, "guide");
+        Telemetry.launchStage(this, "guide_content_set");
         mainHandler.postDelayed(() -> Telemetry.maybeRequestConsent(this), 1200L);
         mainHandler.post(clockTicker);
         loadFromDisk(true);
@@ -130,17 +128,15 @@ public final class MainActivity extends Activity implements ChannelNavigator.Lis
     @Override protected void onResume() {
         super.onResume();
         TvUi.immersive(this);
-        EngagementTracker.start(this, "guide");
         if (repository == null) return;
+        guideActive=true;
         if (!JioSession.load(this).isPresent()) routeToLogin();
-        else {
-            repository.invalidateIndex();
-            loadFromDisk(false);
-        }
+        else loadFromDisk(false);
     }
 
     @Override protected void onPause() {
-        EngagementTracker.stop(this);
+        guideActive=false;
+        mainHandler.removeCallbacks(visibleEpgTask);
         if (heroPreviewController != null) heroPreviewController.stop(false);
         super.onPause();
     }
@@ -150,6 +146,8 @@ public final class MainActivity extends Activity implements ChannelNavigator.Lis
         mainHandler.removeCallbacks(clockTicker);
         if (heroPreviewController != null) heroPreviewController.release();
         executor.shutdownNow();
+        epgExecutor.shutdownNow();
+        mainHandler.removeCallbacks(visibleEpgTask);
         super.onDestroy();
     }
 
@@ -162,281 +160,220 @@ public final class MainActivity extends Activity implements ChannelNavigator.Lis
         finish();
     }
 
-private View buildUi() {
-    FrameLayout root = new FrameLayout(this);
-    root.addView(new AuroraBackgroundView(this), new FrameLayout.LayoutParams(-1, -1));
-    int familyBackdropRes = FamilyTheme.backdropPhotoRes(this);
-    if (familyBackdropRes != 0) {
-        ImageView familyBackdrop = new ImageView(this);
-        familyBackdrop.setScaleType(ImageView.ScaleType.CENTER_CROP);
-        familyBackdrop.setImageResource(familyBackdropRes);
-        familyBackdrop.setAlpha(.58f);
-        root.addView(familyBackdrop, new FrameLayout.LayoutParams(-1, -1));
+    private View buildUi() {
+        FrameLayout root = new FrameLayout(this);
+        root.addView(new AuroraBackgroundView(this), new FrameLayout.LayoutParams(-1, -1));
+
+        LinearLayout shell = new LinearLayout(this);
+        shell.setOrientation(LinearLayout.VERTICAL);
+        shell.setPadding(TvUi.dp(this, 28), TvUi.dp(this, 14), TvUi.dp(this, 28), TvUi.dp(this, 14));
+        root.addView(shell, new FrameLayout.LayoutParams(-1, -1));
+        shell.addView(buildHeader(), new LinearLayout.LayoutParams(-1, TvUi.dp(this, 54)));
+
+        View celebration = FamilyTheme.banner(this);
+        LinearLayout.LayoutParams celebrationParams = new LinearLayout.LayoutParams(
+                -1, FamilyTheme.isBirthday(this) ? TvUi.dp(this, 40) : 0);
+        celebrationParams.bottomMargin = FamilyTheme.isBirthday(this) ? TvUi.dp(this, 4) : 0;
+        shell.addView(celebration, celebrationParams);
+
+        catalogueStatus = TvUi.label(this, "Connecting to JioTV…", 13, TvUi.MUTED, true);
+        catalogueStatus.setGravity(Gravity.CENTER_VERTICAL);
+        shell.addView(catalogueStatus, new LinearLayout.LayoutParams(-1, TvUi.dp(this, 28)));
+
+        LinearLayout body = new LinearLayout(this);
+        body.setOrientation(LinearLayout.HORIZONTAL);
+        LinearLayout.LayoutParams bodyParams = new LinearLayout.LayoutParams(-1, 0, 1f);
+        bodyParams.topMargin = TvUi.dp(this, 6);
+        shell.addView(body, bodyParams);
+
+        LinearLayout hero = buildHero();
+        LinearLayout.LayoutParams heroParams = new LinearLayout.LayoutParams(0, -1, .36f);
+        heroParams.rightMargin = TvUi.dp(this, 16);
+        body.addView(hero, heroParams);
+        body.addView(buildGuide(), new LinearLayout.LayoutParams(0, -1, .64f));
+
+        numberOverlay = TvUi.label(this, "", 30, TvUi.TEXT, true);
+        numberOverlay.setGravity(Gravity.CENTER);
+        numberOverlay.setBackground(TvUi.rounded(Color.argb(244, 3, 11, 18), 24, TvUi.MINT, 2, this));
+        numberOverlay.setVisibility(View.GONE);
+        FrameLayout.LayoutParams overlay = new FrameLayout.LayoutParams(TvUi.dp(this, 170), TvUi.dp(this, 60), Gravity.TOP | Gravity.CENTER_HORIZONTAL);
+        overlay.topMargin = TvUi.dp(this, 70);
+        root.addView(numberOverlay, overlay);
+        return root;
     }
-    root.addView(new CelebrationView(this), new FrameLayout.LayoutParams(-1, -1));
 
-    LinearLayout shell = new LinearLayout(this);
-    shell.setOrientation(LinearLayout.VERTICAL);
-    shell.setPadding(TvUi.dp(this, 22), TvUi.dp(this, 9), TvUi.dp(this, 22), TvUi.dp(this, 9));
-    root.addView(shell, new FrameLayout.LayoutParams(-1, -1));
+    private View buildHeader() {
+        LinearLayout header = new LinearLayout(this);
+        header.setGravity(Gravity.CENTER_VERTICAL);
 
-    shell.addView(buildHeader(), new LinearLayout.LayoutParams(-1, TvUi.dp(this, 48)));
+        TextView brand = TvUi.label(this, "GHAR TV", 24, TvUi.TEXT, true);
+        brand.setLetterSpacing(.11f);
+        header.addView(brand, new LinearLayout.LayoutParams(-2, -1));
 
-    celebrationBanner = FamilyTheme.banner(this);
-    LinearLayout.LayoutParams celebrationParams = new LinearLayout.LayoutParams(-1,
-            FamilyTheme.isBirthday(this) ? TvUi.dp(this, 36) : 0);
-    celebrationParams.bottomMargin = FamilyTheme.isBirthday(this) ? TvUi.dp(this, 4) : 0;
-    shell.addView(celebrationBanner, celebrationParams);
+        TextView live = TvUi.label(this, "JIO LIVE", 11, TvUi.MINT, true);
+        live.setGravity(Gravity.CENTER);
+        live.setPadding(TvUi.dp(this, 14), 0, TvUi.dp(this, 14), 0);
+        live.setBackground(TvUi.rounded(Color.argb(70, 115, 245, 194), 16, TvUi.MINT, 1, this));
+        LinearLayout.LayoutParams liveParams = new LinearLayout.LayoutParams(-2, TvUi.dp(this, 28));
+        liveParams.leftMargin = TvUi.dp(this, 14);
+        header.addView(live, liveParams);
+        header.addView(new View(this), new LinearLayout.LayoutParams(0, 1, 1f));
 
-    catalogueStatus = TvUi.label(this, "Connecting to JioTV…", 12, TvUi.MUTED, true);
-    catalogueStatus.setGravity(Gravity.CENTER_VERTICAL);
-    shell.addView(catalogueStatus, new LinearLayout.LayoutParams(-1, TvUi.dp(this, 21)));
+        Button search = actionButton("Find");
+        search.setOnClickListener(view -> showSearch());
+        header.addView(search, headerButtonParams());
 
-    LinearLayout body = new LinearLayout(this);
-    body.setOrientation(LinearLayout.HORIZONTAL);
-    LinearLayout.LayoutParams bodyParams = new LinearLayout.LayoutParams(-1, 0, 1f);
-    bodyParams.topMargin = TvUi.dp(this, 5);
-    shell.addView(body, bodyParams);
+        Button refresh = actionButton("Update guide");
+        refresh.setOnClickListener(view -> refreshCatalogue(true));
+        header.addView(refresh, headerButtonParams());
 
-    LinearLayout hero = buildHero();
-    LinearLayout.LayoutParams heroParams = new LinearLayout.LayoutParams(0, -1, .315f);
-    heroParams.rightMargin = TvUi.dp(this, 14);
-    body.addView(hero, heroParams);
-    body.addView(buildGuide(), new LinearLayout.LayoutParams(0, -1, .685f));
+        Button movies = actionButton("Punjabi +");
+        movies.setOnClickListener(view -> startActivity(new Intent(this, MovieHubActivity.class)));
+        header.addView(movies, headerButtonParams());
 
-    numberOverlay = TvUi.label(this, "", 30, TvUi.TEXT, true);
-    numberOverlay.setGravity(Gravity.CENTER);
-    numberOverlay.setBackground(TvUi.rounded(Color.argb(232, 3, 11, 18), 22,
-            FamilyTheme.accent(this), 2, this));
-    numberOverlay.setVisibility(View.GONE);
-    FrameLayout.LayoutParams overlay = new FrameLayout.LayoutParams(
-            TvUi.dp(this, 170), TvUi.dp(this, 60), Gravity.TOP | Gravity.CENTER_HORIZONTAL);
-    overlay.topMargin = TvUi.dp(this, 64);
-    root.addView(numberOverlay, overlay);
-    return root;
-}
+        accountButton = actionButton("Jio account");
+        accountButton.setOnClickListener(view -> showAccountMenu());
+        LinearLayout.LayoutParams accountParams = new LinearLayout.LayoutParams(TvUi.dp(this, 145), TvUi.dp(this, 38));
+        accountParams.leftMargin = TvUi.dp(this, 10);
+        header.addView(accountButton, accountParams);
 
+        clock = TvUi.label(this, "", 17, TvUi.TEXT, true);
+        clock.setGravity(Gravity.CENTER | Gravity.END);
+        LinearLayout.LayoutParams clockParams = new LinearLayout.LayoutParams(TvUi.dp(this, 82), -1);
+        clockParams.leftMargin = TvUi.dp(this, 14);
+        header.addView(clock, clockParams);
+        return header;
+    }
 
-private View buildHeader() {
-    LinearLayout header = new LinearLayout(this);
-    header.setGravity(Gravity.CENTER_VERTICAL);
+    private LinearLayout.LayoutParams headerButtonParams() {
+        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(TvUi.dp(this, 108), TvUi.dp(this, 40));
+        params.leftMargin = TvUi.dp(this, 10);
+        return params;
+    }
 
-    TextView brand = TvUi.label(this, "GHAR TV", 23, TvUi.TEXT, true);
-    brand.setLetterSpacing(.11f);
-    header.addView(brand, new LinearLayout.LayoutParams(-2, -1));
+    private LinearLayout buildHero() {
+        LinearLayout hero = new LinearLayout(this);
+        hero.setOrientation(LinearLayout.VERTICAL);
+        hero.setPadding(TvUi.dp(this, 20), TvUi.dp(this, 16), TvUi.dp(this, 20), TvUi.dp(this, 14));
+        hero.setBackground(TvUi.rounded(Color.argb(245, 12, 18, 36), 18, Color.argb(60, 83, 228, 255), 1, this));
 
-    TextView live = TvUi.label(this, "JIO LIVE", 10, FamilyTheme.accent(this), true);
-    live.setGravity(Gravity.CENTER);
-    live.setPadding(TvUi.dp(this, 13), 0, TvUi.dp(this, 13), 0);
-    live.setBackground(TvUi.rounded(
-            Color.argb(58, Color.red(FamilyTheme.accent(this)),
-                    Color.green(FamilyTheme.accent(this)),
-                    Color.blue(FamilyTheme.accent(this))),
-            16, FamilyTheme.accent(this), 1, this));
-    LinearLayout.LayoutParams liveParams = new LinearLayout.LayoutParams(-2, TvUi.dp(this, 27));
-    liveParams.leftMargin = TvUi.dp(this, 13);
-    header.addView(live, liveParams);
-    header.addView(new View(this), new LinearLayout.LayoutParams(0, 1, 1f));
+        LinearLayout top = new LinearLayout(this);
+        top.setGravity(Gravity.CENTER_VERTICAL);
+        TextView onAir = TvUi.label(this, "●  LIVE / YOUR SELECTION", 11, TvUi.MINT, true);
+        top.addView(onAir, new LinearLayout.LayoutParams(-2, TvUi.dp(this, 28)));
+        top.addView(new View(this), new LinearLayout.LayoutParams(0, 1, 1f));
+        heroNumber = TvUi.label(this, "---", 17, TvUi.CYAN, true);
+        heroNumber.setGravity(Gravity.CENTER);
+        heroNumber.setPadding(TvUi.dp(this, 14), 0, TvUi.dp(this, 14), 0);
+        heroNumber.setBackground(TvUi.rounded(Color.argb(120, 0, 0, 0), 17, Color.argb(85, 83, 228, 255), 1, this));
+        top.addView(heroNumber, new LinearLayout.LayoutParams(-2, TvUi.dp(this, 30)));
+        hero.addView(top, new LinearLayout.LayoutParams(-1, TvUi.dp(this, 32)));
 
-    Button movies = actionButton("Movies");
-    movies.setOnClickListener(v -> startActivity(new Intent(this, MovieHubActivity.class)));
-    header.addView(movies, headerButtonParams());
+        FrameLayout previewHost = new FrameLayout(this);
+        previewHost.setClipToOutline(true);
+        previewHost.setBackground(TvUi.rounded(Color.rgb(2, 9, 15), 18,
+                Color.argb(70, 110, 231, 255), 1, this));
+        previewHost.setOnClickListener(view -> play(selectedChannel));
 
-    voiceButton = actionButton("🎙  Voice");
-    voiceButton.setOnClickListener(view -> {
-        if (!VoiceSearchController.launch(this)) showSearch();
-    });
-    header.addView(voiceButton, headerButtonParams());
+        heroPreviewView = new PlayerView(this);
+        previewHost.addView(heroPreviewView, new FrameLayout.LayoutParams(-1, -1));
 
-    Button search = actionButton("⌕  Search");
-    search.setOnClickListener(view -> showSearch());
-    header.addView(search, headerButtonParams());
+        heroLogo = new ImageView(this);
+        heroLogo.setScaleType(ImageView.ScaleType.FIT_CENTER);
+        heroLogo.setPadding(TvUi.dp(this, 8), TvUi.dp(this, 8), TvUi.dp(this, 8), TvUi.dp(this, 8));
+        heroLogo.setBackground(TvUi.rounded(Color.argb(46, 255, 255, 255), 18,
+                Color.argb(38, 255, 255, 255), 1, this));
+        previewHost.addView(heroLogo, new FrameLayout.LayoutParams(
+                TvUi.dp(this, 88), TvUi.dp(this, 88), Gravity.CENTER));
 
-    Button refresh = actionButton("↻  Guide");
-    refresh.setOnClickListener(view -> refreshCatalogue(true));
-    header.addView(refresh, headerButtonParams());
+        heroPreviewLoading = new ProgressBar(this);
+        previewHost.addView(heroPreviewLoading, new FrameLayout.LayoutParams(
+                TvUi.dp(this, 34), TvUi.dp(this, 34), Gravity.CENTER));
 
-    accountButton = actionButton("Jio account");
-    accountButton.setOnClickListener(view -> showAccountMenu());
-    LinearLayout.LayoutParams accountParams = new LinearLayout.LayoutParams(TvUi.dp(this, 128), TvUi.dp(this, 38));
-    accountParams.leftMargin = TvUi.dp(this, 9);
-    header.addView(accountButton, accountParams);
+        heroPreviewStatus = TvUi.label(this,
+                "Channel spotlight  •  press OK to watch",
+                9, Color.WHITE, true);
+        heroPreviewStatus.setGravity(Gravity.CENTER_VERTICAL);
+        heroPreviewStatus.setPadding(TvUi.dp(this, 9), 0, TvUi.dp(this, 9), 0);
+        heroPreviewStatus.setBackground(TvUi.rounded(Color.argb(180, 0, 0, 0), 12,
+                Color.TRANSPARENT, 0, this));
+        FrameLayout.LayoutParams previewStatusParams = new FrameLayout.LayoutParams(
+                -1, TvUi.dp(this, 25), Gravity.BOTTOM);
+        previewStatusParams.setMargins(TvUi.dp(this, 6), 0, TvUi.dp(this, 6), TvUi.dp(this, 6));
+        previewHost.addView(heroPreviewStatus, previewStatusParams);
 
-    clock = TvUi.label(this, "", 17, TvUi.TEXT, true);
-    clock.setGravity(Gravity.CENTER | Gravity.END);
-    LinearLayout.LayoutParams clockParams = new LinearLayout.LayoutParams(TvUi.dp(this, 62), -1);
-    clockParams.leftMargin = TvUi.dp(this, 12);
-    header.addView(clock, clockParams);
-    return header;
-}
+        LinearLayout.LayoutParams previewParams = new LinearLayout.LayoutParams(-1, TvUi.dp(this, 142));
+        previewParams.topMargin = TvUi.dp(this, 6);
+        hero.addView(previewHost, previewParams);
 
+        heroTitle = TvUi.label(this, "Your live television", 22, TvUi.TEXT, true);
+        heroTitle.setMaxLines(2);
+        heroTitle.setEllipsize(TextUtils.TruncateAt.END);
+        LinearLayout.LayoutParams titleParams = new LinearLayout.LayoutParams(-1, -2);
+        titleParams.topMargin = TvUi.dp(this, 8);
+        hero.addView(heroTitle, titleParams);
 
-private LinearLayout.LayoutParams headerButtonParams() {
-    LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(TvUi.dp(this, 90), TvUi.dp(this, 38));
-    params.leftMargin = TvUi.dp(this, 9);
-    return params;
-}
+        heroSource = TvUi.label(this, "JioTV • connected to your account", 12, TvUi.CYAN, true);
+        LinearLayout.LayoutParams sourceParams = new LinearLayout.LayoutParams(-1, TvUi.dp(this, 22));
+        sourceParams.topMargin = TvUi.dp(this, 2);
+        hero.addView(heroSource, sourceParams);
 
+        heroNow = TvUi.label(this, "Live now", 16, TvUi.TEXT, true);
+        LinearLayout.LayoutParams nowParams = new LinearLayout.LayoutParams(-1, -2);
+        nowParams.topMargin = TvUi.dp(this, 10);
+        hero.addView(heroNow, nowParams);
 
-private LinearLayout buildHero() {
-    LinearLayout hero = new LinearLayout(this);
-    hero.setOrientation(LinearLayout.VERTICAL);
-    hero.setPadding(TvUi.dp(this, 14), TvUi.dp(this, 10), TvUi.dp(this, 14), TvUi.dp(this, 10));
-    hero.setBackground(TvUi.gradient(
-            FamilyTheme.panelStart(this, 194),
-            FamilyTheme.panelEnd(this, 184),
-            27,
-            Color.argb(120,
-                    Color.red(FamilyTheme.accentSecondary(this)),
-                    Color.green(FamilyTheme.accentSecondary(this)),
-                    Color.blue(FamilyTheme.accentSecondary(this))),
-            1.15f,
-            this));
+        heroNext = TvUi.label(this, "Choose a channel to see what is on next", 12, TvUi.MUTED, false);
+        heroNext.setMaxLines(2);
+        LinearLayout.LayoutParams nextParams = new LinearLayout.LayoutParams(-1, -2);
+        nextParams.topMargin = TvUi.dp(this, 3);
+        hero.addView(heroNext, nextParams);
 
-    LinearLayout top = new LinearLayout(this);
-    top.setGravity(Gravity.CENTER_VERTICAL);
-    TextView onAir = TvUi.label(this, "●  LIVE TELEVISION", 10, FamilyTheme.accent(this), true);
-    top.addView(onAir, new LinearLayout.LayoutParams(-2, TvUi.dp(this, 24)));
-    top.addView(new View(this), new LinearLayout.LayoutParams(0, 1, 1f));
-    heroNumber = TvUi.label(this, "---", 16, FamilyTheme.accentTertiary(this), true);
-    heroNumber.setGravity(Gravity.CENTER);
-    heroNumber.setPadding(TvUi.dp(this, 13), 0, TvUi.dp(this, 13), 0);
-    heroNumber.setBackground(TvUi.rounded(Color.argb(92, 0, 0, 0), 16,
-            Color.argb(105, 255, 255, 255), 1, this));
-    top.addView(heroNumber, new LinearLayout.LayoutParams(-2, TvUi.dp(this, 27)));
-    hero.addView(top, new LinearLayout.LayoutParams(-1, TvUi.dp(this, 26)));
+        heroProgress = new ProgressBar(this, null, android.R.attr.progressBarStyleHorizontal);
+        heroProgress.setMax(1000);
+        heroProgress.setProgressTintList(android.content.res.ColorStateList.valueOf(TvUi.MINT));
+        heroProgress.setProgressBackgroundTintList(android.content.res.ColorStateList.valueOf(Color.argb(42, 255, 255, 255)));
+        LinearLayout.LayoutParams progressParams = new LinearLayout.LayoutParams(-1, TvUi.dp(this, 4));
+        progressParams.topMargin = TvUi.dp(this, 8);
+        hero.addView(heroProgress, progressParams);
+        hero.addView(new View(this), new LinearLayout.LayoutParams(1, 0, 1f));
 
-    heroPreviewHost = new FrameLayout(this);
-    heroPreviewHost.setBackground(TvUi.gradient(Color.argb(158, 3, 10, 18), Color.argb(148, 12, 33, 51),
-            22, Color.argb(95, 255, 255, 255), 1, this));
-    heroPreviewHost.setFocusable(true);
-    heroPreviewHost.setFocusableInTouchMode(true);
-    heroPreviewHost.setOnClickListener(view -> play(selectedChannel));
-    heroPreviewHost.setOnFocusChangeListener((view, focused) -> view.animate()
-            .scaleX(focused ? 1.025f : 1f)
-            .scaleY(focused ? 1.025f : 1f)
-            .translationZ(focused ? TvUi.dp(this, 8) : 0)
-            .setDuration(110)
-            .start());
+        LinearLayout actions = new LinearLayout(this);
+        playButton = actionButton("▶  WATCH LIVE");
+        playButton.setTextSize(14);
+        playButton.setOnClickListener(view -> play(selectedChannel));
+        TvUi.focusCard(playButton, Color.rgb(23, 112, 115), Color.rgb(34, 156, 151), 22);
+        actions.addView(playButton, new LinearLayout.LayoutParams(0, TvUi.dp(this, 46), 1f));
 
-    heroPreviewView = new PlayerView(this);
-    heroPreviewView.setUseController(false);
-    heroPreviewView.setFocusable(false);
-    heroPreviewHost.addView(heroPreviewView, new FrameLayout.LayoutParams(-1, -1));
+        favouriteButton = actionButton("☆  Favourite");
+        favouriteButton.setOnClickListener(view -> toggleFavourite(selectedChannel));
+        LinearLayout.LayoutParams favouriteParams = new LinearLayout.LayoutParams(TvUi.dp(this, 126), TvUi.dp(this, 46));
+        favouriteParams.leftMargin = TvUi.dp(this, 8);
+        actions.addView(favouriteButton, favouriteParams);
+        hero.addView(actions, new LinearLayout.LayoutParams(-1, TvUi.dp(this, 46)));
 
-    heroLogo = new ImageView(this);
-    heroLogo.setScaleType(ImageView.ScaleType.CENTER_INSIDE);
-    heroLogo.setPadding(TvUi.dp(this, 24), TvUi.dp(this, 14), TvUi.dp(this, 24), TvUi.dp(this, 14));
-    heroPreviewHost.addView(heroLogo, new FrameLayout.LayoutParams(-1, -1));
-
-    heroPreviewLoading = new ProgressBar(this);
-    heroPreviewLoading.setIndeterminate(true);
-    heroPreviewHost.addView(heroPreviewLoading, new FrameLayout.LayoutParams(
-            TvUi.dp(this, 36), TvUi.dp(this, 36), Gravity.CENTER));
-
-    heroPreviewStatus = TvUi.label(this, "Auto preview  •  press OK here for full-screen television", 9.5f, Color.WHITE, true);
-    heroPreviewStatus.setGravity(Gravity.CENTER_VERTICAL);
-    heroPreviewStatus.setPadding(TvUi.dp(this, 9), 0, TvUi.dp(this, 9), 0);
-    heroPreviewStatus.setBackground(TvUi.rounded(Color.argb(164, 0, 0, 0), 13, Color.TRANSPARENT, 0, this));
-    FrameLayout.LayoutParams statusParams = new FrameLayout.LayoutParams(-1, TvUi.dp(this, 24), Gravity.BOTTOM);
-    statusParams.setMargins(TvUi.dp(this, 6), 0, TvUi.dp(this, 6), TvUi.dp(this, 6));
-    heroPreviewHost.addView(heroPreviewStatus, statusParams);
-
-    LinearLayout.LayoutParams previewParams = new LinearLayout.LayoutParams(-1, TvUi.dp(this, 104));
-    previewParams.topMargin = TvUi.dp(this, 5);
-    hero.addView(heroPreviewHost, previewParams);
-
-    heroTitle = TvUi.label(this, "Your live television", 21, TvUi.TEXT, true);
-    heroTitle.setMaxLines(2);
-    heroTitle.setEllipsize(TextUtils.TruncateAt.END);
-    LinearLayout.LayoutParams titleParams = new LinearLayout.LayoutParams(-1, TvUi.dp(this, 44));
-    titleParams.topMargin = TvUi.dp(this, 5);
-    hero.addView(heroTitle, titleParams);
-
-    heroSource = TvUi.label(this, "JioTV • connected to your account", 11, FamilyTheme.accentTertiary(this), true);
-    heroSource.setSingleLine(true);
-    heroSource.setEllipsize(TextUtils.TruncateAt.END);
-    hero.addView(heroSource, new LinearLayout.LayoutParams(-1, TvUi.dp(this, 18)));
-
-    heroNow = TvUi.label(this, "Live now", 15, TvUi.TEXT, true);
-    heroNow.setSingleLine(true);
-    heroNow.setEllipsize(TextUtils.TruncateAt.END);
-    LinearLayout.LayoutParams nowParams = new LinearLayout.LayoutParams(-1, TvUi.dp(this, 22));
-    nowParams.topMargin = TvUi.dp(this, 4);
-    hero.addView(heroNow, nowParams);
-
-    heroNext = TvUi.label(this, "Choose a channel to see what is on next", 11, TvUi.MUTED, false);
-    heroNext.setSingleLine(true);
-    heroNext.setEllipsize(TextUtils.TruncateAt.END);
-    hero.addView(heroNext, new LinearLayout.LayoutParams(-1, TvUi.dp(this, 18)));
-
-    heroProgress = new ProgressBar(this, null, android.R.attr.progressBarStyleHorizontal);
-    heroProgress.setMax(1000);
-    heroProgress.setProgressTintList(TvUi.tint(FamilyTheme.accent(this)));
-    heroProgress.setProgressBackgroundTintList(TvUi.tint(Color.argb(45, 255, 255, 255)));
-    LinearLayout.LayoutParams progressParams = new LinearLayout.LayoutParams(-1, TvUi.dp(this, 4));
-    progressParams.topMargin = TvUi.dp(this, 4);
-    hero.addView(heroProgress, progressParams);
-    hero.addView(new View(this), new LinearLayout.LayoutParams(1, 0, 1f));
-
-    playButton = actionButton("▶  WATCH LIVE");
-    playButton.setTextSize(13);
-    playButton.setOnClickListener(view -> play(selectedChannel));
-    TvUi.focusCard(playButton, Color.rgb(16, 104, 103), Color.rgb(28, 164, 151), 19);
-    hero.addView(playButton, new LinearLayout.LayoutParams(-1, TvUi.dp(this, 42)));
-
-    LinearLayout secondary = new LinearLayout(this);
-    secondary.setGravity(Gravity.CENTER_VERTICAL);
-    favouriteButton = actionButton("☆  Favourite");
-    favouriteButton.setOnClickListener(view -> toggleFavourite(selectedChannel));
-    secondary.addView(favouriteButton, new LinearLayout.LayoutParams(0, TvUi.dp(this, 34), 1f));
-
-    Button recall = actionButton("↶  Recall");
-    recall.setOnClickListener(view -> {
-        Channel previous = repository.byNumber(allChannels, repository.previousChannel());
-        if (previous == null) {
-            Toast.makeText(this, "No previous channel yet", Toast.LENGTH_SHORT).show();
-            return;
-        }
-        playDirect(previous);
-    });
-    LinearLayout.LayoutParams recallParams = new LinearLayout.LayoutParams(0, TvUi.dp(this, 34), 1f);
-    recallParams.leftMargin = TvUi.dp(this, 7);
-    secondary.addView(recall, recallParams);
-    LinearLayout.LayoutParams secondaryParams = new LinearLayout.LayoutParams(-1, TvUi.dp(this, 34));
-    secondaryParams.topMargin = TvUi.dp(this, 5);
-    hero.addView(secondary, secondaryParams);
-
-    TextView hints = TvUi.label(this, "NUMBER to tune  •  CH ± stays in the selected view", 9.5f, TvUi.MUTED, false);
-    hints.setGravity(Gravity.CENTER_VERTICAL);
-    hero.addView(hints, new LinearLayout.LayoutParams(-1, TvUi.dp(this, 17)));
-
-    heroPreviewController = new HeroPreviewController(
-            this, repository, heroPreviewView, heroLogo, heroPreviewLoading, heroPreviewStatus);
-    return hero;
-}
-
-
+        TextView hints = TvUi.label(this, "NUMBER to tune  •  CH ± to switch  •  GUIDE to come back", 10, TvUi.MUTED, false);
+        hints.setGravity(Gravity.CENTER_VERTICAL);
+        LinearLayout.LayoutParams hintsParams = new LinearLayout.LayoutParams(-1, TvUi.dp(this, 24));
+        hintsParams.topMargin = TvUi.dp(this, 4);
+        hero.addView(hints, hintsParams);
+        heroPreviewController = new HeroPreviewController(
+                this, repository, heroPreviewView, heroLogo, heroPreviewLoading, heroPreviewStatus);
+        return hero;
+    }
 
     private View buildGuide() {
         LinearLayout guide = new LinearLayout(this);
         guide.setOrientation(LinearLayout.VERTICAL);
         guide.setPadding(TvUi.dp(this, 14), TvUi.dp(this, 10), TvUi.dp(this, 8), TvUi.dp(this, 8));
-        guide.setBackground(TvUi.gradient(
-                FamilyTheme.guideSurface(this, 188),
-                FamilyTheme.panelEnd(this, 176),
-                28, Color.argb(55, 255, 255, 255), 1, this));
+        guide.setBackground(TvUi.rounded(Color.argb(198, 5, 16, 26), 28, Color.argb(48, 255, 255, 255), 1, this));
 
         LinearLayout guideTitleRow = new LinearLayout(this);
         guideTitleRow.setGravity(Gravity.CENTER_VERTICAL);
-        viewTitle = TvUi.label(this, "FOR YOU", 16, TvUi.TEXT, true);
-        viewTitle.setLetterSpacing(.08f);
-        guideTitleRow.addView(viewTitle, new LinearLayout.LayoutParams(-2, -1));
-        viewSummary = TvUi.label(this, "", 11, TvUi.MUTED, false);
-        viewSummary.setGravity(Gravity.CENTER_VERTICAL | Gravity.END);
-        LinearLayout.LayoutParams summaryParams = new LinearLayout.LayoutParams(0, -1, 1f);
-        summaryParams.leftMargin = TvUi.dp(this, 14);
-        guideTitleRow.addView(viewSummary, summaryParams);
+        TextView title = TvUi.label(this, "LIVE CHANNELS", 16, TvUi.TEXT, true);
+        title.setLetterSpacing(.08f);
+        guideTitleRow.addView(title, new LinearLayout.LayoutParams(-2, -1));
+        guideTitleRow.addView(new View(this), new LinearLayout.LayoutParams(0, 1, 1f));
         guideLoading = new ProgressBar(this);
         guideLoading.setIndeterminate(true);
         guideLoading.setVisibility(View.GONE);
@@ -447,8 +384,6 @@ private LinearLayout buildHero() {
         chips.setLayoutManager(new LinearLayoutManager(this, RecyclerView.HORIZONTAL, false));
         chipAdapter = new ChipAdapter(value -> {
             selectedCategory = value;
-            searchQuery = "";
-            programmeSearchResults = null;
             repository.setLastCategory(value);
             Telemetry.event(this, "guide_filter", Telemetry.data("category", value));
             renderGuide(true);
@@ -458,18 +393,19 @@ private LinearLayout buildHero() {
 
         FrameLayout gridHost = new FrameLayout(this);
         channelGrid = new RecyclerView(this);
-        int spanCount = TvUi.gridSpanCount(this);
-        GridLayoutManager gridManager = new GridLayoutManager(this, spanCount);
-        gridManager.setInitialPrefetchItemCount(spanCount * 3);
+        GridLayoutManager gridManager = new GridLayoutManager(this, 3);
+        gridManager.setInitialPrefetchItemCount(9);
         channelGrid.setLayoutManager(gridManager);
-        channelGrid.setItemViewCacheSize(24);
-        channelGrid.setHasFixedSize(true);
+        channelGrid.setItemViewCacheSize(18);
         channelAdapter = new ChannelAdapter(repository.favourites(), new ChannelAdapter.Listener() {
             @Override public void onFocused(Channel channel, int position) { select(channel); }
             @Override public void onPlay(Channel channel) { play(channel); }
             @Override public void onFavourite(Channel channel) { toggleFavourite(channel); }
         });
         channelGrid.setAdapter(channelAdapter);
+        channelGrid.addOnScrollListener(new RecyclerView.OnScrollListener(){
+            @Override public void onScrollStateChanged(RecyclerView v,int state){if(state==RecyclerView.SCROLL_STATE_IDLE)scheduleVisibleEpg();}
+        });
         gridHost.addView(channelGrid, new FrameLayout.LayoutParams(-1, -1));
 
         emptyState = TvUi.label(this, "", 18, TvUi.MUTED, true);
@@ -501,9 +437,9 @@ private LinearLayout buildHero() {
         }
         String mobile = session.mobile;
         String suffix = mobile.length() >= 4 ? mobile.substring(mobile.length() - 4) : "connected";
-        int queuedDiagnostics = Telemetry.queuedCount(this);
-        accountButton.setText("Jio ••••" + suffix + (queuedDiagnostics > 0 ? "  •  " + queuedDiagnostics : ""));
+        accountButton.setText("Jio ••••" + suffix);
         allChannels = repository.loadAll();
+        Telemetry.launchStage(this, "catalogue_loaded");
         renderGuide(focus);
         updateCatalogueStatus(null);
 
@@ -559,38 +495,12 @@ private LinearLayout buildHero() {
         });
     }
 
-    private String activeViewKey() {
-        if (searchQuery == null || searchQuery.trim().isEmpty()) return selectedCategory;
-        return ChannelIndex.VIEW_SEARCH + ":" + ChannelIndex.normalize(searchQuery);
-    }
-
     private void renderGuide(boolean requestFocus) {
         List<String> categories = repository.categories(allChannels);
-        if (!categories.contains(selectedCategory)) {
-            selectedCategory = ChannelIndex.VIEW_FOR_YOU;
-            repository.setLastCategory(selectedCategory);
-        }
-        Map<String, Integer> counts = repository.categoryCounts(allChannels);
-        chipAdapter.submit(categories, selectedCategory, counts);
-        visibleChannels = programmeSearchResults == null
-                ? repository.filter(allChannels, selectedCategory, searchQuery)
-                : new ArrayList<>(programmeSearchResults);
-        if (viewTitle != null) {
-            viewTitle.setText(searchQuery.isEmpty()
-                    ? selectedCategory.toUpperCase(Locale.ROOT)
-                    : ("SEARCH  •  " + searchQuery).toUpperCase(Locale.ROOT));
-        }
-        if (viewSummary != null) {
-            String scope = searchQuery.isEmpty() ? "this view" : "the full Jio guide";
-            viewSummary.setText(String.format(Locale.US,
-                    "%,d in %s  •  %s", visibleChannels.size(), scope, repository.indexSummary(allChannels)));
-        }
+        if (!categories.contains(selectedCategory)) selectedCategory = "All";
+        chipAdapter.submit(categories, selectedCategory);
+        visibleChannels = repository.filter(allChannels, selectedCategory, searchQuery);
         channelAdapter.submit(visibleChannels, repository.favourites());
-        Telemetry.event(this, "guide_rendered", Telemetry.data(
-                "view", selectedCategory,
-                "search_active", !searchQuery.isEmpty(),
-                "result_count", visibleChannels.size(),
-                "catalogue_count", allChannels.size()));
         boolean empty = visibleChannels.isEmpty();
         emptyState.setVisibility(empty ? View.VISIBLE : View.GONE);
         channelGrid.setVisibility(empty ? View.INVISIBLE : View.VISIBLE);
@@ -600,11 +510,16 @@ private LinearLayout buildHero() {
             return;
         }
 
-        int preferredNumber = repository.lastChannelForView(activeViewKey());
-        Channel preferred = repository.byNumber(visibleChannels, preferredNumber);
-        if (preferred == null) preferred = repository.byNumber(visibleChannels, repository.lastChannel());
+        if (!guideHealthyReported) {
+            guideHealthyReported = true;
+            Telemetry.launchStage(this, "guide_rendered");
+            Telemetry.markLaunchHealthy(this);
+        }
+
+        Channel preferred = repository.byNumber(visibleChannels, repository.lastChannel());
         if (preferred == null) preferred = visibleChannels.get(0);
         select(preferred);
+        scheduleVisibleEpg();
         if (requestFocus) {
             final int position = Math.max(0, visibleChannels.indexOf(preferred));
             channelGrid.post(() -> {
@@ -618,19 +533,14 @@ private LinearLayout buildHero() {
 
     private void select(Channel channel) {
         selectedChannel = channel;
+        if (heroPreviewController != null) heroPreviewController.select(channel);
         if (channel == null) {
             heroNumber.setText("---");
             heroTitle.setText("No channel selected");
             heroSource.setText("JioTV • your account");
-            heroSource.setTextColor(TvUi.CYAN);
             heroNow.setText("Live now");
             heroNext.setText("Choose a live channel from the guide");
             heroLogo.setImageDrawable(null);
-            if (heroPreviewHost != null) {
-                heroPreviewHost.setEnabled(false);
-                heroPreviewHost.setContentDescription("No channel selected");
-            }
-            if (heroPreviewController != null) heroPreviewController.select(null);
             heroProgress.setProgress(0);
             playButton.setEnabled(false);
             favouriteButton.setEnabled(false);
@@ -638,41 +548,14 @@ private LinearLayout buildHero() {
         }
         playButton.setEnabled(true);
         favouriteButton.setEnabled(true);
-        if (heroPreviewHost != null) {
-            heroPreviewHost.setEnabled(true);
-            heroPreviewHost.setContentDescription("Preview of " + channel.name + ". Press OK for continuous full-screen television.");
-        }
-        repository.rememberViewSelection(activeViewKey(), channel.number);
         heroNumber.setText(channel.displayNumber());
         heroTitle.setText(channel.name);
-        if (channel.isAvailable()) {
-            playButton.setText("▶  WATCH LIVE");
-            heroSource.setText((channel.isSubscriptionChannel() ? "SUBSCRIPTION INCLUDED" : "WORKING")
-                    + "  •  " + channel.language + "  •  " + channel.category);
-            heroSource.setTextColor(TvUi.MINT);
-        } else if (channel.isSubscriptionChannel()) {
-            playButton.setText("TRY CHANNEL");
-            heroSource.setText("SUBSCRIPTION  •  " + channel.language + "  •  " + channel.category);
-            heroSource.setTextColor(TvUi.AMBER);
-        } else if (channel.isUnavailable()) {
-            playButton.setText("TRY AGAIN");
-            heroSource.setText("JIO ACCESS  •  " + channel.language + "  •  " + channel.category);
-            heroSource.setTextColor(TvUi.ERROR);
-        } else {
-            playButton.setText("▶  WATCH LIVE");
-            heroSource.setText("JioTV  •  " + channel.language + "  •  " + channel.category);
-            heroSource.setTextColor(TvUi.CYAN);
-        }
-        heroNow.setText(channel.nowTitle.isEmpty() ? "Live now" : channel.nowTitle);
-        heroNext.setText(channel.nextTitle.isEmpty() ? "Loading programme guide…" : "Next: " + channel.nextTitle);
+        heroSource.setText("JioTV  •  " + channel.language + "  •  " + channel.category);
+        heroNow.setText("NOW  " + (channel.nowTitle.isEmpty()?"Live now":channel.nowTitle));
+        heroNext.setText(channel.nextTitle.isEmpty() ? "NEXT  Loading schedule…" : "NEXT  " + channel.nextTitle);
         favouriteButton.setText(repository.favourites().contains(channel.number) ? "★  Favourite" : "☆  Favourite");
-        if (channel.logoUrl.isEmpty()) {
-            Glide.with(heroLogo).clear(heroLogo);
-            heroLogo.setImageDrawable(null);
-        } else {
-            Glide.with(heroLogo).load(channel.logoUrl).fitCenter().into(heroLogo);
-        }
-        if (heroPreviewController != null) heroPreviewController.select(channel);
+        if (channel.logoUrl.isEmpty()) heroLogo.setImageDrawable(null);
+        else Glide.with(heroLogo).load(channel.logoUrl).fitCenter().into(heroLogo);
         scheduleEpg(channel);
     }
 
@@ -682,91 +565,80 @@ private LinearLayout buildHero() {
         mainHandler.postDelayed(pendingEpgLoad, 280L);
     }
 
+    private void scheduleVisibleEpg(){mainHandler.removeCallbacks(visibleEpgTask);mainHandler.postDelayed(visibleEpgTask,450L);}
+    private void loadVisibleEpg(){
+        if(!guideActive||isFinishing()||channelGrid==null)return;
+        GridLayoutManager grid=(GridLayoutManager)channelGrid.getLayoutManager();
+        int first=grid.findFirstVisibleItemPosition(),last=grid.findLastVisibleItemPosition();
+        if(first<0)first=0;if(last<first)last=Math.min(first+7,visibleChannels.size()-1);
+        for(int i=first;i<=last&&i<first+8&&i<visibleChannels.size();i++)loadEpg(visibleChannels.get(i));
+    }
     private void loadEpg(Channel channel) {
-        if (channel == null || channel.id.isEmpty()) return;
-        long now = System.currentTimeMillis();
-        List<Program> cached = epgCache.get(channel.id);
-        Long cachedAt = epgCacheTime.get(channel.id);
-        if (cached != null && cachedAt != null && now - cachedAt < 15 * 60_000L) {
-            applyEpg(channel, cached);
-            return;
-        }
-        executor.execute(() -> {
-            try {
-                List<Program> programmes = repository.api().fetchEpg(channel.id, 0);
-                epgCache.put(channel.id, programmes);
-                epgCacheTime.put(channel.id, System.currentTimeMillis());
-                mainHandler.post(() -> applyEpg(channel, programmes));
-            } catch (Exception ignored) {}
+        if(channel==null||channel.id.isEmpty()||isFinishing())return;
+        List<Program> cached=epgCache.get(channel.id);Long at=epgCacheTime.get(channel.id);
+        if(cached!=null&&at!=null&&System.currentTimeMillis()-at<120_000L){applyEpg(channel,cached);return;}
+        if(!epgPending.add(channel.id))return;
+        epgExecutor.execute(()->{
+            if(!guideActive||isFinishing()){mainHandler.post(()->epgPending.remove(channel.id));return;}
+            try{
+                List<Program> programmes=new ArrayList<>(repository.api().fetchEpg(channel.id,0));
+                List<Program> today=new ArrayList<>(programmes);
+                mainHandler.post(()->{
+                    if(isFinishing())return;
+                    epgCache.put(channel.id,today);epgCacheTime.put(channel.id,System.currentTimeMillis());
+                    epgPending.remove(channel.id);applyEpg(channel,today);
+                });
+                boolean future=false;long time=System.currentTimeMillis();
+                for(Program p:programmes)if(p.startEpochMs>time){future=true;break;}
+                if(!future&&selectedChannel!=null&&selectedChannel.id.equals(channel.id)){
+                    try{
+                        programmes.addAll(repository.api().fetchEpg(channel.id,1));
+                        mainHandler.post(()->{if(!isFinishing()){epgCache.put(channel.id,programmes);applyEpg(channel,programmes);}});
+                    }catch(Exception ignored){}
+                }
+            }catch(Exception error){mainHandler.post(()->{
+                epgPending.remove(channel.id);epgCache.put(channel.id,new ArrayList<>());epgCacheTime.put(channel.id,System.currentTimeMillis()-90_000L);
+                if(selectedChannel!=null&&selectedChannel.id.equals(channel.id))heroNext.setText("NEXT  Schedule unavailable · retry on selection");
+            });}
         });
     }
-
-    private void applyEpg(Channel channel, List<Program> programmes) {
-        if (selectedChannel == null || !selectedChannel.id.equals(channel.id)) return;
-        long now = System.currentTimeMillis();
-        Program current = null;
-        Program next = null;
-        for (Program programme : programmes) {
-            if (programme.isLive(now)) current = programme;
-            else if (programme.startEpochMs > now && next == null) next = programme;
-        }
-        channel.nowTitle = current == null ? "Live now" : current.title;
-        channel.nextTitle = next == null ? "" : next.title;
-        heroNow.setText(channel.nowTitle);
-        heroNext.setText(channel.nextTitle.isEmpty() ? "Next programme not listed" : "Next: " + channel.nextTitle);
-        if (current != null && current.endEpochMs > current.startEpochMs) {
-            long duration = current.endEpochMs - current.startEpochMs;
-            int progress = (int) Math.max(0, Math.min(1000, ((now - current.startEpochMs) * 1000L) / duration));
-            heroProgress.setProgress(progress);
-        } else heroProgress.setProgress(0);
+    private void applyEpg(Channel channel,List<Program> programmes){
+        long now=System.currentTimeMillis();long[] starts=new long[programmes.size()],ends=new long[programmes.size()];
+        for(int i=0;i<programmes.size();i++){starts[i]=programmes.get(i).startEpochMs;ends[i]=programmes.get(i).endEpochMs;}
+        int current=GuideTimeline.current(starts,ends,now),next=GuideTimeline.next(starts,ends,now);
+        channel.nowTitle=current<0?"Live · schedule not listed":programmes.get(current).title;
+        channel.nextTitle=next<0?"":programmes.get(next).title;
+        for(Channel row:visibleChannels)if(row.id.equals(channel.id)){row.nowTitle=channel.nowTitle;row.nextTitle=channel.nextTitle;}
+        channelAdapter.updateProgramme(channel.id,channel.nowTitle,channel.nextTitle);
+        if(selectedChannel==null||!selectedChannel.id.equals(channel.id))return;
+        heroNow.setText("NOW  "+channel.nowTitle);
+        heroNext.setText(next<0?"NEXT  Not listed by provider":"NEXT  "+programmes.get(next).title);
+        if(current>=0)heroProgress.setProgress((int)Math.max(0,Math.min(1000,(now-starts[current])*1000L/(ends[current]-starts[current]))));
+        else heroProgress.setProgress(0);
     }
 
     private void play(Channel channel) {
-        List<Channel> scope = visibleChannels.isEmpty() ? allChannels : visibleChannels;
-        String label = searchQuery.isEmpty() ? selectedCategory : "Search • " + searchQuery;
-        openPlayer(channel, scope, label);
-    }
-
-    private void playDirect(Channel channel) {
-        openPlayer(channel, allChannels, ChannelIndex.VIEW_ALL);
-    }
-
-    private void openPlayer(Channel channel, List<Channel> scopeChannels, String scopeLabel) {
         if (channel == null) return;
         if (!JioSession.load(this).isPresent()) {
             routeToLogin();
             return;
         }
         repository.setLastChannel(channel.number);
-        repository.rememberViewSelection(activeViewKey(), channel.number);
-        if (channel.isPastProgramme()) {
-            boolean catchup = channel.canRequestCatchup();
-            Telemetry.event(this, "catchup_request", Telemetry.data(
-                    "available", catchup,
-                    "language", channel.language,
-                    "category", channel.category));
-            Toast.makeText(this, catchup
-                    ? "Opening the channel — use rewind if Jio exposes this catch-up window"
-                    : "This earlier programme is not marked catch-up available by Jio",
-                    Toast.LENGTH_LONG).show();
-        }
         Telemetry.event(this, "tune_request", Telemetry.data(
                 "category", channel.category,
                 "language", channel.language,
-                "guide_scope", scopeLabel,
+                "guide_scope", selectedCategory,
                 "access_state", channel.accessState));
         Intent player = new Intent(this, PlayerActivity.class);
-        try {
-            player.putExtra(PlayerActivity.EXTRA_CHANNEL_JSON, channel.toJson().toString());
-            JSONArray scope = new JSONArray();
-            List<Channel> safeScope = scopeChannels == null || scopeChannels.isEmpty() ? allChannels : scopeChannels;
-            for (Channel visible : safeScope) scope.put(visible.number);
-            player.putExtra(PlayerActivity.EXTRA_SCOPE_NUMBERS, scope.toString());
-            player.putExtra(PlayerActivity.EXTRA_SCOPE_LABEL, scopeLabel == null ? ChannelIndex.VIEW_ALL : scopeLabel);
-        } catch (Exception error) {
+        try { player.putExtra(PlayerActivity.EXTRA_CHANNEL_JSON, channel.toJson().toString()); }
+        catch (Exception error) {
             Toast.makeText(this, "Could not open this channel", Toast.LENGTH_SHORT).show();
             return;
         }
+        org.json.JSONArray numbers=new org.json.JSONArray();
+        for(Channel item:visibleChannels)numbers.put(item.number);
+        player.putExtra(PlayerActivity.EXTRA_SCOPE_NUMBERS,numbers.toString());
+        player.putExtra(PlayerActivity.EXTRA_SCOPE_LABEL,selectedCategory + (searchQuery.isEmpty()?"":" · search"));
         startActivity(player);
     }
 
@@ -774,129 +646,62 @@ private LinearLayout buildHero() {
         if (channel == null) return;
         boolean added = repository.toggleFavourite(channel.number);
         favouriteButton.setText(added ? "★  Favourite" : "☆  Favourite");
-        repository.invalidateIndex();
-        renderGuide(false);
+        channelAdapter.submit(visibleChannels, repository.favourites());
+        if ("Favourites".equals(selectedCategory)) renderGuide(false);
         Toast.makeText(this, added ? "Added to favourites" : "Removed from favourites", Toast.LENGTH_SHORT).show();
     }
 
-private void showSearch() {
-    EditText input = new EditText(this);
-    input.setSingleLine(true);
-    input.setText(searchQuery);
-    input.setHint("Channel, number or programme");
-    input.setInputType(InputType.TYPE_CLASS_TEXT);
-    input.setSelectAllOnFocus(true);
-    new AlertDialog.Builder(this)
-            .setTitle("Search live TV")
-            .setMessage("Channel results appear immediately. GharTV then checks a bounded part of the programme guide without slowing startup.")
-            .setView(input)
-            .setPositiveButton("Search", (dialog, which) -> runSearch(input.getText().toString(), false))
-            .setNeutralButton("Voice", (dialog, which) -> {
-                if (!VoiceSearchController.launch(this)) showSearch();
-            })
-            .setNegativeButton("Clear", (dialog, which) -> runSearch("", false))
-            .show();
-    input.requestFocus();
-}
-
-
-
-    private void runSearch(String rawQuery, boolean voice) {
-        String query = rawQuery == null ? "" : rawQuery.trim();
-        searchQuery = query;
-        programmeSearchResults = null;
-        programmeSearchBusy = false;
-        Telemetry.event(this, voice ? "voice_search" : "guide_search", Telemetry.data(
-                "active", !query.isEmpty(),
-                "query_length_bucket", query.length() < 4 ? "short" : query.length() < 12 ? "medium" : "long"
-        ));
-        renderGuide(true);
-        if (query.isEmpty()) return;
-
-        programmeSearchBusy = true;
-        catalogueStatus.setText("Searching channels now • checking programme guide…");
-        List<Channel> immediate = new ArrayList<>(visibleChannels);
-        ProgramSearchService.search(this, repository, immediate, allChannels, query,
-                (programmeMatches, scanned, complete) -> {
-                    programmeSearchBusy = false;
-                    LinkedHashMap<String, Channel> merged = new LinkedHashMap<>();
-                    for (Channel channel : immediate) merged.put(channel.id + "|channel", channel);
-                    for (Channel channel : programmeMatches) {
-                        merged.put(channel.id + "|" + channel.searchProgrammeTitle + "|" + channel.searchProgrammeStartMs, channel);
-                    }
-                    programmeSearchResults = new ArrayList<>(merged.values());
-                    catalogueStatus.setText(programmeMatches.isEmpty()
-                            ? "Search ready • no matching programmes in the sampled guide"
-                            : "Search ready • " + programmeMatches.size() + " programme match(es) • " + scanned + " channels checked");
-                    renderGuide(true);
-                });
-    }
-
-    @Override protected void onActivityResult(int requestCode, int resultCode, Intent data) {
-        super.onActivityResult(requestCode, resultCode, data);
-        if (requestCode != REQUEST_VOICE_SEARCH || resultCode != RESULT_OK || data == null) return;
-        ArrayList<String> results = data.getStringArrayListExtra(RecognizerIntent.EXTRA_RESULTS);
-        if (results == null || results.isEmpty()) return;
-        runSearch(results.get(0), true);
-    }
-
-    private void showAppearanceMenu() {
-        FamilyTheme.showPicker(this);
-    }
-
-private void showAccountMenu() {
-    JioSession session = JioSession.load(this);
-    String mobile = session.mobile;
-    String masked = mobile.length() >= 4 ? "••••••" + mobile.substring(mobile.length() - 4) : "Connected";
-    String diagnostics = Telemetry.isEnabled(this) ? "on" : "off";
-    String[] actions = new String[]{
-            "Update live guide",
-            "Check for GharTV update",
-            "Appearance  •  " + FamilyTheme.modeLabel(this),
-            "Diagnostics & privacy  •  " + diagnostics,
-            "Reset Home & Recent",
-            "About this preview",
-            "Sign out of JioTV"
-    };
-    new AlertDialog.Builder(this)
-            .setTitle("JioTV account")
-            .setMessage("Connected as " + masked + "\n\nGharTV keeps internal RC labels out of the living-room screen. "
-                    + "Build details remain available here for owner review.")
-            .setItems(actions, (dialog, which) -> {
-                if (which == 0) refreshCatalogue(true);
-                else if (which == 1) UpdateManager.check(this, true);
-                else if (which == 2) showAppearanceMenu();
-                else if (which == 3) DiagnosticsDialog.show(this);
-                else if (which == 4) confirmResetHome();
-                else if (which == 5) new AlertDialog.Builder(this)
-                        .setTitle("GharTV Preview")
-                        .setMessage("Family Preview RC4\n\nBuild: " + BuildConfig.VERSION_NAME
-                                + "\nVoice: system speech recogniser with text fallback"
-                                + "\nProgramme search: bounded, on-demand Jio EPG lookup"
-                                + "\nCatch-up: offered only when Jio marks the channel as catch-up capable"
-                                + "\nAnalytics: consented, privacy-filtered and shown in Operon")
-                        .setPositiveButton("Close", null)
-                        .show();
-                else if (which == 6) confirmSignOut();
-            })
-            .setNegativeButton("Close", null)
-            .show();
-}
-
-
-    private void confirmResetHome() {
+    private void showSearch() {
+        EditText input = new EditText(this);
+        input.setSingleLine(true);
+        input.setText(searchQuery);
+        input.setHint("Channel name, number, language, or category");
+        input.setInputType(InputType.TYPE_CLASS_TEXT);
+        input.setSelectAllOnFocus(true);
         new AlertDialog.Builder(this)
-                .setTitle("Reset Home and Recent?")
-                .setMessage("This removes only the local viewing suggestions on this TV. It does not sign out, remove favourites, or send viewing history anywhere.")
-                .setPositiveButton("Reset suggestions", (dialog, which) -> {
-                    repository.history().clear();
-                    repository.invalidateIndex();
-                    selectedCategory = ChannelIndex.VIEW_FOR_YOU;
-                    repository.setLastCategory(selectedCategory);
+                .setTitle("Find a live channel")
+                .setView(input)
+                .setPositiveButton("Search", (dialog, which) -> {
+                    searchQuery = input.getText().toString().trim();
+                    Telemetry.event(this, "guide_search", Telemetry.data("active", !searchQuery.isEmpty()));
                     renderGuide(true);
-                    Toast.makeText(this, "Home suggestions reset", Toast.LENGTH_SHORT).show();
+                })
+                .setNeutralButton("Clear", (dialog, which) -> {
+                    searchQuery = "";
+                    Telemetry.event(this, "guide_search", Telemetry.data("active", false));
+                    renderGuide(true);
                 })
                 .setNegativeButton("Cancel", null)
+                .show();
+        input.requestFocus();
+    }
+
+    private void showAccountMenu() {
+        JioSession session = JioSession.load(this);
+        String mobile = session.mobile;
+        String masked = mobile.length() >= 4 ? "••••••" + mobile.substring(mobile.length() - 4) : "Connected";
+        String diagnostics = Telemetry.isEnabled(this) ? "on" : "off";
+        String[] actions = new String[]{
+                "Update live guide",
+                "Check for GharTV update",
+                "Appearance  •  " + FamilyTheme.modeLabel(this),
+                "Owner messages  •  " + RemoteControl.status(this),
+                "Diagnostics & privacy  •  " + diagnostics,
+                "Hardware & picture diagnostics",
+                "Sign out of JioTV"
+        };
+        new AlertDialog.Builder(this)
+                .setTitle("JioTV account  •  " + masked)
+                .setItems(actions, (dialog, which) -> {
+                    if (which == 0) refreshCatalogue(true);
+                    else if (which == 1) UpdateManager.check(this, true);
+                    else if (which == 2) FamilyTheme.showPicker(this);
+                    else if (which == 3) RemoteControl.showPairing(this);
+                    else if (which == 4) DiagnosticsDialog.show(this);
+                    else if (which == 5) HardwareDiagnostics.show(this);
+                    else if (which == 6) confirmSignOut();
+                })
+                .setNegativeButton("Close", null)
                 .show();
     }
 
@@ -913,21 +718,17 @@ private void showAccountMenu() {
                 .show();
     }
 
-private void updateCatalogueStatus(String error) {
-    if (error != null && !error.isEmpty()) {
-        catalogueStatus.setText("Live TV needs attention  •  " + error);
-        catalogueStatus.setTextColor(TvUi.ERROR);
-        return;
+    private void updateCatalogueStatus(String error) {
+        if (error != null && !error.isEmpty()) {
+            catalogueStatus.setText("Live TV needs attention  •  " + error);
+            catalogueStatus.setTextColor(Color.rgb(255, 142, 154));
+            return;
+        }
+        long updated = repository.lastUpdatedAt();
+        String when = updated <= 0 ? "not downloaded yet" : TvUi.istDateTime(updated);
+        catalogueStatus.setText(String.format(Locale.US, "LIVE  •  %,d channels  •  guide updated %s  •  GharTV %s", allChannels.size(), when, BuildConfig.VERSION_NAME));
+        catalogueStatus.setTextColor(TvUi.MUTED);
     }
-    long updated = repository.lastUpdatedAt();
-    String when = updated <= 0 ? "not downloaded yet"
-            : DateFormat.getDateTimeInstance(DateFormat.SHORT, DateFormat.SHORT).format(new Date(updated));
-    catalogueStatus.setText(String.format(Locale.US,
-            "LIVE  •  %,d channels  •  %,d indexed  •  guide updated %s",
-            allChannels.size(), repository.indexedCount(), when));
-    catalogueStatus.setTextColor(TvUi.MUTED);
-}
-
 
     private String readable(Throwable error) {
         String message = error.getMessage();
@@ -938,10 +739,7 @@ private void updateCatalogueStatus(String error) {
         Telemetry.event(this, "channel_change", Telemetry.data(
                 "direction", direction > 0 ? "next" : "previous",
                 "guide_scope", selectedCategory));
-        List<Channel> scope = visibleChannels.isEmpty() ? allChannels : visibleChannels;
-        Channel next = repository.next(scope,
-                selectedChannel == null ? repository.lastChannel() : selectedChannel.number,
-                direction);
+        Channel next = repository.next(visibleChannels, selectedChannel == null ? repository.lastChannel() : selectedChannel.number, direction);
         if (next != null) play(next);
     }
 
@@ -957,7 +755,7 @@ private void updateCatalogueStatus(String error) {
             Toast.makeText(this, "Channel " + channelNumber + " is not in your JioTV guide", Toast.LENGTH_SHORT).show();
             return;
         }
-        playDirect(requested);
+        play(requested);
     }
 
     @Override public boolean dispatchKeyEvent(KeyEvent event) {

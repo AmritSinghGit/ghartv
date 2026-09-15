@@ -1,0 +1,110 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="referrer" content="no-referrer">
+  <title>GharTV · Live television</title>
+  <link rel="stylesheet" href="/styles.css">
+  <link rel="stylesheet" href="/player.css">
+  <script defer src="/vendor/hls.min.js"></script>
+  <script defer src="/shaka-player.compiled.js"></script>
+  <script defer src="/app.js"></script>
+</head>
+<body>
+  <div class="aurora one"></div><div class="aurora two"></div>
+  <header class="topbar">
+    <a class="brand" href="#">GHAR<span>TV</span></a>
+    <div class="top-actions"><a class="owner-link" href="/owner.html">Owner console ↗</a>
+      <button id="accountButton" class="account" type="button">Connect JioTV</button>
+    </div>
+  </header>
+
+  <main>
+    <section id="hero" class="hero hero-connect">
+      <p class="eyebrow">LIVE TELEVISION</p>
+      <h1>Watch what feels<br><em>like home.</em></h1>
+      <p class="lead">Connect your JioTV account to open the channel guide.</p>
+      <button id="connectHeroButton" class="primary hero-connect-button" type="button">Connect JioTV</button>
+      <p id="heroState" class="connection-note">Waiting to connect</p>
+      <p id="heroNote" class="hidden"></p>
+    </section>
+
+    <section id="browse" class="browse hidden" aria-live="polite">
+      <div class="browse-head">
+        <div><p class="eyebrow">LIVE &amp; PROGRAMMES</p><h2>Channel guide</h2></div>
+        <label class="search"><span>⌕</span><input id="search" type="search" placeholder="Search channel, language or category"></label>
+      </div>
+      <div id="categoryBar" class="categories"></div>
+      <p id="resultCount" class="result-count"></p>
+      <div id="channelGrid" class="channel-grid"></div>
+    </section>
+  </main>
+
+  <dialog id="loginDialog" class="modal">
+    <form class="modal-card" id="loginForm">
+      <button id="closeLogin" class="close" type="button" aria-label="Close">×</button>
+      <p class="eyebrow">PRIVATE CONNECTION</p>
+      <h2 id="loginTitle">Connect JioTV</h2>
+      <p id="loginCopy" class="modal-copy">Enter the 10-digit mobile number that receives your Jio OTP.</p>
+      <label id="mobileField">Mobile number<input id="mobile" inputmode="numeric" autocomplete="tel" enterkeyhint="send" maxlength="12" placeholder="10-digit Jio number"></label>
+      <label id="otpField" class="hidden">One-time password<input id="otp" inputmode="numeric" autocomplete="one-time-code" enterkeyhint="go" maxlength="8" placeholder="OTP from Jio"></label>
+      <button id="loginAction" class="primary" type="submit">Send OTP</button>
+      <button id="logoutButton" class="secondary hidden" type="button">Disconnect this browser</button>
+      <p id="loginStatus" class="status"></p>
+      <p class="fine">The number, OTP and provider tokens never enter browser storage or Git.</p>
+    </form>
+  </dialog>
+
+  <dialog id="playerDialog" class="player-modal">
+    <div class="player-shell">
+      <video id="video" autoplay playsinline></video>
+      <div class="player-gradient"></div>
+      <div class="player-top"><div><span class="live-dot">● LIVE</span><span class="source-badge">JioTV</span><span id="playerScope" class="scope-badge"></span></div><button id="closePlayer" type="button">×</button></div>
+      <button id="previousChannel" class="channel-step previous" type="button" aria-label="Previous channel"><span>‹</span><small>Previous<br>channel</small></button>
+      <button id="nextChannel" class="channel-step next" type="button" aria-label="Next channel"><small>Next<br>channel</small><span>›</span></button>
+      <section class="player-console" aria-label="Player and programme guide">
+        <div class="player-heading">
+          <div class="player-channel">
+            <p id="playerNumber"></p>
+            <h2 id="playerTitle">Loading channel…</h2>
+          </div>
+          <div class="player-programme-copy">
+            <p class="programme-kicker">NOW PLAYING</p>
+            <h3 id="playerProgramme">Requesting an eligible stream from your connected account.</h3>
+            <p id="playerProgrammeTime" class="programme-time">Live</p>
+            <p id="playerNext" class="programme-next">UP NEXT  Loading schedule…</p>
+            <p id="playerProgrammeDescription" class="programme-description"></p>
+          </div>
+          <div id="playerStatus" class="player-status">Connecting…</div>
+        </div>
+        <div class="timeline-row">
+          <span id="timelineStart">–:––</span>
+          <input id="playerTimeline" type="range" min="0" max="1" value="1" step="1" disabled aria-label="Live television timeline">
+          <span id="timelineNow">LIVE</span>
+        </div>
+        <div class="player-actions" aria-label="Playback controls">
+          <button id="rewindButton" type="button" aria-label="Rewind 15 seconds">↶ <span>15s</span></button>
+          <button id="playPauseButton" class="play-pause" type="button" aria-label="Pause">Ⅱ</button>
+          <button id="forwardButton" type="button" aria-label="Forward 15 seconds"><span>15s</span> ↷</button>
+          <button id="liveButton" class="live-button" type="button">● LIVE</button>
+          <button id="retryChannel" type="button">Retry channel</button>
+          <button id="guideButton" class="guide-button" type="button" aria-expanded="true">Hide programme guide</button>
+        </div>
+        <div id="programmeGuide" class="programme-guide" aria-label="Programmes">
+          <div class="guide-title"><strong>Today on <span id="guideChannelName">this channel</span></strong><span>Available past programmes can be opened from here</span></div>
+          <div id="programmeRail" class="programme-rail"></div>
+        </div>
+      </section>
+    </div>
+  </dialog>
+
+  <template id="channelTemplate">
+    <button class="channel-card" type="button">
+      <div class="channel-logo"><img alt="" loading="lazy"><span></span></div>
+      <div class="channel-meta"><p class="channel-number"></p><h3></h3><p class="channel-detail"></p></div>
+      <span class="play-mark">▶</span>
+    </button>
+  </template>
+</body>
+</html>

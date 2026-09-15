@@ -13,7 +13,7 @@ import android.widget.Button;
 import android.widget.TextView;
 
 public final class TvUi {
-    public static final int BG = Color.rgb(1, 5, 11);
+    public static final int BG = Color.rgb(5, 7, 16);
     public static final int SURFACE = Color.rgb(4, 18, 28);
     public static final int SURFACE_2 = Color.rgb(7, 32, 44);
     public static final int SURFACE_3 = Color.rgb(10, 74, 78);
@@ -27,6 +27,14 @@ public final class TvUi {
 
     private TvUi() {}
 
+    public static String istTime(long epoch){
+        java.text.SimpleDateFormat f=new java.text.SimpleDateFormat("h:mm a",java.util.Locale.forLanguageTag("en-IN"));
+        f.setTimeZone(java.util.TimeZone.getTimeZone("Asia/Kolkata"));return f.format(new java.util.Date(epoch));
+    }
+    public static String istDateTime(long epoch){
+        java.text.SimpleDateFormat f=new java.text.SimpleDateFormat("dd MMM, h:mm a 'IST'",java.util.Locale.forLanguageTag("en-IN"));
+        f.setTimeZone(java.util.TimeZone.getTimeZone("Asia/Kolkata"));return f.format(new java.util.Date(epoch));
+    }
     public static int dp(Context context, float value) {
         return Math.round(value * context.getResources().getDisplayMetrics().density);
     }
@@ -99,12 +107,12 @@ public final class TvUi {
                     focused ? 2.3f : 1f,
                     v.getContext()));
             v.animate()
-                    .scaleX(focused ? 1.035f : 1f)
-                    .scaleY(focused ? 1.035f : 1f)
-                    .translationZ(focused ? dp(v.getContext(), 8) : 0)
+                    .scaleX(focused ? 1.02f : 1f)
+                    .scaleY(focused ? 1.02f : 1f)
+                    .translationZ(focused ? dp(v.getContext(), 3) : 0)
                     .alpha(focused ? 1f : .96f)
                     .setInterpolator(new AccelerateDecelerateInterpolator())
-                    .setDuration(120)
+                    .setDuration(90)
                     .start();
         });
     }

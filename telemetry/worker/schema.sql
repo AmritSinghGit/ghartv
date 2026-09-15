@@ -30,3 +30,33 @@ CREATE TABLE IF NOT EXISTS ingest_windows (
     updated_at INTEGER NOT NULL,
     PRIMARY KEY (install_hash, window_bucket)
 );
+
+CREATE TABLE IF NOT EXISTS tv_devices (
+    device_id TEXT PRIMARY KEY,
+    device_secret_hash TEXT NOT NULL,
+    pairing_code_hash TEXT,
+    pairing_expires_at INTEGER,
+    paired_at INTEGER,
+    display_name TEXT NOT NULL DEFAULT 'GharTV',
+    created_at INTEGER NOT NULL,
+    last_seen_at INTEGER,
+    app_version TEXT,
+    version_code INTEGER
+);
+
+CREATE INDEX IF NOT EXISTS idx_tv_devices_pairing
+    ON tv_devices(pairing_code_hash, pairing_expires_at);
+
+CREATE TABLE IF NOT EXISTS tv_commands (
+    command_id TEXT PRIMARY KEY,
+    device_id TEXT NOT NULL,
+    command_type TEXT NOT NULL,
+    payload_json TEXT NOT NULL,
+    created_at INTEGER NOT NULL,
+    expires_at INTEGER NOT NULL,
+    acknowledged_at INTEGER,
+    FOREIGN KEY (device_id) REFERENCES tv_devices(device_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_tv_commands_pending
+    ON tv_commands(device_id, acknowledged_at, expires_at, created_at);

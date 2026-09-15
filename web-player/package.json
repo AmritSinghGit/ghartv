@@ -1,0 +1,14 @@
+{
+  "name": "ghartv-local-web-player",
+  "version": "0.6.0-rc5-navigation-review",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "node server.mjs",
+    "test": "node --test test/server.test.mjs"
+  },
+  "dependencies": {
+    "hls.js": "^1.6.13",
+    "shaka-player": "^5.2.10"
+  }
+}

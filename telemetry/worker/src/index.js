@@ -19,16 +19,37 @@ export default {
     const url = new URL(request.url);
     if (request.method === "OPTIONS") return cors(new Response(null, { status: 204 }));
     if (request.method === "GET" && url.pathname === "/health") {
-      return json({ ok: true, service: "ghartv-telemetry", schema: 1, retention_days: RETENTION_DAYS });
+      return json({ ok: true, service: "ghartv-control", schema: 3, revision: "0.6.0-rc4-owner-convergence", display_timezone: "Asia/Kolkata", retention_days: RETENTION_DAYS });
     }
     if (request.method === "POST" && url.pathname === "/v1/events") {
       return cors(await ingest(request, env));
+    }
+    if (request.method === "POST" && url.pathname === "/v1/device/register") {
+      return cors(await registerDevice(request, env));
+    }
+    if (request.method === "GET" && url.pathname === "/v1/device/commands") {
+      return cors(await deviceCommands(request, env, url));
+    }
+    if (request.method === "POST" && url.pathname === "/v1/device/commands/ack") {
+      return cors(await acknowledgeCommand(request, env));
     }
     if (request.method === "GET" && url.pathname === "/v1/admin/summary") {
       return adminSummary(request, env, url);
     }
     if (request.method === "GET" && url.pathname === "/v1/admin/export") {
       return adminExport(request, env, url);
+    }
+    if (request.method === "GET" && url.pathname === "/v1/admin/devices") {
+      return adminDevices(request, env);
+    }
+    if (request.method === "POST" && url.pathname === "/v1/admin/devices/claim") {
+      return claimDevice(request, env);
+    }
+    if (request.method === "GET" && url.pathname === "/v1/admin/commands") return commandHistory(request,env);
+    if (request.method === "POST" && url.pathname === "/v1/admin/broadcast") return createBroadcast(request,env);
+    if (request.method === "POST" && url.pathname === "/v1/admin/devices/revoke") return revokeDevice(request,env);
+    if (request.method === "POST" && url.pathname === "/v1/admin/commands") {
+      return createCommand(request, env);
     }
     if (request.method === "POST" && url.pathname === "/v1/admin/purge") {
       if (!authorizedAdmin(request, env)) return json({ error: "unauthorized" }, 401);
@@ -42,6 +63,152 @@ export default {
     await purge(env);
   },
 };
+
+async function registerDevice(request, env) {
+  if (!env.DB) return json({ error: "control_database_unavailable" }, 503);
+  if (!authorizedIngest(request, env)) return json({ error: "invalid_ingest_key" }, 401);
+  const body = await readJson(request);
+  if (!body) return json({ error: "invalid_json" }, 400);
+  const deviceId = safeHex(body.device_id, 32);
+  const deviceSecret = safeHex(body.device_secret, 64);
+  const pairingCode = String(body.pairing_code || "").trim();
+  if (!deviceId || !deviceSecret || !/^\d{6}$/.test(pairingCode)) {
+    return json({ error: "invalid_device_registration" }, 400);
+  }
+  const now = Date.now();
+  const [secretHash, pairingHash] = await Promise.all([
+    sha256(deviceSecret),
+    sha256("ghartv-pair:" + pairingCode),
+  ]);
+  const existing=await env.DB.prepare('SELECT device_secret_hash FROM tv_devices WHERE device_id=?').bind(deviceId).first();
+  if(existing&&!constantTimeEqual(existing.device_secret_hash,secretHash))return json({error:'registration_identity_mismatch'},403);
+  const registrations=await incrementRate(env,'__device_registration__',1);
+  if(registrations>100)return json({error:'registration_rate_limited'},429);
+  await env.DB.prepare(
+    `INSERT INTO tv_devices (
+       device_id, device_secret_hash, pairing_code_hash, pairing_expires_at,
+       display_name, created_at, last_seen_at, app_version, version_code
+     ) VALUES (?, ?, ?, ?, 'GharTV', ?, ?, ?, ?)
+     ON CONFLICT(device_id) DO UPDATE SET
+       device_secret_hash = excluded.device_secret_hash,
+       pairing_code_hash = CASE WHEN tv_devices.paired_at IS NULL THEN excluded.pairing_code_hash ELSE tv_devices.pairing_code_hash END,
+       pairing_expires_at = CASE WHEN tv_devices.paired_at IS NULL THEN excluded.pairing_expires_at ELSE tv_devices.pairing_expires_at END,
+       last_seen_at = excluded.last_seen_at,
+       app_version = excluded.app_version,
+       version_code = excluded.version_code`
+  ).bind(
+    deviceId, secretHash, pairingHash, now + 10 * 60 * 1000,
+    now, now, safeToken(body.app_version, 64, "unknown"),
+    safeInteger(body.version_code, 0, 1000000, 0)
+  ).run();
+  const row = await env.DB.prepare(
+    "SELECT paired_at FROM tv_devices WHERE device_id = ?"
+  ).bind(deviceId).first();
+  return json({ ok: true, paired: Boolean(row?.paired_at), pairing_expires_in_seconds: 600 });
+}
+
+async function deviceCommands(request, env, url) {
+  if (!env.DB) return json({ error: "control_database_unavailable" }, 503);
+  const device = await authorizedDevice(request, env, safeHex(url.searchParams.get("device_id"), 32));
+  if (!device) return json({ error: "unauthorized_device" }, 401);
+  const now = Date.now();
+  await env.DB.prepare(
+    "UPDATE tv_devices SET last_seen_at = ? WHERE device_id = ?"
+  ).bind(now, device.device_id).run();
+  if (!device.paired_at) return json({ ok: true, paired: false, commands: [] });
+  const rows = await env.DB.prepare(
+    `SELECT command_id, command_type, payload_json, created_at, expires_at
+     FROM tv_commands
+     WHERE device_id = ? AND acknowledged_at IS NULL AND expires_at > ?
+     ORDER BY created_at ASC LIMIT 10`
+  ).bind(device.device_id, now).all();
+  return json({
+    ok: true,
+    paired: true,
+    commands: (rows.results || []).map((row) => ({
+      id: row.command_id,
+      type: row.command_type,
+      payload: parseJson(row.payload_json),
+      created_at: row.created_at,
+      expires_at: row.expires_at,
+    })),
+  });
+}
+
+async function acknowledgeCommand(request, env) {
+  if (!env.DB) return json({ error: "control_database_unavailable" }, 503);
+  const body = await readJson(request);
+  if (!body) return json({ error: "invalid_json" }, 400);
+  const deviceId = safeHex(body.device_id, 32);
+  const commandId = safeUuid(body.command_id);
+  const device = await authorizedDevice(request, env, deviceId);
+  if (!device || !commandId) return json({ error: "unauthorized_device" }, 401);
+  const result = await env.DB.prepare(
+    `UPDATE tv_commands SET acknowledged_at = ?
+     WHERE command_id = ? AND device_id = ? AND acknowledged_at IS NULL`
+  ).bind(Date.now(), commandId, deviceId).run();
+  return json({ ok: true, acknowledged: Number(result.meta?.changes || 0) === 1 });
+}
+
+async function adminDevices(request, env) {
+  if (!authorizedAdmin(request, env)) return json({ error: "unauthorized" }, 401);
+  if (!env.DB) return json({ error: "control_database_unavailable" }, 503);
+  const rows = await env.DB.prepare(
+    `SELECT device_id, display_name, paired_at, created_at, last_seen_at,
+            app_version, version_code
+     FROM tv_devices WHERE paired_at IS NOT NULL ORDER BY last_seen_at DESC LIMIT 200`
+  ).all();
+  return json({ ok: true, devices: rows.results || [] });
+}
+
+async function claimDevice(request, env) {
+  if (!authorizedAdmin(request, env)) return json({ error: "unauthorized" }, 401);
+  if (!env.DB) return json({ error: "control_database_unavailable" }, 503);
+  const body = await readJson(request);
+  if (!body) return json({ error: "invalid_json" }, 400);
+  const pairingCode = String(body.pairing_code || "").trim();
+  if (!/^\d{6}$/.test(pairingCode)) return json({ error: "invalid_pairing_code" }, 400);
+  const pairingHash = await sha256("ghartv-pair:" + pairingCode);
+  const row = await env.DB.prepare(
+    `SELECT device_id FROM tv_devices
+     WHERE pairing_code_hash = ? AND pairing_expires_at > ? AND paired_at IS NULL
+     ORDER BY created_at DESC LIMIT 1`
+  ).bind(pairingHash, Date.now()).first();
+  if (!row) return json({ error: "pairing_code_not_found_or_expired" }, 404);
+  const displayName = safeToken(body.display_name, 48, "GharTV");
+  await env.DB.prepare(
+    `UPDATE tv_devices SET paired_at = ?, display_name = ?,
+       pairing_code_hash = NULL, pairing_expires_at = NULL
+     WHERE device_id = ? AND paired_at IS NULL`
+  ).bind(Date.now(), displayName, row.device_id).run();
+  return json({ ok: true, device_id: row.device_id, display_name: displayName });
+}
+
+async function createCommand(request, env) {
+  if (!authorizedAdmin(request, env)) return json({ error: "unauthorized" }, 401);
+  if (!env.DB) return json({ error: "control_database_unavailable" }, 503);
+  const body = await readJson(request);
+  if (!body) return json({ error: "invalid_json" }, 400);
+  const deviceId = safeHex(body.device_id, 32);
+  const type = safeToken(body.type, 24, "");
+  const message = scrubString(body.message || "").slice(0, 180);
+  if (!deviceId || type !== "message" || message.length < 1) {
+    return json({ error: "invalid_command" }, 400);
+  }
+  const device = await env.DB.prepare(
+    "SELECT paired_at FROM tv_devices WHERE device_id = ?"
+  ).bind(deviceId).first();
+  if (!device?.paired_at) return json({ error: "device_not_paired" }, 404);
+  const now = Date.now();
+  const lifetime = safeInteger(body.expires_in_seconds, 60, 86400, 3600);
+  const commandId = crypto.randomUUID();
+  await env.DB.prepare(
+    `INSERT INTO tv_commands (
+       command_id, device_id, command_type, payload_json, created_at, expires_at
+     ) VALUES (?, ?, 'message', ?, ?, ?)`
+  ).bind(commandId, deviceId, JSON.stringify({ message }), now, now + lifetime * 1000).run();
+  return json({ ok: true, command_id: commandId, expires_at: now + lifetime * 1000 });
+}
 
 async function ingest(request, env) {
   if (!env.DB) return json({ error: "collector_database_unavailable" }, 503);
@@ -238,7 +405,7 @@ async function adminSummary(request, env, url) {
        GROUP BY manufacturer, model, android_api ORDER BY installations DESC LIMIT 40`
     ).bind(since).all(),
     env.DB.prepare(
-      `SELECT date(received_at / 1000, 'unixepoch') AS day,
+      `SELECT date(received_at / 1000, 'unixepoch', '+5 hours', '+30 minutes') AS day,
               COUNT(*) AS events, COUNT(DISTINCT install_hash) AS installations
        FROM telemetry_events WHERE received_at >= ?
        GROUP BY day ORDER BY day`
@@ -248,6 +415,7 @@ async function adminSummary(request, env, url) {
     ok: true,
     generated_at: new Date().toISOString(),
     window_days: days,
+    display_timezone: "Asia/Kolkata",
     retention_days: RETENTION_DAYS,
     totals: totals || { events: 0, installations: 0 },
     events: events.results || [],
@@ -292,6 +460,53 @@ function authorizedAdmin(request, env) {
   return Boolean(env.ADMIN_TOKEN && constantTimeEqual(supplied, env.ADMIN_TOKEN));
 }
 
+function authorizedIngest(request, env) {
+  const supplied = request.headers.get("X-GharTV-Ingest-Key") || "";
+  return Boolean(env.INGEST_KEY && constantTimeEqual(supplied, env.INGEST_KEY));
+}
+
+async function authorizedDevice(request, env, deviceId) {
+  if (!deviceId) return null;
+  const auth = request.headers.get("Authorization") || "";
+  const supplied = auth.startsWith("Device ") ? safeHex(auth.slice(7), 64) : "";
+  if (!supplied) return null;
+  const row = await env.DB.prepare(
+    "SELECT device_id, device_secret_hash, paired_at FROM tv_devices WHERE device_id = ?"
+  ).bind(deviceId).first();
+  if (!row) return null;
+  const suppliedHash = await sha256(supplied);
+  return constantTimeEqual(suppliedHash, row.device_secret_hash) ? row : null;
+}
+
+async function readJson(request) {
+  const length = Number(request.headers.get("content-length") || 0);
+  if (length > 16 * 1024) return null;
+  try {
+    const raw = await request.text();
+    if (new TextEncoder().encode(raw).length > 16 * 1024) return null;
+    const value = JSON.parse(raw);
+    return value && typeof value === "object" && !Array.isArray(value) ? value : null;
+  } catch {
+    return null;
+  }
+}
+
+async function sha256(value) {
+  const bytes = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(String(value)));
+  return [...new Uint8Array(bytes)].map((byte) => byte.toString(16).padStart(2, "0")).join("");
+}
+
+function safeHex(value, length) {
+  const clean = String(value || "").trim().toLowerCase();
+  return new RegExp(`^[a-f0-9]{${length}}$`).test(clean) ? clean : "";
+}
+
+function safeUuid(value) {
+  const clean = String(value || "").trim().toLowerCase();
+  return /^[a-f0-9]{8}-[a-f0-9]{4}-[1-5][a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/.test(clean)
+    ? clean : "";
+}
+
 function constantTimeEqual(left, right) {
   const a = new TextEncoder().encode(String(left));
   const b = new TextEncoder().encode(String(right));
@@ -333,4 +548,47 @@ function cors(response) {
   headers.set("Access-Control-Allow-Headers", "Content-Type, X-GharTV-Ingest-Key, Authorization");
   headers.set("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
   return new Response(response.body, { status: response.status, statusText: response.statusText, headers });
+}
+
+async function commandHistory(request,env) {
+  if(!authorizedAdmin(request,env))return json({error:'unauthorized'},401);
+  if(!env.DB)return json({error:'control_database_unavailable'},503);
+  const rows=await env.DB.prepare(`SELECT command_id,device_id,created_at,expires_at,acknowledged_at FROM tv_commands ORDER BY created_at DESC LIMIT 200`).all();
+  const now=Date.now();
+  return json({ok:true,limit:200,commands:(rows.results||[]).map(row=>({...row,status:row.acknowledged_at?'shown':row.expires_at<=now?'expired':'queued'}))});
+}
+async function revokeDevice(request,env) {
+  if(!authorizedAdmin(request,env))return json({error:'unauthorized'},401);
+  const body=await readJson(request),id=safeHex(body?.device_id,32);
+  if(!id||!env.DB)return json({error:'invalid_device'},400);
+  await env.DB.batch([
+    env.DB.prepare('UPDATE tv_devices SET paired_at=NULL,pairing_code_hash=NULL,pairing_expires_at=NULL WHERE device_id=?').bind(id),
+    env.DB.prepare('UPDATE tv_commands SET expires_at=? WHERE device_id=? AND acknowledged_at IS NULL').bind(Date.now(),id)
+  ]);
+  return json({ok:true,revoked:true});
+}
+async function createBroadcast(request,env) {
+  if(!authorizedAdmin(request,env))return json({error:'unauthorized'},401);
+  if(!env.DB)return json({error:'control_database_unavailable'},503);
+  const body=await readJson(request);if(!body)return json({error:'invalid_json'},400);
+  const requestId=safeUuid(body.request_id),ids=Array.isArray(body.device_ids)?[...new Set(body.device_ids.map(v=>safeHex(v,32)))]:[];
+  const message=scrubString(body.message||'').slice(0,180);
+  if(!requestId||!ids.length||ids.length>50||ids.some(v=>!v)||!message)return json({error:'invalid_broadcast'},400);
+  const now=Date.now(),ttl=safeInteger(body.expires_in_seconds,60,86400,3600),statements=[],commands=[];
+  for(const deviceId of ids){
+    const device=await env.DB.prepare('SELECT paired_at FROM tv_devices WHERE device_id=?').bind(deviceId).first();
+    if(!device?.paired_at)return json({error:'device_not_paired'},409);
+    const hash=await sha256('ghartv-message:'+requestId+':'+deviceId);
+    const commandId=hash.slice(0,8)+'-'+hash.slice(8,12)+'-4'+hash.slice(13,16)+'-a'+hash.slice(17,20)+'-'+hash.slice(20,32);
+    const previous=await env.DB.prepare('SELECT payload_json,expires_at FROM tv_commands WHERE command_id=?').bind(commandId).first();
+    if(previous&&parseJson(previous.payload_json).message!==message)return json({error:'request_id_conflict'},409);
+    if(!previous){
+      const rate=await env.DB.prepare('SELECT COUNT(*) AS n FROM tv_commands WHERE device_id=? AND created_at>?').bind(deviceId,now-60000).first();
+      if(Number(rate?.n||0)>=5)return json({error:'message_rate_limited'},429);
+      statements.push(env.DB.prepare(`INSERT OR IGNORE INTO tv_commands(command_id,device_id,command_type,payload_json,created_at,expires_at) VALUES(?,?,'message',?,?,?)`).bind(commandId,deviceId,JSON.stringify({message}),now,now+ttl*1000));
+    }
+    commands.push({command_id:commandId,device_id:deviceId,expires_at:previous?.expires_at||now+ttl*1000});
+  }
+  if(statements.length)await env.DB.batch(statements);
+  return json({ok:true,request_id:requestId,queued:commands.length,commands,delivery:'queued_not_confirmed_shown'});
 }

@@ -21,8 +21,8 @@ android {
         applicationId = "in.ghartv.nova"
         minSdk = 26
         targetSdk = 35
-        versionCode = 16
-        versionName = "0.5.5-rc2-movies-picture"
+        versionCode = 21
+        versionName = "0.6.0-rc5-navigation-review"
     }
 
     buildFeatures {

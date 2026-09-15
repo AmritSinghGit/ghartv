@@ -72,6 +72,10 @@ public final class Telemetry {
     private static final String KEY_CONFIG_KEY = "config_ingest_key";
     private static final String KEY_CONFIG_ENABLED = "config_enabled";
     private static final String KEY_CONFIG_FETCHED_AT = "config_fetched_at";
+    private static final String KEY_LAUNCH_PENDING = "launch_pending";
+    private static final String KEY_LAUNCH_STAGE = "launch_stage";
+    private static final String KEY_LAUNCH_STARTED_AT = "launch_started_at";
+    private static final String KEY_LAUNCH_VERSION_CODE = "launch_version_code";
 
     private static final String QUEUE_DIR = "telemetry";
     private static final String QUEUE_FILE = "events.jsonl";
@@ -130,6 +134,7 @@ public final class Telemetry {
                     "queue_depth", queuedCount(appContext)
             ));
             enqueueUpload(appContext, false);
+            HardwareDiagnostics.maybeReport(appContext);
         }
     }
 
@@ -150,6 +155,7 @@ public final class Telemetry {
         if (enabled) {
             event(context, "consent_changed", data("enabled", true, "source", "tv_settings"));
             enqueueUpload(context, true);
+            HardwareDiagnostics.maybeReport(context);
         } else {
             clearQueuedEvents(context, false);
         }
@@ -194,6 +200,59 @@ public final class Telemetry {
         String safe = safeToken(screen, 40, "unknown");
         prefs(context).edit().putString(KEY_LAST_SCREEN, safe).apply();
         event(context, "screen_view", data("screen", safe));
+    }
+
+    /**
+     * Starts a consent-gated startup trace. If Android killed the preceding run before
+     * the guide became healthy, the next launch reports the last completed stage. This
+     * does not attempt to guess whether the cause was a crash, power loss or force-stop.
+     */
+    public static void beginLaunch(Context context, String firstStage) {
+        if (context == null || !isEnabled(context)) return;
+        SharedPreferences preferences = prefs(context);
+        boolean previousPending = preferences.getBoolean(KEY_LAUNCH_PENDING, false);
+        String previousStage = preferences.getString(KEY_LAUNCH_STAGE, "unknown");
+        long previousStartedAt = preferences.getLong(KEY_LAUNCH_STARTED_AT, 0L);
+        int previousVersion = preferences.getInt(KEY_LAUNCH_VERSION_CODE, 0);
+        if (previousPending) {
+            long elapsed = previousStartedAt <= 0L ? 0L
+                    : Math.max(0L, System.currentTimeMillis() - previousStartedAt);
+            event(context, "previous_launch_incomplete", data(
+                    "last_stage", safeToken(previousStage, 48, "unknown"),
+                    "previous_version_code", previousVersion,
+                    "elapsed_bucket", durationBucket(elapsed)
+            ));
+        }
+        preferences.edit()
+                .putBoolean(KEY_LAUNCH_PENDING, true)
+                .putString(KEY_LAUNCH_STAGE, safeToken(firstStage, 48, "created"))
+                .putLong(KEY_LAUNCH_STARTED_AT, System.currentTimeMillis())
+                .putInt(KEY_LAUNCH_VERSION_CODE, BuildConfig.VERSION_CODE)
+                .apply();
+        event(context, "startup_stage", data("stage", firstStage));
+    }
+
+    public static void launchStage(Context context, String stage) {
+        if (context == null || !isEnabled(context)) return;
+        String safe = safeToken(stage, 48, "unknown");
+        prefs(context).edit().putString(KEY_LAUNCH_STAGE, safe).apply();
+        event(context, "startup_stage", data("stage", safe));
+    }
+
+    public static void markLaunchHealthy(Context context) {
+        if (context == null || !isEnabled(context)) return;
+        SharedPreferences preferences = prefs(context);
+        long startedAt = preferences.getLong(KEY_LAUNCH_STARTED_AT, 0L);
+        long duration = startedAt <= 0L ? 0L : Math.max(0L, System.currentTimeMillis() - startedAt);
+        preferences.edit()
+                .putBoolean(KEY_LAUNCH_PENDING, false)
+                .putString(KEY_LAUNCH_STAGE, "healthy")
+                .apply();
+        event(context, "startup_healthy", data(
+                "duration_ms", duration,
+                "screen", preferences.getString(KEY_LAST_SCREEN, "unknown")
+        ));
+        enqueueUpload(context, false);
     }
 
     public static void event(Context context, String name, JSONObject attributes) {
@@ -704,6 +763,7 @@ public final class Telemetry {
             if (context != null && isEnabled(context)) {
                 JSONObject attrs = data(
                         "thread", safeToken(thread == null ? "unknown" : thread.getName(), 48, "unknown"),
+                        "launch_stage", prefs(context).getString(KEY_LAUNCH_STAGE, "unknown"),
                         "error_type", error == null ? "Unknown" : error.getClass().getSimpleName(),
                         "message", scrubString(readable(error)),
                         "fingerprint", errorFingerprint(error),
@@ -713,6 +773,14 @@ public final class Telemetry {
             }
             if (previousCrashHandler != null) previousCrashHandler.uncaughtException(thread, error);
         });
+    }
+
+    private static String durationBucket(long durationMs) {
+        if (durationMs < 5_000L) return "under_5s";
+        if (durationMs < 30_000L) return "5_to_30s";
+        if (durationMs < 5 * 60_000L) return "30s_to_5m";
+        if (durationMs < 60 * 60_000L) return "5m_to_1h";
+        return "over_1h";
     }
 
     private static final class CollectorConfig {
