@@ -1,0 +1,48 @@
+name: Record verified RC5 owner delivery
+on:
+  push:
+    paths: ['.github/workflows/rc5-control-record.yml']
+permissions:
+  contents: write
+jobs:
+  record:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - uses: actions/checkout@v5
+      - name: Read exact published delivery and update current control files only
+        run: |
+          set -euo pipefail
+          curl --proto '=https' --proto-redir '=https' -fLsS --max-time 90 https://github.com/AmritSinghGit/ghartv/releases/download/v0.6.0-rc5/GHARTV_RC5_REVIEW.zip -o /tmp/ghartv-rc5-control.zip
+          python - <<'PY'
+          from pathlib import Path
+          import hashlib,io,json,subprocess,zipfile
+          source='7915a279e78f3490fc599c4b7f0447d7a9f18ceb';p=Path('/tmp/ghartv-rc5-control.zip')
+          assert hashlib.sha256(p.read_bytes()).hexdigest()=='be2ed0aba9144ccb11bb803c5a80c31fedbdbacd54b75c24e9578ef90f67ba03'
+          with zipfile.ZipFile(p) as z:
+            command=z.read('GHARTV_RC5_REVIEW/GHARTV_SYNC_CURRENT_AND_REPORT.command')
+            assert hashlib.sha256(command).hexdigest()=='38a92415bda87e4a6035c5a62248b668cf6c81528bd33ba198544a71f9059828'
+            manifest=z.read('GHARTV_RC5_REVIEW/assets/review-manifest.json');assert hashlib.sha256(manifest).hexdigest()=='58290ba6c1fc20de4a107ff538d416e883df0a9c70f42b2b3bbe6d1da8dd6fc2'
+            m=json.loads(manifest);assert m['source_sha']==source and m['version_code']==21
+            companion=z.read('GHARTV_RC5_REVIEW/assets/GharTV-review-companion.zip');assert hashlib.sha256(companion).hexdigest()==m['companion_sha256']
+          with zipfile.ZipFile(io.BytesIO(companion)) as z:
+            for name in ('CURRENT_HANDOFF.md','GHARTV_LANE_PROGRESS.md','docs/owner.html'):Path(name).write_bytes(z.read(name))
+          Path('GHARTV_SYNC_CURRENT_AND_REPORT.command').write_bytes(command)
+          p=Path('.ghartv-owner-state.json');s=json.loads(p.read_text());s.update(current_candidate=m['version_name'],current_candidate_sha=source,candidate_branch=m['branch'],candidate_pr=1,version_code=21,candidate_release='v0.6.0-rc5',candidate_release_status='FULL_BUNDLED_REVIEW_PUBLISHED_OWNER_SIGNING_PENDING',unsigned_apk_sha256=m['unsigned_sha256'],apk_sha256=None,owner_decision='REVIEW_PENDING',owner_command_sha256='38a92415bda87e4a6035c5a62248b668cf6c81528bd33ba198544a71f9059828',owner_command_mode='BUNDLED_REVIEW_TYPED_SIGNATURE_CHECKOUT_READ_ONLY',mac_sync='AWAITING_CYAN7_RC5_RECEIPT',source_build_run=34972164195,source_build_result='NATIVE_RELEASE_AND_TYPED_SIGNER_AND_BROWSER_CHECKS_PASS',last_owner_run='GHARTV-CYAN-6-NET-R1-20260915T115027Z-40855',last_owner_result='SIGNER_EXIT_0_CERTIFICATE_EXTRACTION_FAILED_EMULATOR_UNCHANGED',next_action='Run full RC5 bundle, review scoped channel Next/Previous and NOW/NEXT, confirm local collector status, return safe receipt before promotion.');p.write_text(json.dumps(s,indent=2)+'\n')
+          Path('REVIEW_CANDIDATE.json').write_text(json.dumps({**m,'release_tag':'v0.6.0-rc5','build_run':34972164195,'owner_command_sha256':'38a92415bda87e4a6035c5a62248b668cf6c81528bd33ba198544a71f9059828','complete_bundle_sha256':'be2ed0aba9144ccb11bb803c5a80c31fedbdbacd54b75c24e9578ef90f67ba03','owner_decision':'REVIEW_PENDING','production_version_code':17},indent=2)+'\n')
+          evidence={'schema':'ghartv.rc5-validation.v1','source_sha':source,'version_code':21,'native_and_browser_workflow_run':34972164195,'job':104390830552,'result':'SUCCESS','checks':['actual Android release compilation and package identity','typed Android ApkVerifier public RC8 certificate matches pinned fingerprint','disposable-test-signed APK accepted; unsigned and tampered rejected','selected-channel order and EPG epoch normalization in JVM','real HTTP/Chromium category/search scoped next/previous and Now/Next','local collector-token presence status; token never returned','mobile horizontal overflow and JS errors','existing real SQLite broadcast/idempotency/revoke contracts'],'private_provider_accounts_used':False,'test_keys_or_signed_fixture_published':False,'owner_mac_or_Hisense_execution':'NOT_PERFORMED','public_update_promoted':False,'signed_owner_apk_sha256':None,'measured_owner_latency_improvement':'NOT_MEASURED','full_bundle_sha256':'be2ed0aba9144ccb11bb803c5a80c31fedbdbacd54b75c24e9578ef90f67ba03','initial_owner_certificate_output_format':'NOT_PROVIDED_EXACT_FAILURE_NOT_REPRODUCED'}
+          Path('docs/rc5-review-validation.json').write_text(json.dumps(evidence,indent=2)+'\n')
+          pub=json.loads(Path('update/latest.json').read_text());assert pub['versionCode']==17 and pub['sourceCommit']=='de3106e3e97a9147b06347a3d66c4e5923cdbbcc'
+          subprocess.run(['bash','-n','GHARTV_SYNC_CURRENT_AND_REPORT.command'],check=True)
+          print('RC5_CONTROL_PUBLISHED_BYTES_VERIFIED; PUBLIC_RC8_UNCHANGED')
+          PY
+          test "$(git ls-remote origin refs/heads/main | cut -f1)" = "$GITHUB_SHA"
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add CURRENT_HANDOFF.md GHARTV_LANE_PROGRESS.md docs/owner.html GHARTV_SYNC_CURRENT_AND_REPORT.command .ghartv-owner-state.json REVIEW_CANDIDATE.json docs/rc5-review-validation.json
+          git rm .github/workflows/rc5-control-record.yml
+          test -z "$(git diff --cached --name-only -- android-tv update/latest.json)"
+          git commit -m 'delivery: current RC5 review identity and verified bundled launcher; public RC8 preserved'
+          git push origin HEAD:main
+          echo "CURRENT_CONTROL_SHA=$(git rev-parse HEAD)"
+          rm /tmp/ghartv-rc5-control.zip
