@@ -1,0 +1,102 @@
+name: Verify and publish owner review pages
+on:
+  push:
+    paths: ['.github/workflows/owner-pages-delivery.yml']
+permissions:
+  contents: write
+jobs:
+  browser-and-pages:
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    env:
+      SOURCE: d2f364982ce2972d6a6c75588f206ef098edd65b
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: '24'
+      - name: Fetch exact published companion and command, never owner credentials
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/ghartv-proof
+          curl --proto '=https' --proto-redir '=https' -fLsS --max-time 90 https://github.com/AmritSinghGit/ghartv/releases/download/v0.6.0-rc4/GharTV-review-companion.zip -o /tmp/ghartv-proof/companion.zip
+          curl --proto '=https' --proto-redir '=https' -fLsS --max-time 90 https://github.com/AmritSinghGit/ghartv/releases/download/v0.6.0-rc4/GHARTV_SYNC_CURRENT_AND_REPORT.command -o /tmp/ghartv-proof/runner.command
+          printf '%s  %s\n' 40b77d93ba163674c34130c48f093482ae442da3d4e7787598ca6a3edfde2a3f /tmp/ghartv-proof/companion.zip f9d11248be07981968cdc0b0e5808cc05daa8d1faccca66cb80b2178129adab2 /tmp/ghartv-proof/runner.command | sha256sum -c -
+          unzip -q /tmp/ghartv-proof/companion.zip -d /tmp/ghartv-proof/app
+          npm --prefix /tmp/ghartv-proof install --ignore-scripts --no-audit --no-fund playwright@1.55.1
+          /tmp/ghartv-proof/node_modules/.bin/playwright install --with-deps chromium
+      - name: Real browser navigation, local gateway and broadcast confirmation contract
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat > /tmp/ghartv-proof/check.mjs <<'JS'
+          import assert from 'node:assert/strict';
+          import {spawn} from 'node:child_process';
+          import {createServer} from 'node:http';
+          import {readFile} from 'node:fs/promises';
+          import {chromium} from 'playwright';
+          const root='/tmp/ghartv-proof/app',origin='http://127.0.0.1:8874';
+          const proc=spawn(process.execPath,[root+'/web-player/server.mjs'],{env:{...process.env,GHARTV_WEB_HOST:'127.0.0.1',GHARTV_WEB_PORT:'8874',GHARTV_WEB_SHA:process.env.SOURCE,GHARTV_DISABLE_KEYCHAIN:'1'},stdio:'ignore'});
+          let browser;let pages;
+          try{
+            let health;
+            for(let i=0;i<50;i++){try{health=await (await fetch(origin+'/api/health')).json();break}catch{await new Promise(r=>setTimeout(r,100))}}
+            assert.equal(health.commit,process.env.SOURCE);assert.equal(health.version,'0.6.0-rc4-owner-convergence');
+            assert.equal((await fetch(origin+'/owner-api/v1/admin/summary')).status,401);
+            const raw=await (await fetch(origin+'/owner.html')).text();
+            const boot=JSON.parse(raw.match(/id="owner-bootstrap" type="application\/json">(.*?)<\/script>/s)[1]);assert.match(boot.token,/^[a-f0-9]{64}$/);
+            assert.equal((await fetch(origin+'/owner-api/v1/admin/summary',{headers:{Authorization:'Bearer '+boot.token}})).status,503);
+            assert.equal((await fetch(origin+'/owner-api/v1/admin/broadcast',{method:'POST',headers:{Authorization:'Bearer '+boot.token,Origin:'https://untrusted.invalid'},body:'{}'})).status,403);
+            assert.equal((await fetch(origin+'/vendor/hls.min.js')).status,200);
+            browser=await chromium.launch({headless:true});const page=await browser.newPage({viewport:{width:1440,height:1000}});const errors=[];page.on('pageerror',e=>errors.push(e.message));
+            const id='a'.repeat(32),when=Date.parse('2026-09-15T00:00:00Z');let sent=0;
+            await page.route('https://raw.githubusercontent.com/**',route=>route.fulfill({json:{versionCode:17,versionName:'0.5.4-rc8-pre-birthday-recovery',sourceCommit:'de3106e3e97a9147b06347a3d66c4e5923cdbbcc'}}));
+            await page.route('**/owner-api/**',route=>{
+              const path=new URL(route.request().url()).pathname;
+              if(path.endsWith('/broadcast')){sent++;return route.fulfill({json:{ok:true,queued:1}})}
+              if(path.endsWith('/summary'))return route.fulfill({json:{ok:true,generated_at:'2026-09-15T00:00:00Z',totals:{events:1,installations:1},failures:[],events:[],versions:[]}});
+              if(path.endsWith('/export'))return route.fulfill({json:{ok:true,events:[{received_at:when,install_hash:id,event_name:'hardware_snapshot',version_code:20,attributes:{ram_mb_bucket:2048,cpu_cores:4,display_width:1920,display_height:1080}}]}});
+              if(path.endsWith('/devices'))return route.fulfill({json:{ok:true,devices:[{device_id:id,display_name:'Fixture TV',app_version:'review20',last_seen_at:when}]}});
+              return route.fulfill({json:{ok:true,commands:[]}});
+            });
+            await page.goto(origin+'/owner.html');await page.waitForFunction(()=>document.querySelector('#status').textContent.includes('Connected'));
+            assert.match(await page.locator('#pairedDevices').innerText(),/05:30:00 IST/);assert.match(await page.locator('#hardwareRows').innerText(),/2048/);
+            assert.equal(await page.locator('#targetDevice option[value="__all__"]').count(),1);
+            await page.locator('#ownerMessage').fill('Fixture only');page.once('dialog',d=>d.dismiss());await page.locator('#sendMessage').click();assert.equal(sent,0);
+            page.once('dialog',d=>d.accept());await page.locator('#sendMessage').click();await page.waitForFunction(()=>document.querySelector('#commandStatus').textContent.includes('Queued'));assert.equal(sent,1);
+            await page.locator('#lock').click();assert.equal(await page.locator('#ownerMessage').inputValue(),'');assert.ok(!(await page.locator('#hardwareRows').innerText()).includes('2048'));
+            assert.deepEqual(errors,[]);
+            await page.goto(origin+'/');assert.equal(await page.locator('video').count(),1);assert.deepEqual(errors,[]);
+            pages=createServer(async(req,res)=>{try{const name=req.url==='/'?'downloads.html':req.url.slice(1);if(name!=='downloads.html'){res.writeHead(404);res.end();return}res.setHeader('Content-Type','text/html');res.end(await readFile(root+'/docs/'+name))}catch{res.writeHead(500);res.end()}}).listen(8875,'127.0.0.1');
+            const download=await browser.newPage();
+            await download.route('https://raw.githubusercontent.com/**',r=>r.fulfill({json:{versionCode:17,versionName:'0.5.4-rc8',apkUrl:'https://github.com/AmritSinghGit/ghartv/releases/download/v0.5.4-rc8/GharTV-Jio-Live.apk',sha256:'a'.repeat(64)}}));
+            await download.route('https://api.github.com/**',r=>r.fulfill({json:[{tag_name:'v0.5.3',name:'Older public release',prerelease:false,html_url:'https://github.com/AmritSinghGit/ghartv/releases/tag/v0.5.3',assets:[{name:'GharTV-Jio-Live.apk',browser_download_url:'https://github.com/AmritSinghGit/ghartv/releases/download/v0.5.3/GharTV-Jio-Live.apk',digest:'sha256:'+'b'.repeat(64),size:100}]},{tag_name:'v0.6.0-rc4',prerelease:true,assets:[{name:'GharTV-review-unsigned.apk',browser_download_url:'https://github.com/AmritSinghGit/ghartv/releases/download/v0.6.0-rc4/GharTV-review-unsigned.apk'}]}]}));
+            await download.goto('http://127.0.0.1:8875/');await download.waitForFunction(()=>document.body.innerText.includes('v0.5.3'));
+            assert.equal(await download.locator('a[href*="unsigned.apk"]').count(),0);
+            console.log('BROWSER_GATEWAY_AUTH_IST_HARDWARE_CONFIRM_LOCK_WEB_UI_AND_ARCHIVE=PASS');
+          }finally{if(browser)await browser.close();if(pages)pages.close();proc.kill('SIGTERM');}
+          JS
+          cd /tmp/ghartv-proof
+          node check.mjs
+      - name: Publish docs and canonical release launcher only; keep public TV feed
+        run: |
+          set -euo pipefail
+          test "$(git ls-remote origin refs/heads/main | cut -f1)" = "$GITHUB_SHA"
+          python - <<'PY'
+          from pathlib import Path
+          import json,hashlib
+          root=Path('/tmp/ghartv-proof/app')
+          for name in ('docs/index.html','docs/owner.html','docs/downloads.html','CURRENT_HANDOFF.md','GHARTV_LANE_PROGRESS.md'):
+            Path(name).write_bytes((root/name).read_bytes())
+          Path('GHARTV_SYNC_CURRENT_AND_REPORT.command').write_bytes(Path('/tmp/ghartv-proof/runner.command').read_bytes())
+          p=Path('.ghartv-owner-state.json');data=json.loads(p.read_text());data.update(current_candidate='0.6.0-rc4-owner-convergence',current_candidate_sha='d2f364982ce2972d6a6c75588f206ef098edd65b',candidate_branch='codex/ghartv-remove-auto-preview',candidate_pr=1,version_code=20,candidate_release='v0.6.0-rc4',candidate_release_status='UNSIGNED_CLOUD_RELEASE_AND_OWNER_COMMAND_PUBLISHED',owner_decision='REVIEW_PENDING',owner_command_sha256='f9d11248be07981968cdc0b0e5808cc05daa8d1faccca66cb80b2178129adab2',owner_command_mode='ARTIFACT_FIRST_CHECKOUT_READ_ONLY',mac_sync='AWAITING_OWNER_CYAN6_RECEIPT',apk_sha256=None,unsigned_apk_sha256='a594bc6ddc5d5448c20ac2850c0a3aed432954381c9ce9e840bb8fb56ff8aa5f',production_version='0.5.4-rc8-pre-birthday-recovery',production_version_code=17,reviewed_application_sha='de3106e3e97a9147b06347a3d66c4e5923cdbbcc',production_apk_sha256='8cff8f85403da5924865fddc687dbff11089d7c498f9863e483a7d8123c1ce13',next_action='Run release artifact command. No checkout mutation; install code20 on existing emulator, open existing8790 owner/player, verify backend separately.');p.write_text(json.dumps(data,indent=2)+'\n')
+          Path('docs/owner-review-release.json').write_text(json.dumps({'source':'d2f364982ce2972d6a6c75588f206ef098edd65b','version':'0.6.0-rc4-owner-convergence','version_code':20,'review_only':True,'cloud_build_run':34960401643,'browser_checks':'controlled local contract; no provider-account or owner-runtime proof','public_tv_feed_changed':False},indent=2)+'\n')
+          PY
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add docs/index.html docs/owner.html docs/downloads.html docs/owner-review-release.json .ghartv-owner-state.json GHARTV_SYNC_CURRENT_AND_REPORT.command CURRENT_HANDOFF.md GHARTV_LANE_PROGRESS.md
+          git rm .github/workflows/owner-pages-delivery.yml
+          test -z "$(git diff --cached --name-only -- android-tv update/latest.json)"
+          git commit -m 'docs: publish current owner reader, historical downloads and exact artifact-first review entry'
+          git push origin HEAD:main
+          echo "PAGES_DELIVERY_SHA=$(git rev-parse HEAD)"
