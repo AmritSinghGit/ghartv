@@ -1,38 +1,30 @@
----
-lane: ghartv
-entity_type: project
-analytics_tenant: ghartv
-updated: 2026-09-15
-status: OWNER_REVIEW_PENDING
----
 <!-- GHARTV-MANAGED-LANE-NOTE:v1 -->
-# GharTV — 0.6.0 RC4 owner convergence
+# GharTV 0.6.0 RC5 — navigation & Now/Next review
 
-## Reconciled authority — do not return to old RC2
+Continue the existing GharTV project, PR1 and `codex/ghartv-remove-auto-preview`. No new checkout, runtime, provider or tenant. Public `0.5.4-rc8-pre-birthday-recovery`/code17 remains unchanged. This code21 candidate is review only.
 
-Same independent GharTV project/repository/package in.ghartv.nova. Existing development branch `codex/ghartv-remove-auto-preview`, PR1, published donor SHA `45f689ad0310e07dec77e01fd0d310316ea8aab8`. That branch already contained 0.6.0 Android code19, owner pairing/messages, and the local JioTV browser player. Main `11521cdc4faf745be317a5ffdadc26413e91d47c` instead advertises the separately approved RC8 recovery code17. Main's old RC2 current-handoff and Cyan5 launcher had not followed these changes.
+## Last actual owner receipt
 
-Owner receipt GHARTV-CYAN-5-20260915T074638Z-22943 stopped at SOURCE_SYNC because the obsolete launcher required main/a clean tree. Non-main alone explains that generic blocker; it does not establish that owner edits are dirty. Signing was NOT ATTEMPTED. Obsidian write/readback passed; the memory bridge timed out; no emulator update occurred. Known local commit45f689ad is already on GitHub, not lost local-only code.
+`GHARTV-CYAN-6-NET-R1-20260915T115027Z-40855`: local signing exit0, followed by "APK certificate unavailable"; no installation. Local browser health/source and Obsidian readback succeeded. Bridge handoff0, sync timed out. No private playback logs were supplied or remotely accessible. These facts must not be converted into a working APK or a diagnosed provider outage.
 
-## Current review
+## This candidate
 
-0.6.0-rc4-owner-convergence / code20 continues that existing PR1 branch. Exact application SHA, unsigned/signed hashes and companion-package hash come from the published review-manifest and actual owner receipt. Compiled payload provenance is independent of the checkout being edited. No main merge or TV production promotion is implied.
+- Certificate identity uses Android's native ApkVerifier API and hashes verified X.509 bytes. No dependency on English apksigner stdout or a loosened signature check. Native signature validity, compiled-payload equality, expected public RC8 certificate and existing installed certificate all remain gates. Missing/bad signatures and mismatched keys stop; no key replacement, uninstallation or data clear.
+- Guide CH+/CH- use the actual filtered list, not the all-channel catalogue. Player preserves the exact ordered scope across Activity recreation; explicit number tuning does not silently widen subsequent next/previous navigation. Retry/next-working uses the same scope. Web captures the visible category/search list when playback starts and steps only through that snapshot.
+- Android tiles now have actual NOW and NEXT rows. A bounded visible-card EPG fetch updates those rows without reloading logos or the grid. Epoch seconds/milliseconds/microseconds are normalised; programme order and day rollover are handled. Empty/upstream-missing data is labelled, never made up.
+- Player reads today's schedule without waiting for tomorrow. Metadata failure is not a playback failure. Stale responses after changing channels cannot overwrite the current channel. The browser opens playback independently of the EPG response rather than waiting for three schedule calls first.
+- Nested Media3 error causes/status codes are examined so transient transport failures receive a bounded retry and terminal provider/DRM errors remain explicit. Duplicate error dialogs are suppressed. Browser retries a transient fatal HLS network failure once; access denial is not bypassed. No claim all channels are fixed or a measured speedup exists without device/account evidence.
+- Refined midnight/cyan/lilac surfaces, restrained focus motion, explicit UP NEXT programme text separate from NEXT CHANNEL controls, readable card/overlay sizing, static backgrounds, and no CSS backdrop blur over video. Automatic guide video previews stay OFF as requested previously; the channel spotlight opens playback on OK.
+- Local owner console automatically checks the saved collector config, reports present/missing/private-permission/origin states, and keeps the credential server-side. The expected file is `~/Library/Application Support/GharTV/telemetry/collector.env`, key `GHARTV_TELEMETRY_ADMIN_TOKEN`. Do not ask the owner to paste it into chat or invent/rotate a replacement. Public hosted owner shell still requires its own authentication.
 
-The review launcher reads checkout identity/status only and never switches branches, stashes, resets, cleans, commits unknown work or fetches/replaces that development tree. It downloads a pinned companion runtime and exact APK, uses the existing local signing configuration, verifies signature against RC8, refuses downgrades/different same-code apps, installs on the one existing named AVD, and verifies installed bytes/foreground. Only managed regenerable companion files are replaced. The existing browser service remains port8790; a proven owned old PID may be replaced, never an arbitrary listener. Provider Keychain session, TV data, keys and source remain.
+## Review route
 
-## Changes in this review
+Use the full release kit and its RUN_GHARTV_REVIEW.command. It seeds only checksum-verified public artifacts and replaces the known canonical launcher. Exact source/manifest/companion/APK values come from the generated release record. The existing local signing.env supplies the same key without password prompts. The launcher does not change the development checkout. One existing AVD, one service at127.0.0.1:8790, owner page /owner.html. Bundled installation skips GitHub publication/Worker deployment; live provider playback and collector reads still need connectivity. A subsequent normal networked launcher run can publish the same locally signed review APK and check the existing backend. Never promote without owner acceptance.
 
-- Corrected-name baseline remains Mom, Amrit, Harjas, Rajvinder, Manu, Dad, Simrit. Existing recorded dates are 4 January, 7 March, 1 July, 18 August, 22 August, 12 September, 4 October respectively. No unverified new dates were invented. Appearance now edits per-TV date overrides, validates day/month, uses Asia/Kolkata for birthday evaluation, and expires held previews after five minutes. It does not restore the removed birthday splash entrypoint.
-- Existing owner page adds confirmed broadcast to one or all listed paired TVs (max50), one-hour expiry, idempotent request IDs, message history with queued/shown/expired states, and revocation. Deployment sends NO test message. A shown ACK does not prove the human read it. Existing-device secret ownership is checked before registration updates.
-- Backend remains the same existing Cloudflare Worker and D1, with an additive schema and compatible diagnostics routes. The owner command can deploy the supplied revision through existing Wrangler authentication after checking configured database identity. Its actual backend revision/authentication readback is reported; source publication alone is not deployment success.
-- Telemetry keeps original optional diagnostics. Extra hardware details require separate local consent: RAM buckets, low-RAM/memory-pressure state, cores/ABI/chipset, display mode and decoder inventory. No serial/AndroidID/IP/precise location/provider account. Hardware is a sampled observation, not a uniquely identified customer or guaranteed playback capability.
-- Playback authorisation no longer shares its queue with programme-guide fetching. Obsolete queued tunes are cancelled/skipped. Startup buffering is explicitly set to750ms, recovery2000ms, retained buffer10–30s and16/32MB low/normal-RAM targets. Actual tune-to-first-frame, dropped-frame/source/bandwidth/buffer samples expose the trade-off; real-TV improvement remains to measure. No promise that network or provider delay disappeared.
-- Picture remains per-channel Fit/Crop/Stretch with actual source-quality controls/local live stats. AI super-resolution is NOT running; hardware/output/source resolution are distinct and DRM restrictions are not bypassed.
-- Browser service health is independent of Keychain/provider reads, keeps original authorised-provider request logic, and adds the same owner HTML behind a loopback-only gateway. Collector admin token stays server-side; browser receives a temporary local capability. Credentials are not put in URLs/logs. Provider playback is not certified without an authenticated real run.
-- Owner/browser/log timestamps display IST, while UTC epochs/ISO remain machine storage. Daily collector grouping is IST. Historical signed-name releases are available on a downloads page; unsigned/debug/test artifacts excluded, no automatic downgrade or data clear.
+The installer opens and verifies the app's foreground activity; that is not visual or physical Hisense playback validation. Compare two channels in Devotional, News or a language filter, use Next/Previous and retry, then inspect NOW/NEXT. Check owner credential presence and actual fresh events separately. No global TV log harvesting; private player/collector logs remain on the Mac and must not be pushed to GitHub.
 
-## Review/continuity outcomes are separate
+## Continuity and limits
 
-Obsidian writes directly to the existing Amrit Executive Memory lane note and verifies bytes. Bridge runs only once after the review work, with a ten-second stage budget and separate pending/time-out result. It no longer blocks installing/opening the candidate. Preserve all prior receipts; no global session number invented.
+GharTV stays independent of VCNow; Analytics tenant `ghartv` stays on Operon PR61 and owner-control39. Update the existing managed Obsidian lane note with each actual receipt. Do not claim every replica synced when the bridge timed out. Cleanup only known redundant lane downloads and a verified superseded managed companion after replacement health; do not sweep source, keys, saved sessions or histories.
 
-GharTV stays independent of VCNow and uses existing Operon Analytics tenant ghartv/lane operon-analytics/PR61 and owner-control PR39. No new tenant/database/worktree/controller. Real account-aware Punjabi-movie aggregation, personal provider entitlement verification, billing isolation, commercial rights and AI enhancement remain future work. Do not equate provider app discovery with an authorised subscription or commercial licence.
+AI super-resolution, universal provider entitlement checks and native licensed movie aggregation are not implemented. Other requested RC4 features (local family-date editing, paired owner messages, hardware opt-in and IST) remain. No automatic/silent mandatory-update policy or code21 production deployment is performed by this release.

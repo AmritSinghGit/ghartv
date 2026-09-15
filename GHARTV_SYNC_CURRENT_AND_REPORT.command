@@ -1,8 +1,8 @@
 #!/bin/bash
-# Same RC4. Restore existing configured signing; never generate a key or prompt for passwords.
+# RC5 review. Restore existing configured signing; never generate a key or prompt for passwords.
 set -u
 umask 077
-printf '\033[38;5;51m\nGharTV · CYAN REVIEW 6 · NETWORK RECOVERY R1 · same 0.6.0 RC4 · artifact review · development checkout preserved\033[0m\n'
+printf '\033[38;5;51m\nGharTV · CYAN REVIEW 7 · 0.6.0 RC5 · scoped navigation + Now/Next · artifact review · development checkout preserved\033[0m\n'
 if ! command -v python3 >/dev/null 2>&1; then echo 'Python 3 is required; no TV or source changed.'; exit 1; fi
 CLOSE_MARKER="${TMPDIR:-/tmp}/ghartv-review-close-$$"
 export GHARTV_CLOSE_MARKER="$CLOSE_MARKER"
@@ -10,20 +10,21 @@ python3 - "$0" "$@" <<'PY'
 from __future__ import annotations
 import argparse, datetime as dt, fcntl, hashlib, io, json, os, re, shlex, shutil, socket, stat, subprocess, sys, tempfile, time, zipfile, signal, urllib.request, urllib.error
 from pathlib import Path
-REPO='AmritSinghGit/ghartv'; SOURCE='d2f364982ce2972d6a6c75588f206ef098edd65b'
-PROD='de3106e3e97a9147b06347a3d66c4e5923cdbbcc'; TAG='v0.6.0-rc4'; PACKAGE='in.ghartv.nova'
-VERSION='0.6.0-rc4-owner-convergence'; UNSIGNED='a594bc6ddc5d5448c20ac2850c0a3aed432954381c9ce9e840bb8fb56ff8aa5f'
+REPO='AmritSinghGit/ghartv'; SOURCE='7915a279e78f3490fc599c4b7f0447d7a9f18ceb'
+PROD='de3106e3e97a9147b06347a3d66c4e5923cdbbcc'; TAG='v0.6.0-rc5'; PACKAGE='in.ghartv.nova'
+BACKEND_VERSION='0.6.0-rc4-owner-convergence'
+VERSION='0.6.0-rc5-navigation-review'; UNSIGNED='e4ece353918a573cab76f6de2a741b4ba62ddbc927a28a6fcaad80abe0a43c3c'
 PROD_HASH='8cff8f85403da5924865fddc687dbff11089d7c498f9863e483a7d8123c1ce13'
-MANIFEST_SHA='52ec393fb49268f368eb2ce44d209aa433ceac3f4ed18ad5eb135248ac7265d7'; AVD='GharTV_Nova_Manual_google_tv_API36'; ASSET='GharTV-review-current.apk'
+MANIFEST_SHA='58290ba6c1fc20de4a107ff538d416e883df0a9c70f42b2b3bbe6d1da8dd6fc2'; AVD='GharTV_Nova_Manual_google_tv_API36'; ASSET='GharTV-review-current.apk'
 HOME=Path.home(); SELF=Path(sys.argv[1]).resolve(); STATE=HOME/'Library/Application Support/GharTV/owner-review'; CURRENT=STATE/'current'
 PROJECT=Path(os.environ.get('GHARTV_PROJECT',str(HOME/'Downloads/GharTV_Nova_v0.4.2'))).expanduser()
 RUNTIME=STATE/'runtime-current';COLLECTOR='https://ghartv-telemetry.ghartv-47d9a0.workers.dev'; manifest={}
-EMBEDDED_MANIFEST='{\n  "schema": "ghartv.review-manifest.v2",\n  "source_sha": "d2f364982ce2972d6a6c75588f206ef098edd65b",\n  "branch": "codex/ghartv-remove-auto-preview",\n  "pr": 1,\n  "version_name": "0.6.0-rc4-owner-convergence",\n  "version_code": 20,\n  "unsigned_sha256": "a594bc6ddc5d5448c20ac2850c0a3aed432954381c9ce9e840bb8fb56ff8aa5f",\n  "companion_sha256": "40b77d93ba163674c34130c48f093482ae442da3d4e7787598ca6a3edfde2a3f",\n  "production_unchanged": true,\n  "owner_signed_apk_sha256": null,\n  "owner_mac_run": "NOT_EXECUTED",\n  "ai_super_resolution": "NOT_IMPLEMENTED"\n}\n'
+EMBEDDED_MANIFEST='{\n  "schema": "ghartv.review-manifest.v2",\n  "source_sha": "7915a279e78f3490fc599c4b7f0447d7a9f18ceb",\n  "branch": "codex/ghartv-remove-auto-preview",\n  "pr": 1,\n  "version_name": "0.6.0-rc5-navigation-review",\n  "version_code": 21,\n  "unsigned_sha256": "e4ece353918a573cab76f6de2a741b4ba62ddbc927a28a6fcaad80abe0a43c3c",\n  "companion_sha256": "0f0ca74b0bc7bcd0392cbad2986163b75535a545f1c5928a82b4b907e5ba8ee7",\n  "production_unchanged": true,\n  "owner_signed_apk_sha256": null,\n  "owner_mac_run": "NOT_EXECUTED",\n  "ai_super_resolution": "NOT_IMPLEMENTED"\n}\n'
 IST=dt.timezone(dt.timedelta(hours=5,minutes=30))
-RUN_ID='GHARTV-CYAN-6-NET-R1-'+dt.datetime.now(dt.timezone.utc).strftime('%Y%m%dT%H%M%SZ')+'-'+str(os.getpid()); RUN=STATE/'runs'/RUN_ID
+RUN_ID='GHARTV-CYAN-7-'+dt.datetime.now(dt.timezone.utc).strftime('%Y%m%dT%H%M%SZ')+'-'+str(os.getpid()); RUN=STATE/'runs'/RUN_ID
 parser=argparse.ArgumentParser();parser.add_argument('--memory-only',action='store_true');parser.add_argument('--signed-apk',type=Path);parser.add_argument('--noninteractive',action='store_true');parser.add_argument('--skip-backend-deploy',action='store_true');parser.add_argument('--bundled-review',action='store_true');args=parser.parse_args(sys.argv[2:])
 r=dict(time_ist=dt.datetime.now(IST).isoformat(),time_utc=dt.datetime.now(dt.timezone.utc).isoformat(),checkout='READ_ONLY_NOT_INSPECTED',backend='NOT_CHECKED',web_player='NOT_STARTED',run_id=RUN_ID,lane_id='ghartv',repository=REPO,operon_session=os.environ.get('OPERON_SESSION_ID','UNBOUND'),
- production_source=PROD,review_source=SOURCE,version=VERSION,version_code=20,unsigned_apk_sha256=UNSIGNED,signed_apk_sha256='NOT_VERIFIED',
+ production_source=PROD,review_source=SOURCE,version=VERSION,version_code=21,unsigned_apk_sha256=UNSIGNED,signed_apk_sha256='NOT_VERIFIED',
  delivery_sha='NOT_READ',local_sha='NOT_READ',production_feed='NOT_CHECKED',obsidian='NOT_WRITTEN',memory_bridge='NOT_RUN',
  review_release='NOT_CHECKED',emulator='UNCHANGED',physical_tv='NOT_VERIFIED',owner_decision='REVIEW_PENDING',
  dashboard='NOT_OPENED',signing_mode='NOT_ATTEMPTED',signing_error_code='NONE',signer_exit_code='NOT_RUN',
@@ -50,11 +51,11 @@ def call(argv,timeout=45,check=True,env=None):
 # Only immutable, known public artifacts can enter the local distribution cache.
 ARTIFACTS={
  'review-manifest.json': MANIFEST_SHA,
- 'GharTV-review-companion.zip':'40b77d93ba163674c34130c48f093482ae442da3d4e7787598ca6a3edfde2a3f',
+ 'GharTV-review-companion.zip':'0f0ca74b0bc7bcd0392cbad2986163b75535a545f1c5928a82b4b907e5ba8ee7',
  'GharTV-review-unsigned.apk':UNSIGNED,
  'GharTV-Jio-Live-v0.5.4-rc8-pre-birthday-recovery.apk':PROD_HASH,
 }
-NETWORK_RECOVERY='CYAN6-NETWORK-R1'
+NETWORK_RECOVERY='CYAN7-VERIFIED-REVIEW'
 CACHE=STATE/'artifact-cache'
 
 
@@ -157,9 +158,9 @@ def recovery_note():
  if not vault.is_dir():r['obsidian']='EXISTING_VAULT_NOT_FOUND';return
  dest=vault/'90 System/Operon Portfolio/Handoffs/Terminal Runs/ghartv';mkdir(dest)
  note=dest/(RUN_ID+'-network-recovery.md')
- body='# GharTV RC4 — distribution recovery\n\n'
- body+='Same Android source `'+SOURCE+'`, code20. This is a launcher/network repair, not an APK rebuild.\n\n'
- body+='Previous owner run GHARTV-CYAN-6-20260915T111739Z-35925 timed out in continuity downloads before signing, app installation or Obsidian write. Its generic error does not identify the stalled endpoint or network stage.\n\n'
+ body='# GharTV RC5 — navigation and certificate review\n\n'
+ body+='Same Android source `'+SOURCE+'`, code21. This is the navigation/Now-Next app candidate, plus certificate verifier repair.\n\n'
+ body+='Previous owner run GHARTV-CYAN-6-NET-R1-20260915T115027Z-40855 signed successfully but stopped at certificate extraction before install. Web/Obsidian succeeded; current result is independent.\n\n'
  body+='This run verifies local/bundled/cached immutable bytes first. Public release publication and live collector status are separate from local installation. Production is not changed. Other lanes must not infer a signed APK or running emulator from this note alone.\n\n```text\n'+receipt()+'```\n'
  write(note,body)
  if note.read_bytes()!=body.encode():raise Stop('RECOVERY_NOTE_READBACK_FAILED')
@@ -174,11 +175,11 @@ def observe_production():
   r['production_feed']='UNAVAILABLE_LOCAL_REVIEW_ONLY_NO_PRODUCTION_WRITE';return
  r['production_feed']=str(m.get('versionName','UNKNOWN'))+' / code '+str(m.get('versionCode','UNKNOWN'))
  r['observed_production_source']=m.get('sourceCommit','UNKNOWN')
- if int(m.get('versionCode',0))>=20:raise Stop('Production has caught up or advanced; review identity needs reconciliation')
+ if int(m.get('versionCode',0))>=21:raise Stop('Production has caught up or advanced; review identity needs reconciliation')
 
 
 def publish_review_after_local_success():
- if r.get('emulator')!='RC4_INSTALLED_BYTES_VERIFIED_AND_FOREGROUND':return
+ if r.get('emulator')!='RC5_INSTALLED_BYTES_VERIFIED_AND_FOREGROUND':return
  if args.bundled_review:
   r['review_release']='LOCAL_SIGNED_VERIFIED_GITHUB_UPLOAD_DEFERRED_BUNDLED_REVIEW';return
  if not shutil.which('gh'):
@@ -199,7 +200,7 @@ def publish_review_after_local_success():
  except Exception:r['review_release']='GITHUB_PUBLICATION_PENDING_LOCAL_REVIEW_PRESERVED'
 
 def git(*a):return call(['git','-C',PROJECT,*a]).stdout.strip()
-def receipt():return 'GHARTV_CYAN_REVIEW_6_HANDOFF\n'+'\n'.join(k.upper()+'='+str(v) for k,v in r.items())+'\n'
+def receipt():return 'GHARTV_CYAN_REVIEW_7_HANDOFF\n'+'\n'.join(k.upper()+'='+str(v) for k,v in r.items())+'\n'
 def persist():
  r['evidence']=str(RUN)
  write(RUN/'handoff.txt',receipt());write(RUN/'receipt.json',json.dumps(r,indent=2)+'\n');write(CURRENT/'handoff.txt',receipt())
@@ -237,7 +238,7 @@ def reconcile():
   download(f'https://github.com/{REPO}/releases/download/{TAG}/review-manifest.json',meta)
   if digest(meta)!=MANIFEST_SHA:raise Stop('RELEASE_MANIFEST_CHECKSUM_MISMATCH')
   manifest=json.loads(meta.read_text())
-  if manifest.get('source_sha')!=SOURCE or manifest.get('unsigned_sha256')!=UNSIGNED or manifest.get('version_code')!=20:raise Stop('RELEASE_IDENTITY_MISMATCH')
+  if manifest.get('source_sha')!=SOURCE or manifest.get('unsigned_sha256')!=UNSIGNED or manifest.get('version_code')!=21:raise Stop('RELEASE_IDENTITY_MISMATCH')
   r['phase']='ARTIFACT_COMPANION'
   bundle=t/'companion.zip';download(f'https://github.com/{REPO}/releases/download/{TAG}/GharTV-review-companion.zip',bundle)
   if digest(bundle)!=manifest['companion_sha256']:raise Stop('COMPANION_CHECKSUM_MISMATCH')
@@ -379,10 +380,17 @@ def review():
   java=Path(detected)
  env['JAVA_HOME']=str(java);env['PATH']=str(java/'bin')+':'+env.get('PATH','')
  def cert(path):
-  out=call([signer,'verify','--print-certs',path],env=env).stdout
-  values=re.findall(r'Signer #\d+ certificate SHA-256 digest: ([a-fA-F0-9]{64})',out)
-  if not values:raise Stop('APK certificate unavailable')
-  return set(v.lower() for v in values)
+  r['phase']='VERIFY_APK_CERTIFICATE';r['certificate_probe_artifact']=path.name
+  helper=RUNTIME/'tools/GharTVApkVerifier.java';jar=signer.parent/'lib/apksigner.jar'
+  if not helper.is_file() or not jar.is_file():raise Stop('APK_VERIFIER_LIBRARY_MISSING: preserve key and app; installed Android tools required')
+  checked=call([str(java/'bin/java'),'-cp',str(jar),str(helper),str(path)],60,False,env)
+  r['certificate_probe_exit']=checked.returncode
+  try:data=json.loads(checked.stdout.strip())
+  except ValueError:raise Stop('APK_VERIFIER_OUTPUT_INVALID: native result unavailable; no install or key change') from None
+  if checked.returncode or data.get('ok') is not True:raise Stop('APK_VERIFY_FAILED: '+str(data.get('error','UNKNOWN')))
+  values=data.get('certificate_sha256',[])
+  if not values or not all(re.fullmatch('[a-f0-9]{64}',v) for v in values):raise Stop('APK_VERIFIER_CERTIFICATE_INVALID')
+  r['certificate_engine']='ANDROID_APKSIG_LIBRARY';return set(values)
  with tempfile.TemporaryDirectory(prefix='.rc4-review-',dir=CURRENT) as t:
    t=Path(t);u=t/'unsigned.apk';c=t/'candidate.apk';p=t/'production.apk'
    r['phase']='ARTIFACT_UNSIGNED_APK'
@@ -399,13 +407,17 @@ def review():
      try:
       m=json.loads(meta.read_text());reuse=m.get('source')==SOURCE and m.get('sha256')==digest(prior)
      except (ValueError,OSError):reuse=False
-    if reuse:shutil.copyfile(prior,c);r['signing_mode']='REUSED_LOCAL_RC4_PENDING_VERIFICATION'
+    if reuse:shutil.copyfile(prior,c);r['signing_mode']='REUSED_LOCAL_RC5_PENDING_VERIFICATION'
     else:configured_sign(signer,align,u,c,env)
-   if payload(u)!=payload(c) or cert(c)!=cert(p):raise Stop('Payload/signature continuity failed; no upload or installation')
+   if payload(u)!=payload(c):raise Stop('SIGNED_PAYLOAD_DIFFERS_FROM_BUILT_APK: no install')
+   candidateCert=cert(c);referenceCert=cert(p)
+   if referenceCert!={'40a9d8bf6b1c557b3d6fd02acef075368dd13e28691f207a297202d0d5ec233c'}:raise Stop('PUBLIC_REFERENCE_CERTIFICATE_CHANGED: no install')
+   if candidateCert!=referenceCert:raise Stop('RELEASE_SIGNER_MISMATCH: saved key differs from public RC8; no uninstall or key replacement')
+   r['signing_certificate_sha256']=','.join(sorted(candidateCert))
    r['phase']='SIGNED_PAYLOAD_AND_CERTIFICATE_VERIFIED'
    print('3 / 5 · Signed APK payload and original certificate verified. Open local review first.',flush=True)
    badging=call([aapt,'dump','badging',c],env=env).stdout
-   if not all(v in badging for v in ["name='in.ghartv.nova'","versionCode='20'","versionName='0.6.0-rc4-owner-convergence'"]):raise Stop('Wrong package or Android version')
+   if not all(v in badging for v in ["name='in.ghartv.nova'","versionCode='21'","versionName='0.6.0-rc5-navigation-review'"]):raise Stop('Wrong package or Android version')
    # Development checkout is intentionally untouched; verified artifact bytes are authoritative.
    h=digest(c);r['signed_apk_sha256']=h
    r['review_release']='SIGNED_LOCAL_VERIFIED_GITHUB_PUBLICATION_PENDING';r['phase']='EMULATOR_SELECTION'
@@ -433,7 +445,7 @@ def review():
     time.sleep(2)
    else:raise Stop('AVD boot incomplete; no installation')
    codes=re.findall(r'versionCode=(\d+)',call([adb,'-s',serial,'shell','dumpsys','package',PACKAGE]).stdout)
-   if codes and int(codes[0])>20:raise Stop('Newer version installed; no downgrade')
+   if codes and int(codes[0])>21:raise Stop('Newer version installed; no downgrade')
    def pull_installed(destination):
     paths=call([adb,'-s',serial,'shell','pm','path',PACKAGE]).stdout.splitlines()
     if len(paths)!=1 or not paths[0].startswith('package:'):raise Stop('Unexpected installed package layout')
@@ -441,17 +453,17 @@ def review():
    if codes:
     old=t/'installed.apk';pull_installed(old)
     if cert(old)!=cert(c):raise Stop('Installed signer differs; no uninstall or storage clearing')
-    if int(codes[0])==20 and digest(old)!=h:raise Stop('Different code-20 APK installed; reconcile first')
-   if not codes or int(codes[0])<20:
+    if int(codes[0])==21 and digest(old)!=h:raise Stop('Different code-21 APK installed; reconcile first')
+   if not codes or int(codes[0])<21:
     result=call([adb,'-s',serial,'install','-r',c],120).stdout
     if 'Success' not in result:raise Stop('Android did not confirm install')
    installed=t/'installed-final.apk';pull_installed(installed)
    if digest(installed)!=h:raise Stop('Installed byte verification failed')
-   r['emulator']='RC4_INSTALLED_BYTES_VERIFIED';r['phase']='OPENING_REVIEW'
+   r['emulator']='RC5_INSTALLED_BYTES_VERIFIED';r['phase']='OPENING_REVIEW'
    call([adb,'-s',serial,'shell','input','keyevent','KEYCODE_WAKEUP'],check=False)
    call([adb,'-s',serial,'shell','am','force-stop',PACKAGE])
    out=call([adb,'-s',serial,'shell','am','start','-W','-n',PACKAGE+'/.MainActivity']).stdout
-   if 'Status: ok' not in out:raise Stop('RC4_INSTALLED_LAUNCH_NOT_CONFIRMED: no data clear or downgrade attempted')
+   if 'Status: ok' not in out:raise Stop('RC5_INSTALLED_LAUNCH_NOT_CONFIRMED: no data clear or downgrade attempted')
    foreground=False
    for _ in range(8):
     time.sleep(1)
@@ -461,17 +473,17 @@ def review():
     if pid and lines:
      match=re.search(r'in\.ghartv\.nova/(?:in\.ghartv\.nova\.)?\.?(MainActivity|LoginActivity|PlayerActivity|MovieHubActivity|SplashActivity)',lines[0])
      r['review_screen']=match.group(1) if match else 'GHARTV_FOREGROUND';foreground=True;break
-   if not foreground:raise Stop('RC4_INSTALLED_FOREGROUND_NOT_CONFIRMED: launch did not settle in GharTV; installed identity retained in this receipt')
+   if not foreground:raise Stop('RC5_INSTALLED_FOREGROUND_NOT_CONFIRMED: launch did not settle in GharTV; installed identity retained in this receipt')
    c.chmod(0o600);os.replace(c,target)
    write(CURRENT/'review-artifact.json',json.dumps({'source':SOURCE,'sha256':h,'unsigned_sha256':UNSIGNED,'version':VERSION},indent=2)+'\n')
-   r['emulator']='RC4_INSTALLED_BYTES_VERIFIED_AND_FOREGROUND';r['phase']='REVIEW_OPEN';r['status']='REVIEW_READY'
-   print('RC4 is installed and GharTV is the foreground Android activity: '+r['review_screen'],flush=True)
+   r['emulator']='RC5_INSTALLED_BYTES_VERIFIED_AND_FOREGROUND';r['phase']='REVIEW_OPEN';r['status']='REVIEW_READY'
+   print('RC5 is installed and GharTV is the foreground Android activity: '+r['review_screen'],flush=True)
    obsolete=CURRENT/'GharTV-review-unsigned.apk'
    if obsolete.is_file() and not obsolete.is_symlink() and digest(obsolete)==UNSIGNED:
     r['cleanup_bytes']+=obsolete.stat().st_size;obsolete.unlink();r['cleanup_count']+=1
 
 def cleanup():
- allowed={'GHARTV_CYAN_REVIEW_5.zip':'41daac68572e83561d7ef7dd4c0b503d890a5e8cec97979b176fa61d289516df','GHARTV_CYAN_REVIEW_4.zip':'9693852663be42086f7b869e3374a37d9f010dc23fcebaefb19724bc8dbd90fe','GHARTV_SYNC_CURRENT_AND_REPORT.command':'e797636a8718a67273ef68ce240c9d5e3bbe5f1201ea96b4864c70e0248654b5','GHARTV_RC4_SOURCE_HANDOFF.zip':'3968480bf420c9e9b4c16eee83a89e171dddf78c7d16eb4bd77031f0b789547d','GHARTV_CYAN_REVIEW_2.zip':'7d8906d5ba84be44bb1546f4f6887e5259f734b61eedb0201c99b263901443b8','GHARTV_RC5_EXACT_STABLE_R1.command':'3d3a6e0a69b0ba4ce105913d92801af4bec6cb895da37f91a5d9383ef5149901'}
+ allowed={'GHARTV_CYAN_REVIEW_5.zip':'41daac68572e83561d7ef7dd4c0b503d890a5e8cec97979b176fa61d289516df','GHARTV_CYAN_REVIEW_4.zip':'9693852663be42086f7b869e3374a37d9f010dc23fcebaefb19724bc8dbd90fe','GHARTV_SYNC_CURRENT_AND_REPORT.command':'e797636a8718a67273ef68ce240c9d5e3bbe5f1201ea96b4864c70e0248654b5','GHARTV_RC5_SOURCE_HANDOFF.zip':'3968480bf420c9e9b4c16eee83a89e171dddf78c7d16eb4bd77031f0b789547d','GHARTV_CYAN_REVIEW_2.zip':'7d8906d5ba84be44bb1546f4f6887e5259f734b61eedb0201c99b263901443b8','GHARTV_RC5_EXACT_STABLE_R1.command':'3d3a6e0a69b0ba4ce105913d92801af4bec6cb895da37f91a5d9383ef5149901'}
  d=HOME/'Downloads'
  if not d.is_dir() or d.is_symlink():return
  for p in d.iterdir():
@@ -505,7 +517,14 @@ def stop_owned_web_if_needed():
   time.sleep(.1)
  else:raise Stop('OWNED_WEB_PROCESS_DID_NOT_STOP: no forced kill')
 
+def inspect_collector():
+ config=HOME/'Library/Application Support/GharTV/telemetry/collector.env'
+ r['collector_config']='NOT_FOUND';r['collector_auth']='NOT_CHECKED'
+ if not config.is_file() or config.is_symlink():return
+ r['collector_config']='PRESENT';return
+
 def open_dashboard():
+ inspect_collector()
  if not RUNTIME.is_dir():raise Stop('Companion runtime not prepared')
  if not shutil.which('node'):r['web_player']='NODE_NOT_AVAILABLE';return
  try:health=local_json('http://127.0.0.1:8790/api/health')
@@ -553,7 +572,7 @@ def collector_check_and_deploy():
   with opener.open(req,timeout=12) as response:return json.loads(response.read(2*1024*1024))
  try:health=read('/health')
  except Exception:health={}
- if health.get('revision')!=VERSION and not args.skip_backend_deploy:
+ if health.get('revision')!=BACKEND_VERSION and not args.skip_backend_deploy:
   db=values.get('GHARTV_TELEMETRY_D1_ID','')
   if not re.fullmatch('[a-f0-9-]{36}',db) or values.get('GHARTV_TELEMETRY_D1_NAME')!='ghartv-telemetry' or values.get('GHARTV_TELEMETRY_WORKER')!='ghartv-telemetry':r['backend']='EXISTING_BACKEND_IDENTITY_NOT_VERIFIED';return
   if not shutil.which('npx'):r['backend']='WRANGLER_RUNTIME_UNAVAILABLE';return
@@ -568,7 +587,7 @@ def collector_check_and_deploy():
   call(prefix+['d1','execute','ghartv-telemetry','--remote','--file',str(worker/'schema.sql'),'--yes'],90,env=env)
   call(prefix+['deploy','--keep-vars'],120,env=env)
   health=read('/health')
- if health.get('revision')!=VERSION:r['backend']='MATCHING_BACKEND_NOT_DEPLOYED';return
+ if health.get('revision')!=BACKEND_VERSION:r['backend']='MATCHING_BACKEND_NOT_DEPLOYED';return
  summary=read('/v1/admin/summary?days=1',True);devices=read('/v1/admin/devices',True);commands=read('/v1/admin/commands',True)
  if not all(x.get('ok') is True for x in (summary,devices,commands)):raise Stop('COLLECTOR_AUTHENTICATED_READ_FAILED')
  r['backend']='REVISION_AND_AUTHENTICATED_READS_VERIFIED';r['collector_events_24h']=summary.get('totals',{}).get('events','UNAVAILABLE');r['collector_read_at_ist']=dt.datetime.now(IST).isoformat()

@@ -1,0 +1,26 @@
+{
+  "schema": "ghartv.rc5-validation.v1",
+  "source_sha": "7915a279e78f3490fc599c4b7f0447d7a9f18ceb",
+  "version_code": 21,
+  "native_and_browser_workflow_run": 34972164195,
+  "job": 104390830552,
+  "result": "SUCCESS",
+  "checks": [
+    "actual Android release compilation and package identity",
+    "typed Android ApkVerifier public RC8 certificate matches pinned fingerprint",
+    "disposable-test-signed APK accepted; unsigned and tampered rejected",
+    "selected-channel order and EPG epoch normalization in JVM",
+    "real HTTP/Chromium category/search scoped next/previous and Now/Next",
+    "local collector-token presence status; token never returned",
+    "mobile horizontal overflow and JS errors",
+    "existing real SQLite broadcast/idempotency/revoke contracts"
+  ],
+  "private_provider_accounts_used": false,
+  "test_keys_or_signed_fixture_published": false,
+  "owner_mac_or_Hisense_execution": "NOT_PERFORMED",
+  "public_update_promoted": false,
+  "signed_owner_apk_sha256": null,
+  "measured_owner_latency_improvement": "NOT_MEASURED",
+  "full_bundle_sha256": "be2ed0aba9144ccb11bb803c5a80c31fedbdbacd54b75c24e9578ef90f67ba03",
+  "initial_owner_certificate_output_format": "NOT_PROVIDED_EXACT_FAILURE_NOT_REPRODUCED"
+}
