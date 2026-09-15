@@ -64,6 +64,12 @@ async function messages(){if(!auth||document.hidden)return;try{const r=await get
 $('revokeDevice').onclick=async()=>{const id=$('targetDevice').value;if(!id||id==='__all__')return;text('commandStatus','');if(!window.confirm('Revoke this selected TV and expire its pending messages?'))return;try{await post('/v1/admin/devices/revoke',{device_id:id});text('commandStatus','TV revoked. Pair again from the television to resume messages.');refresh();}catch(e){text('commandStatus',e.message)}};
 const previousLock=$('lock').onclick;$('lock').onclick=()=>{previousLock();renderControlDevices([]);table('hardwareRows',null,[]);table('messageHistory',null,[]);$('ownerMessage').value='';$('pairCode').value='';pendingBroadcast=null;};
 setInterval(messages,15000);messages();
+
+async function localConfigStatus(){
+  if(!ENDPOINT.startsWith(location.origin+'/owner-api')||!auth||!$('configStatus'))return;
+  try{const x=await get(ENDPOINT+'/config-status',true);text('configStatus',x.token_present?'Saved collector credential found. Live authorization is checked by the report requests.':'Collector configuration: '+x.config_status+'. Expected '+x.location+' with '+x.field+'. No token was displayed or changed.');}catch{text('configStatus','Local configuration check unavailable. The report connection is not verified.');}
+}
+localConfigStatus();setInterval(localConfigStatus,30000);
 </script>
 
 </body></html>

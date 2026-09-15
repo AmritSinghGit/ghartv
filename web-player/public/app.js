@@ -1,15 +1,16 @@
 const $ = (id) => document.getElementById(id);
-const state = { connected: false, otpSent: false, channels: [], filtered: [], category: "All", currentIndex: -1, currentChannel: null, programs: [], hls: null, shaka: null, ticker: null, busy: false, playbackGeneration: 0, focusGuideAfterLoad: false, widevineSupport: null };
+const state = { connected: false, otpSent: false, channels: [], filtered: [], category: "All", currentIndex: -1, currentChannel: null, programs: [], scope: [], scopeLabel: "All", retryAttempt: 0, playerError: "", playbackAbort: null, hls: null, shaka: null, ticker: null, busy: false, playbackGeneration: 0, focusGuideAfterLoad: false, widevineSupport: null };
 
 async function api(path, options = {}) {
-  const response = await fetch(path, {
-    ...options,
-    headers: { "content-type": "application/json", ...(options.headers || {}) },
-    credentials: "same-origin",
-  });
-  const payload = await response.json().catch(() => ({ message: `Request returned HTTP ${response.status}.` }));
-  if (!response.ok) throw Object.assign(new Error(payload.message || "Request failed."), { status: response.status, code: payload.code });
-  return payload;
+  const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),25000);
+  const cancel=()=>controller.abort();
+  if(options.signal){if(options.signal.aborted)controller.abort();else options.signal.addEventListener("abort",cancel,{once:true});}
+  try{
+    const response=await fetch(path,{...options,headers:{"content-type":"application/json",...(options.headers||{})},credentials:"same-origin",signal:controller.signal});
+    const payload=await response.json().catch(()=>({message:`Request returned HTTP ${response.status}.`}));
+    if(!response.ok)throw Object.assign(new Error(payload.message||"Request failed."),{status:response.status,code:payload.code});
+    return payload;
+  }finally{clearTimeout(timer);options.signal?.removeEventListener("abort",cancel);}
 }
 
 function setStatus(message, error = false) {
@@ -93,7 +94,7 @@ function renderChannels() {
     node.querySelector(".channel-number").textContent = `CH ${String(channel.number).padStart(3, "0")}${channel.subscription ? " · SUBSCRIPTION" : ""}`;
     node.querySelector("h3").textContent = channel.name;
     node.querySelector(".channel-detail").textContent = `${channel.language} · ${channel.category}`;
-    node.onclick = () => playChannel(channel.id);
+    node.onclick = () => { state.scope=state.filtered.map(c=>c.id);state.scopeLabel=state.category+($("search").value.trim()?" · search":"");playChannel(channel.id); };
     fragment.append(node);
   }
   $("channelGrid").replaceChildren(fragment);
@@ -106,6 +107,7 @@ function renderChannels() {
 
 function destroyPlayback() {
   state.playbackGeneration += 1;
+  state.playbackAbort?.abort();state.playbackAbort=null;
   if (state.ticker) { clearInterval(state.ticker); state.ticker = null; }
   if (state.hls) { state.hls.destroy(); state.hls = null; }
   if (state.shaka) { state.shaka.destroy().catch(() => {}); state.shaka = null; }
@@ -117,8 +119,13 @@ function destroyPlayback() {
 
 function epochMs(value) {
   const number = Number(value || 0);
-  if (!Number.isFinite(number) || number <= 0) return 0;
-  return number < 10_000_000_000 ? number * 1000 : number;
+  if (Number.isFinite(number)&&number>0) return number<100_000_000_000?number*1000:number>100_000_000_000_000?number/1000:number;
+  const text=String(value||"").trim();
+  if(/^\d{4}-\d{2}-\d{2}[ T]/.test(text)){
+    const iso=text.replace(" ","T");const dated=Date.parse(/[zZ]|[+-]\d\d:\d\d$/.test(iso)?iso:iso+"+05:30");
+    return Number.isFinite(dated)?dated:0;
+  }
+  return 0;
 }
 
 function programmeStart(program) {
@@ -179,7 +186,10 @@ function renderProgrammeInfo() {
   $("playerProgrammeTime").textContent = current
     ? `${formatTime(programmeStart(current))} – ${formatTime(programmeEnd(current))}`
     : "Live";
-  $("playerProgrammeDescription").textContent = current ? programmeDescription(current) : "";
+  $("playerProgrammeDescription").textContent = state.playerError || (current ? programmeDescription(current) : "");
+  const boundary=current?programmeEnd(current):Date.now();
+  const next=[...state.programs].filter(p=>programmeStart(p)>=boundary&&programmeStart(p)>Date.now()).sort((a,b)=>programmeStart(a)-programmeStart(b))[0];
+  $("playerNext").textContent=next?`UP NEXT  ${formatTime(programmeStart(next))} · ${programmeTitle(next)}`:"UP NEXT  Not listed by provider";
 }
 
 function renderProgrammeGuide() {
@@ -224,6 +234,7 @@ function renderProgrammeGuide() {
 
 function updatePlayerClock() {
   const video = $("video");
+  renderProgrammeInfo();
   const range = seekRange();
   const timeline = $("playerTimeline");
   if (range && range.end - range.start > 5) {
@@ -251,16 +262,20 @@ function startPlayerClock() {
   state.ticker = setInterval(updatePlayerClock, 1000);
 }
 
-async function fetchProgrammeGuide(channelId) {
-  const results = await Promise.all([-1, 0, 1].map((offset) =>
-    api(`/api/epg?channel_id=${encodeURIComponent(channelId)}&offset=${offset}`).catch(() => ({ programs: [] }))
-  ));
-  const unique = new Map();
-  for (const program of results.flatMap((result) => result.programs || [])) {
-    const key = `${program.srno || program.showId || programmeTitle(program)}:${programmeStart(program)}`;
-    unique.set(key, program);
-  }
-  return { programs: [...unique.values()].sort((a, b) => programmeStart(a) - programmeStart(b)) };
+async function fetchProgrammeGuide(channelId, generation, signal) {
+  const current=await api(`/api/epg?channel_id=${encodeURIComponent(channelId)}&offset=0`,{signal}).catch(()=>({programs:[]}));
+  if(generation!==state.playbackGeneration)return;
+  const valid=(current.programs||[]).filter(p=>programmeStart(p)>0&&programmeEnd(p)>programmeStart(p));
+  const apply=(all)=>{
+    if(generation!==state.playbackGeneration)return;
+    const unique=new Map();for(const p of all)unique.set(`${programmeTitle(p)}:${programmeStart(p)}`,p);
+    state.programs=[...unique.values()].sort((a,b)=>programmeStart(a)-programmeStart(b));renderProgrammeInfo();renderProgrammeGuide();
+  };
+  apply(valid);
+  const now=Date.now(),active=valid.find(p=>programmeStart(p)<=now&&programmeEnd(p)>now),boundary=active?programmeEnd(active):now;
+  if(valid.some(p=>programmeStart(p)>now&&programmeStart(p)>=boundary))return;
+  const tomorrow=await api(`/api/epg?channel_id=${encodeURIComponent(channelId)}&offset=1`,{signal}).catch(()=>({programs:[]}));
+  apply([...valid,...(tomorrow.programs||[]).filter(p=>programmeStart(p)>0&&programmeEnd(p)>programmeStart(p))]);
 }
 
 function base64Url(input) {
@@ -329,22 +344,25 @@ async function playDash(video, playback, generation) {
     if (generation !== state.playbackGeneration) return;
     const message = protectedPlaybackMessage(event.detail);
     $("playerStatus").textContent = message.includes("Google Chrome") ? "Open in Chrome" : "Unable to play";
-    $("playerProgrammeDescription").textContent = message;
+    state.playerError=message;$("playerProgrammeDescription").textContent = message;
   });
   await player.load(playback.url, null, "application/dash+xml");
   await video.play().catch(() => { $("playerStatus").textContent = "Press play to start"; });
 }
 
-async function playChannel(channelId) {
-  if (state.busy) return;
+async function playChannel(channelId, autoRetry=false) {
+  if(!autoRetry)state.retryAttempt=0;
   const channel = state.channels.find((item) => item.id === String(channelId));
   if (!channel) return;
   state.currentChannel = channel;
   state.programs = [];
-  state.currentIndex = state.channels.indexOf(channel);
+  state.currentIndex = state.scope.indexOf(channel.id);
+  $("playerScope").textContent=state.scopeLabel+" · "+state.scope.length+" channels · CH ± stays here";
   state.busy = true;
   destroyPlayback();
   const generation = state.playbackGeneration;
+  state.playbackAbort=new AbortController();state.playerError="";
+  const requestSignal=state.playbackAbort.signal;
   $("playerNumber").textContent = `CHANNEL ${String(channel.number).padStart(3, "0")} · ${channel.language} · ${channel.category}`;
   $("playerTitle").textContent = channel.name;
   $("playerProgramme").textContent = "Checking this account and preparing the live stream…";
@@ -355,15 +373,12 @@ async function playChannel(channelId) {
   $("playerStatus").textContent = "Connecting…";
   if (!$("playerDialog").open) $("playerDialog").showModal();
   try {
-    const [playback, epg] = await Promise.all([
-      api("/api/playback", { method: "POST", body: JSON.stringify({ channelId: channel.id }) }),
-      fetchProgrammeGuide(channel.id),
-    ]);
-    state.programs = epg.programs || [];
-    renderProgrammeInfo();
-    renderProgrammeGuide();
+    fetchProgrammeGuide(channel.id,generation,requestSignal).catch(()=>{});
+    const playback=await api("/api/playback",{method:"POST",body:JSON.stringify({channelId:channel.id}),signal:requestSignal});
+    if(generation!==state.playbackGeneration)return;
+    renderProgrammeInfo();renderProgrammeGuide();
     const video = $("video");
-    video.addEventListener("playing", () => { if (generation === state.playbackGeneration) $("playerStatus").textContent = "LIVE"; }, { once: true });
+    video.addEventListener("playing", () => { if (generation === state.playbackGeneration){state.playerError="";$("playerStatus").textContent = "LIVE";} }, { once: true });
     video.addEventListener("waiting", () => { if (generation === state.playbackGeneration) $("playerStatus").textContent = "Buffering…"; }, { once: true });
     if (playback.protocol === "dash") {
       $("playerStatus").textContent = playback.drm ? "Opening protected stream…" : "Opening stream…";
@@ -371,15 +386,21 @@ async function playChannel(channelId) {
     } else if (window.Hls?.isSupported()) {
       state.hls = new Hls({ enableWorker: true, lowLatencyMode: true, backBufferLength: 30 });
       state.hls.attachMedia(video);
-      state.hls.on(Hls.Events.MEDIA_ATTACHED, () => state.hls?.loadSource(playback.url));
+      state.hls.on(Hls.Events.MEDIA_ATTACHED, () => {if(generation===state.playbackGeneration)state.hls?.loadSource(playback.url);});
       state.hls.on(Hls.Events.MANIFEST_PARSED, () => {
+        if(generation!==state.playbackGeneration)return;
         $("playerStatus").textContent = "Starting video…";
         video.play().catch(() => { $("playerStatus").textContent = "Press play to start"; });
       });
       state.hls.on(Hls.Events.ERROR, (_, data) => {
         if (!data.fatal || generation !== state.playbackGeneration) return;
-        $("playerStatus").textContent = "Unable to play";
-        $("playerProgramme").textContent = `Stream error: ${data.details || data.type || "unknown"}`;
+        const code=Number(data.response?.code||0);
+        if(state.retryAttempt<1&&data.type===Hls.ErrorTypes.NETWORK_ERROR&&![401,403].includes(code)){
+          state.retryAttempt++;$("playerStatus").textContent="Reconnecting once…";
+          setTimeout(()=>{if(generation===state.playbackGeneration)playChannel(channel.id,true);},1000);return;
+        }
+        $("playerStatus").textContent=code===403?"Provider access required":"Unable to play";
+        state.playerError="Try this channel again or select the next channel in "+state.scopeLabel+".";$("playerProgrammeDescription").textContent=state.playerError;
       });
     } else if (video.canPlayType("application/vnd.apple.mpegurl")) {
       video.src = playback.url;
@@ -388,17 +409,19 @@ async function playChannel(channelId) {
     } else throw new Error("This browser does not support HLS playback.");
     startPlayerClock();
   } catch (error) {
+    if(generation!==state.playbackGeneration)return;
     const message = protectedPlaybackMessage(error);
-    $("playerProgrammeDescription").textContent = message;
+    state.playerError=message;$("playerProgrammeDescription").textContent = message;
     $("playerStatus").textContent = error.status === 403 ? "Not included for this account" : message.includes("Google Chrome") ? "Open in Chrome" : "Unable to play";
     if (error.status === 401) setConnected(false);
-  } finally { state.busy = false; }
+  } finally { if(generation===state.playbackGeneration)state.busy = false; }
 }
 
 function stepChannel(delta) {
-  if (!state.channels.length || state.busy) return;
-  const next = (state.currentIndex + delta + state.channels.length) % state.channels.length;
-  playChannel(state.channels[next].id);
+  if(!state.scope.length)return;
+  const index=state.scope.indexOf(state.currentChannel?.id);
+  const next=index<0?(delta>0?0:state.scope.length-1):(index+delta+state.scope.length)%state.scope.length;
+  playChannel(state.scope[next]);
 }
 
 function openLogin() {
@@ -448,6 +471,7 @@ $("search").oninput = filterChannels;
 $("closePlayer").onclick = () => { destroyPlayback(); $("playerDialog").close(); };
 $("previousChannel").onclick = () => stepChannel(-1);
 $("nextChannel").onclick = () => stepChannel(1);
+$("retryChannel").onclick=()=>{if(state.currentChannel)playChannel(state.currentChannel.id);};
 $("playerTimeline").oninput = (event) => {
   $("timelineNow").textContent = formatTime(Number(event.currentTarget.value) * 1000);
 };

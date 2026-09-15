@@ -90,10 +90,10 @@ public final class ChannelAdapter extends RecyclerView.Adapter<ChannelAdapter.Ho
         card.setOrientation(LinearLayout.VERTICAL);
         card.setPadding(TvUi.dp(context, 12), TvUi.dp(context, 10), TvUi.dp(context, 12), TvUi.dp(context, 9));
         RecyclerView.LayoutParams params = new RecyclerView.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT, TvUi.dp(context, 126));
+                ViewGroup.LayoutParams.MATCH_PARENT, TvUi.dp(context, 158));
         params.setMargins(TvUi.dp(context, 5), TvUi.dp(context, 5), TvUi.dp(context, 5), TvUi.dp(context, 5));
         card.setLayoutParams(params);
-        TvUi.focusCard(card, Color.argb(238, 6, 20, 31), Color.rgb(13, 92, 99), 20);
+        TvUi.focusCard(card, Color.argb(242, 11, 18, 34), Color.rgb(22, 50, 76), 14);
         View.OnFocusChangeListener focusDecoration = card.getOnFocusChangeListener();
 
         LinearLayout top = new LinearLayout(context);
@@ -139,12 +139,18 @@ public final class ChannelAdapter extends RecyclerView.Adapter<ChannelAdapter.Ho
         nameParams.topMargin = TvUi.dp(context, 4);
         card.addView(name, nameParams);
 
-        TextView meta = TvUi.label(context, "", 10.5f, TvUi.MUTED, false);
+        TextView now = TvUi.label(context, "", 10.5f, TvUi.TEXT, false);
+        now.setSingleLine(true);now.setEllipsize(TextUtils.TruncateAt.END);
+        TextView next = TvUi.label(context, "", 10.5f, TvUi.CYAN, false);
+        next.setSingleLine(true);next.setEllipsize(TextUtils.TruncateAt.END);
+        card.addView(now,new LinearLayout.LayoutParams(-1,TvUi.dp(context,18)));
+        card.addView(next,new LinearLayout.LayoutParams(-1,TvUi.dp(context,18)));
+        TextView meta = TvUi.label(context, "", 9.5f, TvUi.MUTED, false);
         meta.setMaxLines(1);
         meta.setEllipsize(TextUtils.TruncateAt.END);
         card.addView(meta, new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, TvUi.dp(context, 17)));
-        return new Holder(card, logo, number, status, name, meta, focusDecoration);
+        return new Holder(card, logo, number, status, name, meta, now, next, focusDecoration);
     }
 
     @Override public void onBindViewHolder(@NonNull Holder holder, int position) {
@@ -153,6 +159,7 @@ public final class ChannelAdapter extends RecyclerView.Adapter<ChannelAdapter.Ho
         holder.number.setText((favourite ? "★  " : "") + channel.displayNumber());
         holder.name.setText(channel.name);
         holder.meta.setText(channel.language + "  •  " + channel.category);
+        bindProgrammes(holder,channel);
 
         if (channel.isSubscriptionChannel() && channel.isAvailable()) {
             holder.status.setText("INCLUDED");
@@ -205,6 +212,20 @@ public final class ChannelAdapter extends RecyclerView.Adapter<ChannelAdapter.Ho
         });
     }
 
+    private void bindProgrammes(Holder h,Channel c){
+        h.now.setText("NOW  "+(c.nowTitle==null||c.nowTitle.isEmpty()?"Schedule not listed":c.nowTitle));
+        h.next.setText("NEXT  "+(c.nextTitle==null||c.nextTitle.isEmpty()?"Not listed by provider":c.nextTitle));
+    }
+    public void updateProgramme(String id,String now,String next){
+        for(int i=0;i<channels.size();i++)if(channels.get(i).id.equals(id)){
+            Channel c=channels.get(i);c.nowTitle=now;c.nextTitle=next;
+            int hash=contentHash(c,favourites);if(contentHashes.get(i)!=hash){contentHashes.set(i,hash);notifyItemChanged(i,"epg");}break;
+        }
+    }
+    @Override public void onBindViewHolder(@NonNull Holder h,int position,@NonNull List<Object> payloads){
+        if(!payloads.isEmpty()&&payloads.contains("epg")){bindProgrammes(h,channels.get(position));return;}
+        super.onBindViewHolder(h,position,payloads);
+    }
     @Override public void onViewRecycled(@NonNull Holder holder) {
         Glide.with(holder.logo).clear(holder.logo);
         super.onViewRecycled(holder);
@@ -221,7 +242,7 @@ public final class ChannelAdapter extends RecyclerView.Adapter<ChannelAdapter.Ho
                 channel.category,
                 channel.logoUrl,
                 channel.accessState,
-                channel.accessMessage,
+                channel.accessMessage,channel.nowTitle,channel.nextTitle,
                 channel.requiresSubscription,
                 channel.subscriptionHint,
                 favourites.contains(channel.number));
@@ -232,17 +253,17 @@ public final class ChannelAdapter extends RecyclerView.Adapter<ChannelAdapter.Ho
         final TextView number;
         final TextView status;
         final TextView name;
-        final TextView meta;
+        final TextView meta,now,next;
         final View.OnFocusChangeListener focusDecoration;
 
         Holder(View itemView, ImageView logo, TextView number, TextView status,
-               TextView name, TextView meta, View.OnFocusChangeListener focusDecoration) {
+               TextView name, TextView meta, TextView now, TextView next, View.OnFocusChangeListener focusDecoration) {
             super(itemView);
             this.logo = logo;
             this.number = number;
             this.status = status;
             this.name = name;
-            this.meta = meta;
+            this.meta = meta;this.now=now;this.next=next;
             this.focusDecoration = focusDecoration;
         }
     }

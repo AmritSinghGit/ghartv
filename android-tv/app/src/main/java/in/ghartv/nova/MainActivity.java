@@ -45,7 +45,11 @@ import java.util.concurrent.Executors;
 public final class MainActivity extends Activity implements ChannelNavigator.Listener {
     private final Handler mainHandler = new Handler(Looper.getMainLooper());
     private final ExecutorService executor = Executors.newFixedThreadPool(3);
+    private final ExecutorService epgExecutor = Executors.newFixedThreadPool(2);
+    private final java.util.Set<String> epgPending = new java.util.HashSet<>();
     private final Map<String, List<Program>> epgCache = new HashMap<>();
+    private final Runnable visibleEpgTask = this::loadVisibleEpg;
+    private boolean guideActive;
     private final Map<String, Long> epgCacheTime = new HashMap<>();
 
     private ChannelRepository repository;
@@ -85,7 +89,7 @@ public final class MainActivity extends Activity implements ChannelNavigator.Lis
     private Runnable pendingEpgLoad;
     private final Runnable clockTicker = new Runnable() {
         @Override public void run() {
-            if (clock != null) clock.setText(DateFormat.getTimeInstance(DateFormat.SHORT).format(new Date()));
+            if (clock != null) clock.setText(TvUi.istTime(System.currentTimeMillis()));
             mainHandler.postDelayed(this, 30_000L);
         }
     };
@@ -125,11 +129,14 @@ public final class MainActivity extends Activity implements ChannelNavigator.Lis
         super.onResume();
         TvUi.immersive(this);
         if (repository == null) return;
+        guideActive=true;
         if (!JioSession.load(this).isPresent()) routeToLogin();
         else loadFromDisk(false);
     }
 
     @Override protected void onPause() {
+        guideActive=false;
+        mainHandler.removeCallbacks(visibleEpgTask);
         if (heroPreviewController != null) heroPreviewController.stop(false);
         super.onPause();
     }
@@ -139,6 +146,8 @@ public final class MainActivity extends Activity implements ChannelNavigator.Lis
         mainHandler.removeCallbacks(clockTicker);
         if (heroPreviewController != null) heroPreviewController.release();
         executor.shutdownNow();
+        epgExecutor.shutdownNow();
+        mainHandler.removeCallbacks(visibleEpgTask);
         super.onDestroy();
     }
 
@@ -246,11 +255,11 @@ public final class MainActivity extends Activity implements ChannelNavigator.Lis
         LinearLayout hero = new LinearLayout(this);
         hero.setOrientation(LinearLayout.VERTICAL);
         hero.setPadding(TvUi.dp(this, 20), TvUi.dp(this, 16), TvUi.dp(this, 20), TvUi.dp(this, 14));
-        hero.setBackground(TvUi.rounded(Color.argb(220, 7, 20, 31), 28, Color.argb(60, 83, 228, 255), 1, this));
+        hero.setBackground(TvUi.rounded(Color.argb(245, 12, 18, 36), 18, Color.argb(60, 83, 228, 255), 1, this));
 
         LinearLayout top = new LinearLayout(this);
         top.setGravity(Gravity.CENTER_VERTICAL);
-        TextView onAir = TvUi.label(this, "●  LIVE TELEVISION", 11, TvUi.MINT, true);
+        TextView onAir = TvUi.label(this, "●  LIVE / YOUR SELECTION", 11, TvUi.MINT, true);
         top.addView(onAir, new LinearLayout.LayoutParams(-2, TvUi.dp(this, 28)));
         top.addView(new View(this), new LinearLayout.LayoutParams(0, 1, 1f));
         heroNumber = TvUi.label(this, "---", 17, TvUi.CYAN, true);
@@ -282,7 +291,7 @@ public final class MainActivity extends Activity implements ChannelNavigator.Lis
                 TvUi.dp(this, 34), TvUi.dp(this, 34), Gravity.CENTER));
 
         heroPreviewStatus = TvUi.label(this,
-                "Muted preview  •  correct proportions  •  OK for full screen",
+                "Channel spotlight  •  press OK to watch",
                 9, Color.WHITE, true);
         heroPreviewStatus.setGravity(Gravity.CENTER_VERTICAL);
         heroPreviewStatus.setPadding(TvUi.dp(this, 9), 0, TvUi.dp(this, 9), 0);
@@ -394,6 +403,9 @@ public final class MainActivity extends Activity implements ChannelNavigator.Lis
             @Override public void onFavourite(Channel channel) { toggleFavourite(channel); }
         });
         channelGrid.setAdapter(channelAdapter);
+        channelGrid.addOnScrollListener(new RecyclerView.OnScrollListener(){
+            @Override public void onScrollStateChanged(RecyclerView v,int state){if(state==RecyclerView.SCROLL_STATE_IDLE)scheduleVisibleEpg();}
+        });
         gridHost.addView(channelGrid, new FrameLayout.LayoutParams(-1, -1));
 
         emptyState = TvUi.label(this, "", 18, TvUi.MUTED, true);
@@ -507,6 +519,7 @@ public final class MainActivity extends Activity implements ChannelNavigator.Lis
         Channel preferred = repository.byNumber(visibleChannels, repository.lastChannel());
         if (preferred == null) preferred = visibleChannels.get(0);
         select(preferred);
+        scheduleVisibleEpg();
         if (requestFocus) {
             final int position = Math.max(0, visibleChannels.indexOf(preferred));
             channelGrid.post(() -> {
@@ -538,8 +551,8 @@ public final class MainActivity extends Activity implements ChannelNavigator.Lis
         heroNumber.setText(channel.displayNumber());
         heroTitle.setText(channel.name);
         heroSource.setText("JioTV  •  " + channel.language + "  •  " + channel.category);
-        heroNow.setText(channel.nowTitle.isEmpty() ? "Live now" : channel.nowTitle);
-        heroNext.setText(channel.nextTitle.isEmpty() ? "Loading programme guide…" : "Next: " + channel.nextTitle);
+        heroNow.setText("NOW  " + (channel.nowTitle.isEmpty()?"Live now":channel.nowTitle));
+        heroNext.setText(channel.nextTitle.isEmpty() ? "NEXT  Loading schedule…" : "NEXT  " + channel.nextTitle);
         favouriteButton.setText(repository.favourites().contains(channel.number) ? "★  Favourite" : "☆  Favourite");
         if (channel.logoUrl.isEmpty()) heroLogo.setImageDrawable(null);
         else Glide.with(heroLogo).load(channel.logoUrl).fitCenter().into(heroLogo);
@@ -552,44 +565,56 @@ public final class MainActivity extends Activity implements ChannelNavigator.Lis
         mainHandler.postDelayed(pendingEpgLoad, 280L);
     }
 
+    private void scheduleVisibleEpg(){mainHandler.removeCallbacks(visibleEpgTask);mainHandler.postDelayed(visibleEpgTask,450L);}
+    private void loadVisibleEpg(){
+        if(!guideActive||isFinishing()||channelGrid==null)return;
+        GridLayoutManager grid=(GridLayoutManager)channelGrid.getLayoutManager();
+        int first=grid.findFirstVisibleItemPosition(),last=grid.findLastVisibleItemPosition();
+        if(first<0)first=0;if(last<first)last=Math.min(first+7,visibleChannels.size()-1);
+        for(int i=first;i<=last&&i<first+8&&i<visibleChannels.size();i++)loadEpg(visibleChannels.get(i));
+    }
     private void loadEpg(Channel channel) {
-        if (channel == null || channel.id.isEmpty()) return;
-        long now = System.currentTimeMillis();
-        List<Program> cached = epgCache.get(channel.id);
-        Long cachedAt = epgCacheTime.get(channel.id);
-        if (cached != null && cachedAt != null && now - cachedAt < 15 * 60_000L) {
-            applyEpg(channel, cached);
-            return;
-        }
-        executor.execute(() -> {
-            if(isFinishing()||selectedChannel==null||!selectedChannel.id.equals(channel.id))return;
-            try {
-                List<Program> programmes = repository.api().fetchEpg(channel.id, 0);
-                epgCache.put(channel.id, programmes);
-                epgCacheTime.put(channel.id, System.currentTimeMillis());
-                mainHandler.post(() -> applyEpg(channel, programmes));
-            } catch (Exception ignored) {}
+        if(channel==null||channel.id.isEmpty()||isFinishing())return;
+        List<Program> cached=epgCache.get(channel.id);Long at=epgCacheTime.get(channel.id);
+        if(cached!=null&&at!=null&&System.currentTimeMillis()-at<120_000L){applyEpg(channel,cached);return;}
+        if(!epgPending.add(channel.id))return;
+        epgExecutor.execute(()->{
+            if(!guideActive||isFinishing()){mainHandler.post(()->epgPending.remove(channel.id));return;}
+            try{
+                List<Program> programmes=new ArrayList<>(repository.api().fetchEpg(channel.id,0));
+                List<Program> today=new ArrayList<>(programmes);
+                mainHandler.post(()->{
+                    if(isFinishing())return;
+                    epgCache.put(channel.id,today);epgCacheTime.put(channel.id,System.currentTimeMillis());
+                    epgPending.remove(channel.id);applyEpg(channel,today);
+                });
+                boolean future=false;long time=System.currentTimeMillis();
+                for(Program p:programmes)if(p.startEpochMs>time){future=true;break;}
+                if(!future&&selectedChannel!=null&&selectedChannel.id.equals(channel.id)){
+                    try{
+                        programmes.addAll(repository.api().fetchEpg(channel.id,1));
+                        mainHandler.post(()->{if(!isFinishing()){epgCache.put(channel.id,programmes);applyEpg(channel,programmes);}});
+                    }catch(Exception ignored){}
+                }
+            }catch(Exception error){mainHandler.post(()->{
+                epgPending.remove(channel.id);epgCache.put(channel.id,new ArrayList<>());epgCacheTime.put(channel.id,System.currentTimeMillis()-90_000L);
+                if(selectedChannel!=null&&selectedChannel.id.equals(channel.id))heroNext.setText("NEXT  Schedule unavailable · retry on selection");
+            });}
         });
     }
-
-    private void applyEpg(Channel channel, List<Program> programmes) {
-        if (selectedChannel == null || !selectedChannel.id.equals(channel.id)) return;
-        long now = System.currentTimeMillis();
-        Program current = null;
-        Program next = null;
-        for (Program programme : programmes) {
-            if (programme.isLive(now)) current = programme;
-            else if (programme.startEpochMs > now && next == null) next = programme;
-        }
-        channel.nowTitle = current == null ? "Live now" : current.title;
-        channel.nextTitle = next == null ? "" : next.title;
-        heroNow.setText(channel.nowTitle);
-        heroNext.setText(channel.nextTitle.isEmpty() ? "Next programme not listed" : "Next: " + channel.nextTitle);
-        if (current != null && current.endEpochMs > current.startEpochMs) {
-            long duration = current.endEpochMs - current.startEpochMs;
-            int progress = (int) Math.max(0, Math.min(1000, ((now - current.startEpochMs) * 1000L) / duration));
-            heroProgress.setProgress(progress);
-        } else heroProgress.setProgress(0);
+    private void applyEpg(Channel channel,List<Program> programmes){
+        long now=System.currentTimeMillis();long[] starts=new long[programmes.size()],ends=new long[programmes.size()];
+        for(int i=0;i<programmes.size();i++){starts[i]=programmes.get(i).startEpochMs;ends[i]=programmes.get(i).endEpochMs;}
+        int current=GuideTimeline.current(starts,ends,now),next=GuideTimeline.next(starts,ends,now);
+        channel.nowTitle=current<0?"Live · schedule not listed":programmes.get(current).title;
+        channel.nextTitle=next<0?"":programmes.get(next).title;
+        for(Channel row:visibleChannels)if(row.id.equals(channel.id)){row.nowTitle=channel.nowTitle;row.nextTitle=channel.nextTitle;}
+        channelAdapter.updateProgramme(channel.id,channel.nowTitle,channel.nextTitle);
+        if(selectedChannel==null||!selectedChannel.id.equals(channel.id))return;
+        heroNow.setText("NOW  "+channel.nowTitle);
+        heroNext.setText(next<0?"NEXT  Not listed by provider":"NEXT  "+programmes.get(next).title);
+        if(current>=0)heroProgress.setProgress((int)Math.max(0,Math.min(1000,(now-starts[current])*1000L/(ends[current]-starts[current]))));
+        else heroProgress.setProgress(0);
     }
 
     private void play(Channel channel) {
@@ -613,7 +638,7 @@ public final class MainActivity extends Activity implements ChannelNavigator.Lis
         org.json.JSONArray numbers=new org.json.JSONArray();
         for(Channel item:visibleChannels)numbers.put(item.number);
         player.putExtra(PlayerActivity.EXTRA_SCOPE_NUMBERS,numbers.toString());
-        player.putExtra(PlayerActivity.EXTRA_SCOPE_LABEL,selectedCategory);
+        player.putExtra(PlayerActivity.EXTRA_SCOPE_LABEL,selectedCategory + (searchQuery.isEmpty()?"":" · search"));
         startActivity(player);
     }
 
@@ -700,7 +725,7 @@ public final class MainActivity extends Activity implements ChannelNavigator.Lis
             return;
         }
         long updated = repository.lastUpdatedAt();
-        String when = updated <= 0 ? "not downloaded yet" : DateFormat.getDateTimeInstance(DateFormat.SHORT, DateFormat.SHORT).format(new Date(updated));
+        String when = updated <= 0 ? "not downloaded yet" : TvUi.istDateTime(updated);
         catalogueStatus.setText(String.format(Locale.US, "LIVE  •  %,d channels  •  guide updated %s  •  GharTV %s", allChannels.size(), when, BuildConfig.VERSION_NAME));
         catalogueStatus.setTextColor(TvUi.MUTED);
     }
@@ -714,7 +739,7 @@ public final class MainActivity extends Activity implements ChannelNavigator.Lis
         Telemetry.event(this, "channel_change", Telemetry.data(
                 "direction", direction > 0 ? "next" : "previous",
                 "guide_scope", selectedCategory));
-        Channel next = repository.next(allChannels, selectedChannel == null ? repository.lastChannel() : selectedChannel.number, direction);
+        Channel next = repository.next(visibleChannels, selectedChannel == null ? repository.lastChannel() : selectedChannel.number, direction);
         if (next != null) play(next);
     }
 

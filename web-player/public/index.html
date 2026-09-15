@@ -15,7 +15,7 @@
   <div class="aurora one"></div><div class="aurora two"></div>
   <header class="topbar">
     <a class="brand" href="#">GHAR<span>TV</span></a>
-    <div class="top-actions">
+    <div class="top-actions"><a class="owner-link" href="/owner.html">Owner console ↗</a>
       <button id="accountButton" class="account" type="button">Connect JioTV</button>
     </div>
   </header>
@@ -60,7 +60,7 @@
     <div class="player-shell">
       <video id="video" autoplay playsinline></video>
       <div class="player-gradient"></div>
-      <div class="player-top"><div><span class="live-dot">● LIVE</span><span class="source-badge">JioTV</span></div><button id="closePlayer" type="button">×</button></div>
+      <div class="player-top"><div><span class="live-dot">● LIVE</span><span class="source-badge">JioTV</span><span id="playerScope" class="scope-badge"></span></div><button id="closePlayer" type="button">×</button></div>
       <button id="previousChannel" class="channel-step previous" type="button" aria-label="Previous channel"><span>‹</span><small>Previous<br>channel</small></button>
       <button id="nextChannel" class="channel-step next" type="button" aria-label="Next channel"><small>Next<br>channel</small><span>›</span></button>
       <section class="player-console" aria-label="Player and programme guide">
@@ -73,6 +73,7 @@
             <p class="programme-kicker">NOW PLAYING</p>
             <h3 id="playerProgramme">Requesting an eligible stream from your connected account.</h3>
             <p id="playerProgrammeTime" class="programme-time">Live</p>
+            <p id="playerNext" class="programme-next">UP NEXT  Loading schedule…</p>
             <p id="playerProgrammeDescription" class="programme-description"></p>
           </div>
           <div id="playerStatus" class="player-status">Connecting…</div>
@@ -87,6 +88,7 @@
           <button id="playPauseButton" class="play-pause" type="button" aria-label="Pause">Ⅱ</button>
           <button id="forwardButton" type="button" aria-label="Forward 15 seconds"><span>15s</span> ↷</button>
           <button id="liveButton" class="live-button" type="button">● LIVE</button>
+          <button id="retryChannel" type="button">Retry channel</button>
           <button id="guideButton" class="guide-button" type="button" aria-expanded="true">Hide programme guide</button>
         </div>
         <div id="programmeGuide" class="programme-guide" aria-label="Programmes">

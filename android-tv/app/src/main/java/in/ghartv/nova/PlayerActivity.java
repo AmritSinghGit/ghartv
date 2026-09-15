@@ -61,6 +61,8 @@ public final class PlayerActivity extends Activity implements ChannelNavigator.L
     private List<Channel> playbackScope = new ArrayList<>();
     private Channel channel;
     private String scopeLabel = "All channels";
+    private AlertDialog errorDialog;
+    private boolean recoveryPending;
 
     private ExoPlayer player;
     private PlayerView playerView;
@@ -134,21 +136,27 @@ public final class PlayerActivity extends Activity implements ChannelNavigator.L
         navigator = new ChannelNavigator(this);
 
         try {
-            channel = Channel.fromJson(new JSONObject(getIntent().getStringExtra(EXTRA_CHANNEL_JSON)));
+            channel = Channel.fromJson(new JSONObject(state!=null?state.getString(EXTRA_CHANNEL_JSON):getIntent().getStringExtra(EXTRA_CHANNEL_JSON)));
         } catch (Exception error) {
             Toast.makeText(this, "Channel data is missing", Toast.LENGTH_LONG).show();
             finish();
             return;
         }
 
-        scopeLabel = cleanScopeLabel(getIntent().getStringExtra(EXTRA_SCOPE_LABEL));
-        playbackScope = parseScope(getIntent().getStringExtra(EXTRA_SCOPE_NUMBERS));
+        scopeLabel = cleanScopeLabel(state!=null?state.getString(EXTRA_SCOPE_LABEL):getIntent().getStringExtra(EXTRA_SCOPE_LABEL));
+        playbackScope = parseScope(state!=null?state.getString(EXTRA_SCOPE_NUMBERS):getIntent().getStringExtra(EXTRA_SCOPE_NUMBERS));
         setContentView(buildUi());
         Telemetry.screen(this, "player");
         mainHandler.post(progressTicker);
         startChannel(channel, true);
     }
 
+    @Override protected void onSaveInstanceState(Bundle out){
+        super.onSaveInstanceState(out);
+        try{if(channel!=null)out.putString(EXTRA_CHANNEL_JSON,channel.toJson().toString());}catch(Exception ignored){}
+        JSONArray scope=new JSONArray();for(Channel c:playbackScope)scope.put(c.number);
+        out.putString(EXTRA_SCOPE_NUMBERS,scope.toString());out.putString(EXTRA_SCOPE_LABEL,scopeLabel);
+    }
     @Override protected void onResume() {
         super.onResume();
         TvUi.immersive(this);
@@ -198,7 +206,7 @@ public final class PlayerActivity extends Activity implements ChannelNavigator.L
         guidePanel = buildGuidePanel();
         guidePanel.setVisibility(View.GONE);
         FrameLayout.LayoutParams guideParams = new FrameLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT, TvUi.dp(this, 160), Gravity.BOTTOM);
+                ViewGroup.LayoutParams.MATCH_PARENT, TvUi.dp(this, 180), Gravity.BOTTOM);
         guideParams.setMargins(TvUi.dp(this, 34), 0, TvUi.dp(this, 34), TvUi.dp(this, 14));
         root.addView(guidePanel, guideParams);
 
@@ -297,7 +305,8 @@ public final class PlayerActivity extends Activity implements ChannelNavigator.L
         guideButton = TvUi.button(this, "Programmes", false);
         guideButton.setOnClickListener(view -> showProgrammeSchedule());
         actions.addView(guideButton, actionParams());
-        nextButton = TvUi.button(this, "Next ▶", true);
+        nextButton = TvUi.button(this, "Next channel ▶", true);
+        nextButton.setTextSize(11);
         nextButton.setOnClickListener(view -> changeChannel(1));
         actions.addView(nextButton, actionParams());
 
@@ -334,6 +343,8 @@ public final class PlayerActivity extends Activity implements ChannelNavigator.L
 
     private void startChannel(Channel next, boolean resetRecovery) {
         if (next == null) return;
+        recoveryPending=false;
+        if(errorDialog!=null){errorDialog.dismiss();errorDialog=null;}
         if (resetRecovery) {
             automaticStreamRefreshes = 0;
             lastAutomaticStreamRefreshAt = 0L;
@@ -350,6 +361,7 @@ public final class PlayerActivity extends Activity implements ChannelNavigator.L
                 "access_state", next.accessState));
         currentProgram = null;
         nextProgram = null;
+        guidePrograms.clear();
         guideStatus = "Connecting to JioTV…";
         repository.setLastChannel(next.number);
         historyStore.recordTune(next);
@@ -363,6 +375,7 @@ public final class PlayerActivity extends Activity implements ChannelNavigator.L
         refreshGuideContent();
         showGuide(false, null);
 
+        loadEpg(next);
         pendingPlayback=playbackExecutor.submit(() -> {
             if(generation!=playbackGeneration||Thread.currentThread().isInterrupted())return;
             try {
@@ -393,7 +406,6 @@ public final class PlayerActivity extends Activity implements ChannelNavigator.L
                         return;
                     }
                     preparePlayer(info);
-                    loadEpg(next);
                 });
             } catch (Exception error) {
                 mainHandler.post(() -> {
@@ -510,42 +522,31 @@ public final class PlayerActivity extends Activity implements ChannelNavigator.L
     }
 
     private void loadEpg(Channel selected) {
-        executor.execute(() -> {
-            try {
-                List<Program> programs = new ArrayList<>(repository.api().fetchEpg(selected.id, 0));
-                for (Program programme : repository.api().fetchEpg(selected.id, 1)) {
-                    boolean duplicate = false;
-                    for (Program existing : programs) {
-                        if (existing.startEpochMs == programme.startEpochMs
-                                && existing.title.equals(programme.title)) {
-                            duplicate = true;
-                            break;
-                        }
-                    }
-                    if (!duplicate) programs.add(programme);
-                }
-                programs.sort((left, right) -> Long.compare(left.startEpochMs, right.startEpochMs));
-                long now = System.currentTimeMillis();
-                Program current = null;
-                Program next = null;
-                for (Program programme : programs) {
-                    if (programme.isLive(now)) current = programme;
-                    else if (programme.startEpochMs > now && next == null) next = programme;
-                }
-                Program finalCurrent = current;
-                Program finalNext = next;
-                mainHandler.post(() -> {
-                    if (channel == null || !channel.id.equals(selected.id)) return;
-                    guidePrograms = new ArrayList<>(programs);
-                    currentProgram = finalCurrent;
-                    nextProgram = finalNext;
-                    refreshGuideContent();
-                });
-            } catch (Exception error) {
-                Telemetry.playbackFailure(this, selected, "epg_refresh", error.getMessage(), 0, error);
-                mainHandler.post(this::refreshGuideContent);
+        final int generation=playbackGeneration;
+        executor.execute(()->{
+            List<Program> programs=new ArrayList<>();
+            try { programs.addAll(repository.api().fetchEpg(selected.id,0)); }
+            catch(Exception error){Telemetry.error(this,"epg_refresh",error,Telemetry.data("stage","today"));}
+            List<Program> today=new ArrayList<>(programs);
+            mainHandler.post(()->applyPrograms(selected,generation,today));
+            long now=System.currentTimeMillis();boolean hasNext=false;
+            for(Program p:programs)if(p.startEpochMs>now){hasNext=true;break;}
+            if(!hasNext&&generation==playbackGeneration){
+                try{programs.addAll(repository.api().fetchEpg(selected.id,1));}catch(Exception ignored){}
+                mainHandler.post(()->applyPrograms(selected,generation,programs));
             }
         });
+    }
+    private void applyPrograms(Channel selected,int generation,List<Program> programs){
+        if(isFinishing()||generation!=playbackGeneration||channel==null||!channel.id.equals(selected.id))return;
+        guidePrograms=new ArrayList<>(programs);guidePrograms.sort((a,b)->Long.compare(a.startEpochMs,b.startEpochMs));
+        selectPrograms();refreshGuideContent();
+    }
+    private void selectPrograms(){
+        int n=guidePrograms.size();long[] starts=new long[n],ends=new long[n];
+        for(int i=0;i<n;i++){starts[i]=guidePrograms.get(i).startEpochMs;ends[i]=guidePrograms.get(i).endEpochMs;}
+        int c=GuideTimeline.current(starts,ends,System.currentTimeMillis()),x=GuideTimeline.next(starts,ends,System.currentTimeMillis());
+        currentProgram=c<0?null:guidePrograms.get(c);nextProgram=x<0?null:guidePrograms.get(x);
     }
 
     private void showProgrammeSchedule() {
@@ -606,6 +607,7 @@ public final class PlayerActivity extends Activity implements ChannelNavigator.L
     }
 
     private void refreshGuideContent() {
+        if(!guidePrograms.isEmpty())selectPrograms();
         if (guidePanel == null || channel == null) return;
         guideChannel.setText(channel.displayNumber() + "  " + channel.name);
         guideScope.setText((scopeLabel + "  •  " + playbackScope.size()).toUpperCase(Locale.ROOT));
@@ -627,9 +629,9 @@ public final class PlayerActivity extends Activity implements ChannelNavigator.L
         }
 
         if (nextProgram != null) {
-            nextTitle.setText("NEXT  " + formatTime(nextProgram.startEpochMs) + "  •  " + nextProgram.title);
+            nextTitle.setText("UP NEXT  " + formatTime(nextProgram.startEpochMs) + "  •  " + nextProgram.title);
         } else {
-            nextTitle.setText("NEXT  Programme guide not listed yet");
+            nextTitle.setText("UP NEXT  Not listed by provider");
         }
     }
 
@@ -640,7 +642,7 @@ public final class PlayerActivity extends Activity implements ChannelNavigator.L
 
     private String formatTime(long epochMs) {
         if (epochMs <= 0L) return "";
-        return DateFormat.getTimeInstance(DateFormat.SHORT).format(new Date(epochMs));
+        return TvUi.istTime(epochMs);
     }
 
     private void showGuide(boolean interactive, View preferredFocus) {
@@ -769,11 +771,12 @@ public final class PlayerActivity extends Activity implements ChannelNavigator.L
     }
 
     private void showAccessRequired(boolean explicitSubscription, String message) {
+        if(isFinishing()||isDestroyed()||(errorDialog!=null&&errorDialog.isShowing()))return;
         loading.setVisibility(View.GONE);
         guideStatus = explicitSubscription ? "Subscription required" : "Jio access required";
         refreshGuideContent();
         showGuide(true, nextButton);
-        new AlertDialog.Builder(this)
+        errorDialog=new AlertDialog.Builder(this)
                 .setTitle(explicitSubscription ? "Subscription required" : "Jio access required")
                 .setMessage(message == null || message.trim().isEmpty()
                         ? (explicitSubscription
@@ -788,12 +791,13 @@ public final class PlayerActivity extends Activity implements ChannelNavigator.L
     }
 
     private boolean maybeAutoRecover(Throwable error, String stage) {
-        String technical = readable(error).toLowerCase(Locale.ROOT);
+        if(recoveryPending)return true;
+        String technical = diagnostic(error).toLowerCase(Locale.ROOT);
         long now = System.currentTimeMillis();
         final Channel retryChannel = channel;
         final int retryGeneration = playbackGeneration;
         boolean forbidden = technical.contains("403") || technical.contains("forbidden");
-        boolean transientNetwork = technical.contains("unable to resolve host")
+        boolean transientNetwork = technical.contains("io_network_connection") || technical.contains("behind_live_window") || technical.contains("unable to resolve host")
                 || technical.contains("unknownhost")
                 || technical.contains("timeout")
                 || technical.contains("timed out")
@@ -804,6 +808,7 @@ public final class PlayerActivity extends Activity implements ChannelNavigator.L
                 || technical.contains("http 503")
                 || technical.contains("http 504");
         if (forbidden && automaticStreamRefreshes < 1) {
+            recoveryPending=true;
             automaticStreamRefreshes++;
             lastAutomaticStreamRefreshAt = now;
             Telemetry.event(this, "playback_auto_recovery", Telemetry.data(
@@ -819,6 +824,7 @@ public final class PlayerActivity extends Activity implements ChannelNavigator.L
             return true;
         }
         if (transientNetwork && automaticNetworkRetries < 1) {
+            recoveryPending=true;
             automaticNetworkRetries++;
             Telemetry.event(this, "playback_auto_recovery", Telemetry.data(
                     "reason", "network_retry", "stage", stage, "attempt", automaticNetworkRetries));
@@ -841,8 +847,9 @@ public final class PlayerActivity extends Activity implements ChannelNavigator.L
     }
 
     private void showStreamEnded() {
+        if(isFinishing()||isDestroyed()||(errorDialog!=null&&errorDialog.isShowing()))return;
         showGuide(true, nextButton);
-        new AlertDialog.Builder(this)
+        errorDialog=new AlertDialog.Builder(this)
                 .setTitle("Live feed ended")
                 .setMessage("This live feed ended or was closed by the provider. You can reopen it or continue to the next working channel.")
                 .setPositiveButton("Next working channel", (dialog, which) -> changeChannel(1, true))
@@ -889,10 +896,12 @@ public final class PlayerActivity extends Activity implements ChannelNavigator.L
     }
 
     private void showPlaybackError(Throwable error) {
+        if(isFinishing()||isDestroyed()||(errorDialog!=null&&errorDialog.isShowing()))return;
+        recoveryPending=false;
         cancelBufferingWatchdog();
         loading.setVisibility(View.GONE);
         releasePlayer();
-        String technical = readable(error);
+        String technical = diagnostic(error);
         String lower = technical.toLowerCase(Locale.ROOT);
         boolean auth = lower.contains("401") || lower.contains("419")
                 || lower.contains("token") || lower.contains("unauthor");
@@ -918,21 +927,22 @@ public final class PlayerActivity extends Activity implements ChannelNavigator.L
 
         AlertDialog.Builder builder = new AlertDialog.Builder(this)
                 .setTitle("Live channel unavailable")
-                .setMessage(withReference(friendly + "\n\nDetails: " + technical, reference))
+                .setMessage(withReference(friendly, reference))
                 .setPositiveButton("Next working channel", (dialog, which) -> changeChannel(1, true))
                 .setNegativeButton("Guide", (dialog, which) -> finish());
         if (auth) builder.setNeutralButton("Reconnect Jio", (dialog, which) -> reconnectJio());
         else builder.setNeutralButton("Retry", (dialog, which) -> retryCurrent());
-        builder.show();
+        errorDialog=builder.show();
     }
 
     private void showAuthRequired(String message) {
+        if(isFinishing()||isDestroyed()||(errorDialog!=null&&errorDialog.isShowing()))return;
         loading.setVisibility(View.GONE);
         hideGuideNow();
         String body = message == null || message.trim().isEmpty()
                 ? "The Jio session needs to be connected again before this channel can play."
                 : message;
-        new AlertDialog.Builder(this)
+        errorDialog=new AlertDialog.Builder(this)
                 .setTitle("Reconnect JioTV")
                 .setMessage(body)
                 .setPositiveButton("Reconnect Jio", (dialog, which) -> reconnectJio())
@@ -1067,7 +1077,11 @@ public final class PlayerActivity extends Activity implements ChannelNavigator.L
                 }
             }
         } catch (Exception ignored) {}
-        if (scoped.isEmpty()) scoped.addAll(allChannels);
+        if(scoped.isEmpty()&&raw==null){
+            // An explicit empty/broken scope is never widened. Only legacy absent extras may use their category.
+            if("All channels".equals(scopeLabel))scoped.addAll(allChannels);
+            else if(!scopeLabel.contains(" · search"))scoped.addAll(repository.filter(allChannels,scopeLabel,""));
+        }
         boolean containsCurrent = false;
         for (Channel value : scoped) {
             if (channel != null && value.number == channel.number) {
@@ -1075,7 +1089,7 @@ public final class PlayerActivity extends Activity implements ChannelNavigator.L
                 break;
             }
         }
-        if (!containsCurrent && channel != null) scoped.add(0, channel);
+        if (scoped.isEmpty() && channel != null) scoped.add(channel);
         return scoped;
     }
 
@@ -1125,10 +1139,7 @@ public final class PlayerActivity extends Activity implements ChannelNavigator.L
                 break;
             }
         }
-        if (!insideScope) {
-            playbackScope = new ArrayList<>(allChannels);
-            scopeLabel = "All channels";
-        }
+        if(!insideScope)Toast.makeText(this,"Direct tune · CH ± returns to "+scopeLabel,Toast.LENGTH_SHORT).show();
         startChannel(requested, true);
     }
 
@@ -1221,6 +1232,17 @@ public final class PlayerActivity extends Activity implements ChannelNavigator.L
         return super.dispatchKeyEvent(event);
     }
 
+    private String diagnostic(Throwable error){
+        StringBuilder b=new StringBuilder();Throwable e=error;
+        for(int i=0;e!=null&&i<6;i++,e=e.getCause()){
+            if(i>0)b.append(" / ");b.append(e.getClass().getSimpleName());
+            if(e instanceof androidx.media3.datasource.HttpDataSource.InvalidResponseCodeException)
+                b.append(" HTTP ").append(((androidx.media3.datasource.HttpDataSource.InvalidResponseCodeException)e).responseCode);
+            if(e instanceof PlaybackException)b.append(" ").append(((PlaybackException)e).getErrorCodeName());
+            if(e.getMessage()!=null)b.append(" ").append(e.getMessage().replaceAll("https?://[^\\s]+","[endpoint]").replaceAll("(?i)(token|cookie|authorization|password)[=:][^\\s]+","$1=[redacted]"));
+        }
+        return b.toString();
+    }
     private String readable(Throwable error) {
         String message = error == null ? "" : error.getMessage();
         return message == null || message.trim().isEmpty()

@@ -222,13 +222,9 @@ public final class ChannelRepository {
 
     public Channel next(List<Channel> channels, int number, int direction) {
         if (channels == null || channels.isEmpty()) return null;
-        int index = -1;
-        for (int i = 0; i < channels.size(); i++) {
-            if (channels.get(i).number == number) { index = i; break; }
-        }
-        if (index < 0) return direction >= 0 ? channels.get(0) : channels.get(channels.size() - 1);
-        int next = (index + (direction >= 0 ? 1 : -1) + channels.size()) % channels.size();
-        return channels.get(next);
+        int[] numbers=new int[channels.size()];
+        for(int i=0;i<numbers.length;i++)numbers[i]=channels.get(i).number;
+        return channels.get(GuideTimeline.nextChannelIndex(numbers,number,direction));
     }
 
     /** Next candidate that is not already known to fail, falling back to ordinary next. */

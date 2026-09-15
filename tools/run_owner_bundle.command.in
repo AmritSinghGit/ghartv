@@ -1,0 +1,44 @@
+#!/bin/bash
+set -eu
+umask 077
+HERE="$(cd "$(dirname "$0")" && pwd)"
+PY=""
+for candidate in /opt/homebrew/bin/python3 /usr/local/bin/python3 /usr/bin/python3; do
+ if [ -x "$candidate" ] && "$candidate" -c 'import sys;raise SystemExit(0 if sys.version_info >= (3,9) else 1)' >/dev/null 2>&1; then PY="$candidate"; break; fi
+done
+if [ -z "$PY" ] && command -v python3 >/dev/null 2>&1 && python3 -c 'import sys;raise SystemExit(0 if sys.version_info >= (3,9) else 1)' >/dev/null 2>&1; then PY="$(command -v python3)"; fi
+if [ -z "$PY" ]; then printf 'Python 3.9 or newer is required. No app, source or signing key changed.\n'; exit 1; fi
+"$PY" - "$HERE" <<'SEED'
+from pathlib import Path
+import hashlib,os,shutil,sys,tempfile
+root=Path(sys.argv[1]);home=Path.home()
+expected=@ARTIFACT_HASHES_REPR@
+command_hash='@COMMAND_SHA@'
+cache=home/'Library/Application Support/GharTV/owner-review/artifact-cache'
+managed=home/'.local/share/ghartv-launcher/current'
+def safe(p):
+ if any(x.is_symlink() for x in (p,*p.parents)):raise SystemExit('Symlinked output preserved; no overwrite')
+def sha(p):return hashlib.sha256(p.read_bytes()).hexdigest()
+script=root/'GHARTV_SYNC_CURRENT_AND_REPORT.command';safe(script)
+if sha(script)!=command_hash:raise SystemExit('Recovery launcher checksum differs; stopped')
+for name,h in expected.items():
+ p=root/'assets'/name;safe(p)
+ if not p.is_file() or sha(p)!=h:raise SystemExit('Recovery package file missing or checksum mismatch: '+name)
+for p in (cache,managed):safe(p);p.mkdir(parents=True,exist_ok=True);p.chmod(0o700)
+for name,h in expected.items():
+ target=cache/h;safe(target)
+ if target.exists():
+  if sha(target)!=h:raise SystemExit('Existing cache bytes differ; preserved without overwrite')
+  continue
+ with open(target,'xb') as f:f.write((root/'assets'/name).read_bytes())
+ target.chmod(0o600)
+target=managed/'GHARTV_SYNC_CURRENT_AND_REPORT.command';safe(target)
+known={'f9d11248be07981968cdc0b0e5808cc05daa8d1faccca66cb80b2178129adab2','22fba74fae70ff7523543669d8362dc7661882efa225397eb28037462aa64456',command_hash}
+if target.exists() and sha(target) not in known:raise SystemExit('Managed launcher has advanced or was edited; preserved without overwrite')
+fd,tmp=tempfile.mkstemp(prefix='.verified-review-',dir=managed)
+with os.fdopen(fd,'wb') as f:f.write(script.read_bytes())
+os.chmod(tmp,0o700);os.replace(tmp,target)
+print('All bundled public artifact checksums verified. No GitHub download is needed to prepare this review.')
+SEED
+export PATH="$(dirname "$PY"):$PATH"
+exec /bin/bash "$HOME/.local/share/ghartv-launcher/current/GHARTV_SYNC_CURRENT_AND_REPORT.command" --bundled-review "$@"
