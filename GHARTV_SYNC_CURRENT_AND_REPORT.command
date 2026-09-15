@@ -2,7 +2,7 @@
 # Same RC4. Restore existing configured signing; never generate a key or prompt for passwords.
 set -u
 umask 077
-printf '\033[38;5;51m\nGharTV · CYAN REVIEW 6 · 0.6.0 RC4 · artifact review · development checkout preserved\033[0m\n'
+printf '\033[38;5;51m\nGharTV · CYAN REVIEW 6 · NETWORK RECOVERY R1 · same 0.6.0 RC4 · artifact review · development checkout preserved\033[0m\n'
 if ! command -v python3 >/dev/null 2>&1; then echo 'Python 3 is required; no TV or source changed.'; exit 1; fi
 CLOSE_MARKER="${TMPDIR:-/tmp}/ghartv-review-close-$$"
 export GHARTV_CLOSE_MARKER="$CLOSE_MARKER"
@@ -18,9 +18,10 @@ MANIFEST_SHA='52ec393fb49268f368eb2ce44d209aa433ceac3f4ed18ad5eb135248ac7265d7';
 HOME=Path.home(); SELF=Path(sys.argv[1]).resolve(); STATE=HOME/'Library/Application Support/GharTV/owner-review'; CURRENT=STATE/'current'
 PROJECT=Path(os.environ.get('GHARTV_PROJECT',str(HOME/'Downloads/GharTV_Nova_v0.4.2'))).expanduser()
 RUNTIME=STATE/'runtime-current';COLLECTOR='https://ghartv-telemetry.ghartv-47d9a0.workers.dev'; manifest={}
+EMBEDDED_MANIFEST='{\n  "schema": "ghartv.review-manifest.v2",\n  "source_sha": "d2f364982ce2972d6a6c75588f206ef098edd65b",\n  "branch": "codex/ghartv-remove-auto-preview",\n  "pr": 1,\n  "version_name": "0.6.0-rc4-owner-convergence",\n  "version_code": 20,\n  "unsigned_sha256": "a594bc6ddc5d5448c20ac2850c0a3aed432954381c9ce9e840bb8fb56ff8aa5f",\n  "companion_sha256": "40b77d93ba163674c34130c48f093482ae442da3d4e7787598ca6a3edfde2a3f",\n  "production_unchanged": true,\n  "owner_signed_apk_sha256": null,\n  "owner_mac_run": "NOT_EXECUTED",\n  "ai_super_resolution": "NOT_IMPLEMENTED"\n}\n'
 IST=dt.timezone(dt.timedelta(hours=5,minutes=30))
-RUN_ID='GHARTV-CYAN-6-'+dt.datetime.now(dt.timezone.utc).strftime('%Y%m%dT%H%M%SZ')+'-'+str(os.getpid()); RUN=STATE/'runs'/RUN_ID
-parser=argparse.ArgumentParser();parser.add_argument('--memory-only',action='store_true');parser.add_argument('--signed-apk',type=Path);parser.add_argument('--noninteractive',action='store_true');parser.add_argument('--skip-backend-deploy',action='store_true');args=parser.parse_args(sys.argv[2:])
+RUN_ID='GHARTV-CYAN-6-NET-R1-'+dt.datetime.now(dt.timezone.utc).strftime('%Y%m%dT%H%M%SZ')+'-'+str(os.getpid()); RUN=STATE/'runs'/RUN_ID
+parser=argparse.ArgumentParser();parser.add_argument('--memory-only',action='store_true');parser.add_argument('--signed-apk',type=Path);parser.add_argument('--noninteractive',action='store_true');parser.add_argument('--skip-backend-deploy',action='store_true');parser.add_argument('--bundled-review',action='store_true');args=parser.parse_args(sys.argv[2:])
 r=dict(time_ist=dt.datetime.now(IST).isoformat(),time_utc=dt.datetime.now(dt.timezone.utc).isoformat(),checkout='READ_ONLY_NOT_INSPECTED',backend='NOT_CHECKED',web_player='NOT_STARTED',run_id=RUN_ID,lane_id='ghartv',repository=REPO,operon_session=os.environ.get('OPERON_SESSION_ID','UNBOUND'),
  production_source=PROD,review_source=SOURCE,version=VERSION,version_code=20,unsigned_apk_sha256=UNSIGNED,signed_apk_sha256='NOT_VERIFIED',
  delivery_sha='NOT_READ',local_sha='NOT_READ',production_feed='NOT_CHECKED',obsidian='NOT_WRITTEN',memory_bridge='NOT_RUN',
@@ -45,14 +46,158 @@ def call(argv,timeout=45,check=True,env=None):
  if check and p.returncode:raise Stop(Path(str(argv[0])).name+' failed (exit '+str(p.returncode)+'); no force/recovery action taken')
  return p
 
-def download(url,path):
+
+# Only immutable, known public artifacts can enter the local distribution cache.
+ARTIFACTS={
+ 'review-manifest.json': MANIFEST_SHA,
+ 'GharTV-review-companion.zip':'40b77d93ba163674c34130c48f093482ae442da3d4e7787598ca6a3edfde2a3f',
+ 'GharTV-review-unsigned.apk':UNSIGNED,
+ 'GharTV-Jio-Live-v0.5.4-rc8-pre-birthday-recovery.apk':PROD_HASH,
+}
+NETWORK_RECOVERY='CYAN6-NETWORK-R1'
+CACHE=STATE/'artifact-cache'
+
+
+def network_record(label,url,attempt,p=None,outcome='NOT_RUN',elapsed=0):
+ from urllib.parse import urlsplit
+ original=urlsplit(url)
+ # Never retain redirected URLs, proxy details, raw stderr or response headers.
+ item={'artifact':label,'host':original.hostname,'attempt':attempt,'result':outcome,
+       'elapsed_seconds':round(elapsed,3),'curl_exit':p.returncode if p else None}
+ if p is not None:
+  values=p.stdout.strip().split('|')
+  for key,value in zip(('http_status','dns_seconds','tcp_seconds','tls_seconds','first_byte_seconds','total_seconds','bytes_received','redirects'),values):
+   try:item[key]=float(value) if '.' in value else int(value)
+   except ValueError:pass
+ r['last_download']=item
+ write(RUN/'network-last.json',json.dumps(item,indent=2)+'\n')
+
+
+def download(url,path,attempts=2,max_seconds=90):
+ from urllib.parse import urlsplit
  safe(path)
- call(['curl','--proto','=https','--proto-redir','=https','-fLsS','--connect-timeout','15','--max-time','120','--max-filesize','52428800',url,'-o',path],130)
+ parsed=urlsplit(url)
+ if parsed.scheme!='https' or parsed.username or parsed.password:
+  raise Stop('PUBLIC_DOWNLOAD_URL_INVALID')
+ allowed=('github.com','raw.githubusercontent.com')
+ if parsed.hostname not in allowed or not parsed.path.startswith(('/AmritSinghGit/ghartv/','/repos/AmritSinghGit/ghartv/')):
+  raise Stop('PUBLIC_DOWNLOAD_ORIGIN_REFUSED')
+ name=parsed.path.rsplit('/',1)[-1]
+ expected=ARTIFACTS.get(name) if parsed.hostname=='github.com' and '/releases/download/' in parsed.path else None
+ r['network_recovery']=NETWORK_RECOVERY;r['download_artifact']=name;r['download_host']=parsed.hostname
+ if expected:
+  mkdir(CACHE)
+  cached=CACHE/expected
+  for local in (SELF.parent/'assets'/name,cached):
+   if not local.is_file() or local.is_symlink():continue
+   safe(local)
+   if digest(local)!=expected:
+    r['invalid_cached_artifacts']=r.get('invalid_cached_artifacts',0)+1
+    continue
+   if local!=path:shutil.copyfile(local,path)
+   network_record(name,url,0,outcome='VERIFIED_LOCAL_BYTES')
+   return
+  if name=='review-manifest.json':
+   raw=EMBEDDED_MANIFEST.encode('utf-8')
+   if hashlib.sha256(raw).hexdigest()!=expected:raise Stop('EMBEDDED_MANIFEST_MISMATCH')
+   write(path,EMBEDDED_MANIFEST);write(cached,EMBEDDED_MANIFEST)
+   network_record(name,url,0,outcome='VERIFIED_EMBEDDED_MANIFEST')
+   return
+ if args.bundled_review:
+  network_record(name,url,0,outcome='BUNDLED_ARTIFACT_MISSING')
+  raise Stop('BUNDLED_ARTIFACT_MISSING: '+name+'; use the complete recovery ZIP; no network fallback or checksum bypass')
+ attempts=max(1,min(2,attempts));max_seconds=max(1,min(90,max_seconds))
+ for attempt in range(1,attempts+1):
+  temp=path.with_name(path.name+'.download-'+str(os.getpid()))
+  safe(temp)
+  if temp.exists():temp.unlink()
+  print('Download '+name+' from '+str(parsed.hostname)+' · attempt '+str(attempt)+'/'+str(attempts),flush=True)
+  command=['curl','--proto','=https','--proto-redir','=https','--max-redirs','5','-fLsS',
+    '--connect-timeout',str(min(20,max_seconds)),'--max-time',str(max_seconds),'--max-filesize','52428800',
+    '--write-out','%{http_code}|%{time_namelookup}|%{time_connect}|%{time_appconnect}|%{time_starttransfer}|%{time_total}|%{size_download}|%{num_redirects}']
+  if attempt==2:command.extend(['--ipv4','--http1.1'])
+  command.extend([url,'-o',str(temp)])
+  started=time.monotonic()
+  try:p=call(command,timeout=max_seconds+5,check=False)
+  except subprocess.TimeoutExpired:
+   p=subprocess.CompletedProcess(command,28,'','')
+  elapsed=time.monotonic()-started
+  if p.returncode==0:
+   if not temp.is_file() or (expected and digest(temp)!=expected):
+    if temp.exists():temp.unlink()
+    network_record(name,url,attempt,p,'CHECKSUM_MISMATCH',elapsed)
+    raise Stop('DOWNLOAD_CHECKSUM_MISMATCH: '+name+'; refused without retry or execution')
+   temp.chmod(0o600);os.replace(temp,path)
+   if expected:
+    cached=CACHE/expected;safe(cached)
+    # Do not replace a corrupt owner file silently. It was ignored above.
+    if not cached.exists():shutil.copyfile(path,cached);cached.chmod(0o600)
+   network_record(name,url,attempt,p,'DOWNLOADED_AND_VERIFIED' if expected else 'DOWNLOADED_LIVE_METADATA',elapsed)
+   return
+  if temp.exists():temp.unlink()
+  category='TIMEOUT' if p.returncode==28 else 'DNS_FAILED' if p.returncode==6 else 'TRANSFER_FAILED'
+  network_record(name,url,attempt,p,category,elapsed)
+  http=r['last_download'].get('http_status',0)
+  transient=p.returncode in (6,7,18,28,35,52,55,56,92) or (p.returncode==22 and http in (408,429,500,502,503,504))
+  if not transient or attempt==attempts:break
+  time.sleep(1)
+ raise Stop('DOWNLOAD_'+category+': '+name+' from '+str(parsed.hostname)+'; curl exit '+str(p.returncode)+
+            '; measured '+str(round(elapsed,1))+'s on last attempt; see network-last.json; no local source or credentials changed')
+
+
 def get(url):
  with tempfile.TemporaryDirectory(prefix='.public-read-',dir=CURRENT) as t:
-  p=Path(t)/'response';download(url,p)
+  p=Path(t)/'response';download(url,p,attempts=1,max_seconds=15)
   if p.stat().st_size>2*1024*1024:raise Stop('Public metadata exceeds bound')
   return json.loads(p.read_text())
+
+
+def recovery_note():
+ vault=HOME/'Documents/Amrit Executive Memory'
+ if not vault.is_dir():r['obsidian']='EXISTING_VAULT_NOT_FOUND';return
+ dest=vault/'90 System/Operon Portfolio/Handoffs/Terminal Runs/ghartv';mkdir(dest)
+ note=dest/(RUN_ID+'-network-recovery.md')
+ body='# GharTV RC4 — distribution recovery\n\n'
+ body+='Same Android source `'+SOURCE+'`, code20. This is a launcher/network repair, not an APK rebuild.\n\n'
+ body+='Previous owner run GHARTV-CYAN-6-20260915T111739Z-35925 timed out in continuity downloads before signing, app installation or Obsidian write. Its generic error does not identify the stalled endpoint or network stage.\n\n'
+ body+='This run verifies local/bundled/cached immutable bytes first. Public release publication and live collector status are separate from local installation. Production is not changed. Other lanes must not infer a signed APK or running emulator from this note alone.\n\n```text\n'+receipt()+'```\n'
+ write(note,body)
+ if note.read_bytes()!=body.encode():raise Stop('RECOVERY_NOTE_READBACK_FAILED')
+ r['obsidian']='RECOVERY_NOTE_WRITTEN_AND_READBACK_VERIFIED';r['obsidian_note']=str(note)
+
+
+def observe_production():
+ if args.bundled_review:
+  r['production_feed']='NOT_FETCHED_BUNDLED_REVIEW_NO_PRODUCTION_WRITE';return
+ try:m=get(f'https://raw.githubusercontent.com/{REPO}/main/update/latest.json')
+ except Exception:
+  r['production_feed']='UNAVAILABLE_LOCAL_REVIEW_ONLY_NO_PRODUCTION_WRITE';return
+ r['production_feed']=str(m.get('versionName','UNKNOWN'))+' / code '+str(m.get('versionCode','UNKNOWN'))
+ r['observed_production_source']=m.get('sourceCommit','UNKNOWN')
+ if int(m.get('versionCode',0))>=20:raise Stop('Production has caught up or advanced; review identity needs reconciliation')
+
+
+def publish_review_after_local_success():
+ if r.get('emulator')!='RC4_INSTALLED_BYTES_VERIFIED_AND_FOREGROUND':return
+ if args.bundled_review:
+  r['review_release']='LOCAL_SIGNED_VERIFIED_GITHUB_UPLOAD_DEFERRED_BUNDLED_REVIEW';return
+ if not shutil.which('gh'):
+  r['review_release']='LOCAL_SIGNED_VERIFIED_GITHUB_CLI_UNAVAILABLE_UPLOAD_PENDING';return
+ target=CURRENT/ASSET
+ try:
+  info=json.loads(call(['gh','api',f'repos/{REPO}/releases/tags/{TAG}'],20).stdout)
+  if info.get('target_commitish')!=SOURCE or not info.get('prerelease') or info.get('draft'):
+   r['review_release']='PUBLISHED_RELEASE_IDENTITY_CHANGED_NO_UPLOAD';return
+  published=[a for a in info.get('assets',[]) if a.get('name')==ASSET]
+  if published:
+   r['review_release']='SIGNED_REVIEW_ASSET_VERIFIED' if len(published)==1 and published[0].get('digest')=='sha256:'+r['signed_apk_sha256'] else 'DIFFERENT_SIGNED_REVIEW_ASSET_PRESERVED_NO_UPLOAD'
+   return
+  call(['gh','release','upload',TAG,target,'--repo',REPO],45)
+  info=json.loads(call(['gh','api',f'repos/{REPO}/releases/tags/{TAG}'],20).stdout)
+  found=[a for a in info.get('assets',[]) if a.get('name')==ASSET and a.get('digest')=='sha256:'+r['signed_apk_sha256']]
+  r['review_release']='SIGNED_REVIEW_ASSET_VERIFIED' if len(found)==1 else 'UPLOAD_NOT_VERIFIED_LOCAL_REVIEW_PRESERVED'
+ except Exception:r['review_release']='GITHUB_PUBLICATION_PENDING_LOCAL_REVIEW_PRESERVED'
+
 def git(*a):return call(['git','-C',PROJECT,*a]).stdout.strip()
 def receipt():return 'GHARTV_CYAN_REVIEW_6_HANDOFF\n'+'\n'.join(k.upper()+'='+str(v) for k,v in r.items())+'\n'
 def persist():
@@ -88,10 +233,12 @@ def reconcile():
  global manifest
  with tempfile.TemporaryDirectory(prefix='.release-read-',dir=CURRENT) as t:
   t=Path(t);meta=t/'manifest.json'
+  r['phase']='ARTIFACT_MANIFEST'
   download(f'https://github.com/{REPO}/releases/download/{TAG}/review-manifest.json',meta)
   if digest(meta)!=MANIFEST_SHA:raise Stop('RELEASE_MANIFEST_CHECKSUM_MISMATCH')
   manifest=json.loads(meta.read_text())
   if manifest.get('source_sha')!=SOURCE or manifest.get('unsigned_sha256')!=UNSIGNED or manifest.get('version_code')!=20:raise Stop('RELEASE_IDENTITY_MISMATCH')
+  r['phase']='ARTIFACT_COMPANION'
   bundle=t/'companion.zip';download(f'https://github.com/{REPO}/releases/download/{TAG}/GharTV-review-companion.zip',bundle)
   if digest(bundle)!=manifest['companion_sha256']:raise Stop('COMPANION_CHECKSUM_MISMATCH')
   safe(RUNTIME)
@@ -220,8 +367,6 @@ def configured_sign(signer,align,unsigned,candidate,environment):
 
 def review():
  print('\n2 / 5 · Verify exact cloud APK and reuse the existing local signing configuration.',flush=True)
- if not shutil.which('gh'):raise Stop('GitHub CLI unavailable; Obsidian progress was already written')
- call(['gh','auth','status','-h','github.com'])
  sdk=Path(os.environ.get('ANDROID_SDK_ROOT',str(HOME/'Library/Android/sdk')));tools=sorted(sdk.glob('build-tools/*/apksigner'),key=lambda p:tuple(map(int,re.findall(r'\d+',p.parent.name))))
  if not tools:raise Stop('Android apksigner not found in the existing SDK')
  signer=tools[-1];align=signer.parent/'zipalign';aapt=signer.parent/'aapt';adb=sdk/'platform-tools/adb'
@@ -238,25 +383,15 @@ def review():
   values=re.findall(r'Signer #\d+ certificate SHA-256 digest: ([a-fA-F0-9]{64})',out)
   if not values:raise Stop('APK certificate unavailable')
   return set(v.lower() for v in values)
- def release():
-  x=json.loads(call(['gh','api',f'repos/{REPO}/releases/tags/{TAG}']).stdout)
-  if x.get('target_commitish')!=SOURCE or not x.get('prerelease') or x.get('draft'):raise Stop('Review release identity changed')
-  assets=x.get('assets',[]);u=[v for v in assets if v['name']=='GharTV-review-unsigned.apk'];s=[v for v in assets if v['name']==ASSET]
-  if len(u)!=1 or u[0].get('digest')!='sha256:'+UNSIGNED or len(s)>1:raise Stop('Review assets changed')
-  return s
  with tempfile.TemporaryDirectory(prefix='.rc4-review-',dir=CURRENT) as t:
    t=Path(t);u=t/'unsigned.apk';c=t/'candidate.apk';p=t/'production.apk'
+   r['phase']='ARTIFACT_UNSIGNED_APK'
    download(f'https://github.com/{REPO}/releases/download/{TAG}/GharTV-review-unsigned.apk',u)
+   r['phase']='ARTIFACT_SIGNER_REFERENCE'
    download(f'https://github.com/{REPO}/releases/download/v0.5.4-rc8/GharTV-Jio-Live-v0.5.4-rc8-pre-birthday-recovery.apk',p)
    if digest(u)!=UNSIGNED or digest(p)!=PROD_HASH:raise Stop('Release byte digest mismatch')
-   published=release();r['review_release']='EXISTING_SIGNED_ASSET_FOUND' if published else 'UNSIGNED_ASSET_VERIFIED'
-   if published:
-    expected=published[0].get('digest','')
-    if not re.fullmatch('sha256:[a-f0-9]{64}',expected):raise Stop('Signed asset digest unavailable')
-    download(f'https://github.com/{REPO}/releases/download/{TAG}/{ASSET}',c)
-    if digest(c)!=expected[7:]:raise Stop('Signed download digest mismatch')
-    r['signing_mode']='REUSED_PUBLISHED_SIGNED_APK'
-   elif args.signed_apk:
+   r['review_release']='LOCAL_PREPARATION_GITHUB_PUBLICATION_PENDING'
+   if args.signed_apk:
     safe(args.signed_apk.expanduser());shutil.copyfile(args.signed_apk.expanduser(),c);r['signing_mode']='OWNER_SUPPLIED_SIGNED_APK'
    else:
     prior=CURRENT/ASSET;meta=CURRENT/'review-artifact.json';reuse=False
@@ -268,17 +403,12 @@ def review():
     else:configured_sign(signer,align,u,c,env)
    if payload(u)!=payload(c) or cert(c)!=cert(p):raise Stop('Payload/signature continuity failed; no upload or installation')
    r['phase']='SIGNED_PAYLOAD_AND_CERTIFICATE_VERIFIED'
-   print('3 / 5 · Signed APK payload and original certificate verified. Publish review only.',flush=True)
+   print('3 / 5 · Signed APK payload and original certificate verified. Open local review first.',flush=True)
    badging=call([aapt,'dump','badging',c],env=env).stdout
    if not all(v in badging for v in ["name='in.ghartv.nova'","versionCode='20'","versionName='0.6.0-rc4-owner-convergence'"]):raise Stop('Wrong package or Android version')
    # Development checkout is intentionally untouched; verified artifact bytes are authoritative.
-   h=digest(c);r['signed_apk_sha256']=h;race=release()
-   if race and race[0].get('digest')!='sha256:'+h:raise Stop('Another signed artifact exists; no overwrite')
-   if not race:
-    public=t/ASSET;shutil.copyfile(c,public);call(['gh','release','upload',TAG,public,'--repo',REPO],120)
-   verified=release()
-   if len(verified)!=1 or verified[0].get('digest')!='sha256:'+h:raise Stop('Signed review upload not verified')
-   r['review_release']='SIGNED_REVIEW_ASSET_VERIFIED';r['phase']='EMULATOR_SELECTION'
+   h=digest(c);r['signed_apk_sha256']=h
+   r['review_release']='SIGNED_LOCAL_VERIFIED_GITHUB_PUBLICATION_PENDING';r['phase']='EMULATOR_SELECTION'
    print('4 / 5 · Update and open the same named emulator; no physical-TV change.',flush=True)
    target=CURRENT/ASSET;safe(target)
    devices=call([adb,'devices']).stdout.splitlines();matches=[]
@@ -449,16 +579,15 @@ note_text='';lock_acquired=False
 try:
  for p in (STATE,CURRENT,RUN):mkdir(p)
  lockpath=STATE/'owner-run.lock';safe(lockpath);lock=open(lockpath,'w');fcntl.flock(lock,fcntl.LOCK_EX|fcntl.LOCK_NB);lock_acquired=True
+ r['network_recovery']=NETWORK_RECOVERY
+ recovery_note();persist()
  r['phase']='CONTINUITY';print('1 / 5 · Reconcile current handoff and update existing Obsidian note.',flush=True)
  note_text=reconcile()
  try:note_sync(note_text)
  except Exception as e:r['obsidian']='FAILED_'+type(e).__name__
  persist()
  r['phase']='CHECKOUT_OBSERVATION_ONLY';sync_checkout()
- m=get(f'https://raw.githubusercontent.com/{REPO}/main/update/latest.json')
- r['production_feed']=str(m.get('versionName','UNKNOWN'))+' / code '+str(m.get('versionCode','UNKNOWN'))
- r['observed_production_source']=m.get('sourceCommit','UNKNOWN')
- if int(m.get('versionCode',0))>=20:raise Stop('Production has caught up or advanced; review identity needs reconciliation')
+ observe_production()
  r['status']='MEMORY_UPDATED' if r['obsidian']=='WRITTEN_AND_READBACK_VERIFIED' else 'CONTINUITY_REQUIRES_ATTENTION';cleanup()
  if not args.memory_only:review()
 except Exception as e:
@@ -470,14 +599,21 @@ finally:
     if note_text:open_dashboard()
    except Exception as e:r['dashboard']='OPEN_FAILED_'+(str(e) if isinstance(e,Stop) else type(e).__name__)
    try:
-    if note_text and not args.memory_only:collector_check_and_deploy()
+    if args.bundled_review:r['backend']='NOT_CHECKED_BUNDLED_REVIEW_NO_DEPLOYMENT'
+    elif note_text and not args.memory_only:collector_check_and_deploy()
    except Exception as e:r['backend']='ATTENTION_'+(str(e) if isinstance(e,Stop) else type(e).__name__)
+   publish_review_after_local_success()
    print('5 / 5 · Save exact outcome and current memory; no secrets in handoff.',flush=True)
    if note_text:
     try:note_sync(note_text)
     except Exception as e:r['obsidian']='FAILED_'+type(e).__name__
+   else:recovery_note()
    persist()
    bridge_once()
+   if note_text:
+    try:note_sync(note_text)
+    except Exception:r['obsidian']='FINAL_NOTE_UPDATE_FAILED'
+   else:recovery_note()
    persist()
  except Exception as e:print('Continuity receipt issue: '+type(e).__name__)
  print('\n'+receipt())

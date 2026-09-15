@@ -1,0 +1,23 @@
+{
+  "schema": "ghartv.network-recovery.v1",
+  "revision": "CYAN6-NETWORK-R1",
+  "version": "0.6.0-rc4-owner-convergence",
+  "version_code": 20,
+  "application_source": "d2f364982ce2972d6a6c75588f206ef098edd65b",
+  "command_sha256": "22fba74fae70ff7523543669d8362dc7661882efa225397eb28037462aa64456",
+  "bundle_sha256": "b1a0beff6a96c4cac7452560caf5729c625532ce8fabb5d9355d106d83fbc266",
+  "bundle_bytes": 12037900,
+  "artifact_sha256": {
+    "review-manifest.json": "52ec393fb49268f368eb2ce44d209aa433ceac3f4ed18ad5eb135248ac7265d7",
+    "GharTV-review-companion.zip": "40b77d93ba163674c34130c48f093482ae442da3d4e7787598ca6a3edfde2a3f",
+    "GharTV-review-unsigned.apk": "a594bc6ddc5d5448c20ac2850c0a3aed432954381c9ce9e840bb8fb56ff8aa5f",
+    "GharTV-Jio-Live-v0.5.4-rc8-pre-birthday-recovery.apk": "8cff8f85403da5924865fddc687dbff11089d7c498f9863e483a7d8123c1ce13"
+  },
+  "android_or_companion_rebuilt": false,
+  "owner_key_read": false,
+  "production_changed": false,
+  "local_network_function_checks": "PASS",
+  "owner_mac_execution": "NOT_PERFORMED",
+  "bundled_review_github_publication": "DEFERRED_UNTIL_NETWORKED_RUN",
+  "backend_deployment": "DEFERRED_IN_BUNDLED_MODE"
+}

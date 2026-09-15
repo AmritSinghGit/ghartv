@@ -1,3 +1,13 @@
+# Delivery correction — Cyan6 Network R1
+
+The Sept15 owner run GHARTV-CYAN-6-20260915T111739Z-35925 timed out before manifest/companion preparation completed. Its receipt does not identify the stalled endpoint or network stage. No signing, emulator change or Obsidian write occurred in that run.
+
+Current recovery command hash: `22fba74fae70ff7523543669d8362dc7661882efa225397eb28037462aa64456`. SAME RC4 Android code20 and immutable APK/companion bytes. Recovery ZIP `GHARTV_RC4_NETWORK_RECOVERY_R1.zip` on existing v0.6.0-rc4 includes the manifest, unsigned APK, companion and accepted RC8 signer-reference APK. It installs the known canonical launcher and verifies all bundled bytes. No source checkout change, new key or new runtime. Bundled review skips GitHub requests/publication and collector deployment; those remain explicitly pending. Live playback/telemetry still require network. Failed network attempts now get named file/host and safe timing diagnostics, max two attempts, no TLS/checksum bypass, and an Obsidian failure note.
+
+Packaging and focused offline-preparation checks are not owner-Mac signing or foreground evidence. The current command is a delivery correction, not an Android enhancement or production promotion.
+
+---
+
 # Current GharTV owner-review handoff — 15 September 2026
 
 Read GHARTV_LANE_PROGRESS.md first. The source authority for this candidate is the EXISTING `codex/ghartv-remove-auto-preview` branch and PR1, not a new lane. Donor SHA45f689ad0310e07dec77e01fd0d310316ea8aab8. The delivered candidate is0.6.0-rc4-owner-convergence/code20. Exact source/artifact identities will be in release v0.6.0-rc4/review-manifest.json and the copied owner receipt.
