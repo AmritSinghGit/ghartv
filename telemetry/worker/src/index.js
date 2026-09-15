@@ -19,7 +19,7 @@ export default {
     const url = new URL(request.url);
     if (request.method === "OPTIONS") return cors(new Response(null, { status: 204 }));
     if (request.method === "GET" && url.pathname === "/health") {
-      return json({ ok: true, service: "ghartv-control", schema: 2, retention_days: RETENTION_DAYS });
+      return json({ ok: true, service: "ghartv-control", schema: 3, revision: "0.6.0-rc4-owner-convergence", display_timezone: "Asia/Kolkata", retention_days: RETENTION_DAYS });
     }
     if (request.method === "POST" && url.pathname === "/v1/events") {
       return cors(await ingest(request, env));
@@ -45,6 +45,9 @@ export default {
     if (request.method === "POST" && url.pathname === "/v1/admin/devices/claim") {
       return claimDevice(request, env);
     }
+    if (request.method === "GET" && url.pathname === "/v1/admin/commands") return commandHistory(request,env);
+    if (request.method === "POST" && url.pathname === "/v1/admin/broadcast") return createBroadcast(request,env);
+    if (request.method === "POST" && url.pathname === "/v1/admin/devices/revoke") return revokeDevice(request,env);
     if (request.method === "POST" && url.pathname === "/v1/admin/commands") {
       return createCommand(request, env);
     }
@@ -77,6 +80,10 @@ async function registerDevice(request, env) {
     sha256(deviceSecret),
     sha256("ghartv-pair:" + pairingCode),
   ]);
+  const existing=await env.DB.prepare('SELECT device_secret_hash FROM tv_devices WHERE device_id=?').bind(deviceId).first();
+  if(existing&&!constantTimeEqual(existing.device_secret_hash,secretHash))return json({error:'registration_identity_mismatch'},403);
+  const registrations=await incrementRate(env,'__device_registration__',1);
+  if(registrations>100)return json({error:'registration_rate_limited'},429);
   await env.DB.prepare(
     `INSERT INTO tv_devices (
        device_id, device_secret_hash, pairing_code_hash, pairing_expires_at,
@@ -398,7 +405,7 @@ async function adminSummary(request, env, url) {
        GROUP BY manufacturer, model, android_api ORDER BY installations DESC LIMIT 40`
     ).bind(since).all(),
     env.DB.prepare(
-      `SELECT date(received_at / 1000, 'unixepoch') AS day,
+      `SELECT date(received_at / 1000, 'unixepoch', '+5 hours', '+30 minutes') AS day,
               COUNT(*) AS events, COUNT(DISTINCT install_hash) AS installations
        FROM telemetry_events WHERE received_at >= ?
        GROUP BY day ORDER BY day`
@@ -408,6 +415,7 @@ async function adminSummary(request, env, url) {
     ok: true,
     generated_at: new Date().toISOString(),
     window_days: days,
+    display_timezone: "Asia/Kolkata",
     retention_days: RETENTION_DAYS,
     totals: totals || { events: 0, installations: 0 },
     events: events.results || [],
@@ -540,4 +548,47 @@ function cors(response) {
   headers.set("Access-Control-Allow-Headers", "Content-Type, X-GharTV-Ingest-Key, Authorization");
   headers.set("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
   return new Response(response.body, { status: response.status, statusText: response.statusText, headers });
+}
+
+async function commandHistory(request,env) {
+  if(!authorizedAdmin(request,env))return json({error:'unauthorized'},401);
+  if(!env.DB)return json({error:'control_database_unavailable'},503);
+  const rows=await env.DB.prepare(`SELECT command_id,device_id,created_at,expires_at,acknowledged_at FROM tv_commands ORDER BY created_at DESC LIMIT 200`).all();
+  const now=Date.now();
+  return json({ok:true,limit:200,commands:(rows.results||[]).map(row=>({...row,status:row.acknowledged_at?'shown':row.expires_at<=now?'expired':'queued'}))});
+}
+async function revokeDevice(request,env) {
+  if(!authorizedAdmin(request,env))return json({error:'unauthorized'},401);
+  const body=await readJson(request),id=safeHex(body?.device_id,32);
+  if(!id||!env.DB)return json({error:'invalid_device'},400);
+  await env.DB.batch([
+    env.DB.prepare('UPDATE tv_devices SET paired_at=NULL,pairing_code_hash=NULL,pairing_expires_at=NULL WHERE device_id=?').bind(id),
+    env.DB.prepare('UPDATE tv_commands SET expires_at=? WHERE device_id=? AND acknowledged_at IS NULL').bind(Date.now(),id)
+  ]);
+  return json({ok:true,revoked:true});
+}
+async function createBroadcast(request,env) {
+  if(!authorizedAdmin(request,env))return json({error:'unauthorized'},401);
+  if(!env.DB)return json({error:'control_database_unavailable'},503);
+  const body=await readJson(request);if(!body)return json({error:'invalid_json'},400);
+  const requestId=safeUuid(body.request_id),ids=Array.isArray(body.device_ids)?[...new Set(body.device_ids.map(v=>safeHex(v,32)))]:[];
+  const message=scrubString(body.message||'').slice(0,180);
+  if(!requestId||!ids.length||ids.length>50||ids.some(v=>!v)||!message)return json({error:'invalid_broadcast'},400);
+  const now=Date.now(),ttl=safeInteger(body.expires_in_seconds,60,86400,3600),statements=[],commands=[];
+  for(const deviceId of ids){
+    const device=await env.DB.prepare('SELECT paired_at FROM tv_devices WHERE device_id=?').bind(deviceId).first();
+    if(!device?.paired_at)return json({error:'device_not_paired'},409);
+    const hash=await sha256('ghartv-message:'+requestId+':'+deviceId);
+    const commandId=hash.slice(0,8)+'-'+hash.slice(8,12)+'-4'+hash.slice(13,16)+'-a'+hash.slice(17,20)+'-'+hash.slice(20,32);
+    const previous=await env.DB.prepare('SELECT payload_json,expires_at FROM tv_commands WHERE command_id=?').bind(commandId).first();
+    if(previous&&parseJson(previous.payload_json).message!==message)return json({error:'request_id_conflict'},409);
+    if(!previous){
+      const rate=await env.DB.prepare('SELECT COUNT(*) AS n FROM tv_commands WHERE device_id=? AND created_at>?').bind(deviceId,now-60000).first();
+      if(Number(rate?.n||0)>=5)return json({error:'message_rate_limited'},429);
+      statements.push(env.DB.prepare(`INSERT OR IGNORE INTO tv_commands(command_id,device_id,command_type,payload_json,created_at,expires_at) VALUES(?,?,'message',?,?,?)`).bind(commandId,deviceId,JSON.stringify({message}),now,now+ttl*1000));
+    }
+    commands.push({command_id:commandId,device_id:deviceId,expires_at:previous?.expires_at||now+ttl*1000});
+  }
+  if(statements.length)await env.DB.batch(statements);
+  return json({ok:true,request_id:requestId,queued:commands.length,commands,delivery:'queued_not_confirmed_shown'});
 }
