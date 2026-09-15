@@ -562,6 +562,7 @@ public final class MainActivity extends Activity implements ChannelNavigator.Lis
             return;
         }
         executor.execute(() -> {
+            if(isFinishing()||selectedChannel==null||!selectedChannel.id.equals(channel.id))return;
             try {
                 List<Program> programmes = repository.api().fetchEpg(channel.id, 0);
                 epgCache.put(channel.id, programmes);
@@ -609,6 +610,10 @@ public final class MainActivity extends Activity implements ChannelNavigator.Lis
             Toast.makeText(this, "Could not open this channel", Toast.LENGTH_SHORT).show();
             return;
         }
+        org.json.JSONArray numbers=new org.json.JSONArray();
+        for(Channel item:visibleChannels)numbers.put(item.number);
+        player.putExtra(PlayerActivity.EXTRA_SCOPE_NUMBERS,numbers.toString());
+        player.putExtra(PlayerActivity.EXTRA_SCOPE_LABEL,selectedCategory);
         startActivity(player);
     }
 
@@ -657,6 +662,7 @@ public final class MainActivity extends Activity implements ChannelNavigator.Lis
                 "Appearance  •  " + FamilyTheme.modeLabel(this),
                 "Owner messages  •  " + RemoteControl.status(this),
                 "Diagnostics & privacy  •  " + diagnostics,
+                "Hardware & picture diagnostics",
                 "Sign out of JioTV"
         };
         new AlertDialog.Builder(this)
@@ -667,7 +673,8 @@ public final class MainActivity extends Activity implements ChannelNavigator.Lis
                     else if (which == 2) FamilyTheme.showPicker(this);
                     else if (which == 3) RemoteControl.showPairing(this);
                     else if (which == 4) DiagnosticsDialog.show(this);
-                    else if (which == 5) confirmSignOut();
+                    else if (which == 5) HardwareDiagnostics.show(this);
+                    else if (which == 6) confirmSignOut();
                 })
                 .setNegativeButton("Close", null)
                 .show();

@@ -84,6 +84,7 @@ public final class FamilyTheme {
         prefs(context).edit()
                 .putString(KEY_MODE, MODE_BIRTHDAY)
                 .putString(KEY_PERSON, safe)
+                .putLong("preview_expires_at", System.currentTimeMillis()+5*60_000L)
                 .apply();
         Telemetry.event(context, "theme_mode", Telemetry.data(
                 "mode", MODE_BIRTHDAY,
@@ -93,14 +94,18 @@ public final class FamilyTheme {
 
     public static Birthday activeBirthday(Context context) {
         String mode = mode(context);
+        // A held review preview must never turn into an all-year production birthday.
+        if (MODE_BIRTHDAY.equals(mode) && System.currentTimeMillis() > prefs(context).getLong("preview_expires_at", 0L)) {
+            prefs(context).edit().putString(KEY_MODE, MODE_AUTO).apply(); mode=MODE_AUTO;
+        }
         if (MODE_STANDARD.equals(mode)) return null;
         if (MODE_BIRTHDAY.equals(mode)) {
             String stored = prefs(context).getString(KEY_PERSON, "dad");
             stored = migrateLegacyKey(stored);
-            return BIRTHDAYS.getOrDefault(stored, BIRTHDAYS.get("dad"));
+            return effective(context, BIRTHDAYS.getOrDefault(stored, BIRTHDAYS.get("dad")));
         }
-        MonthDay today = MonthDay.from(LocalDate.now());
-        for (Birthday birthday : BIRTHDAYS.values()) {
+        MonthDay today = MonthDay.from(LocalDate.now(java.time.ZoneId.of("Asia/Kolkata")));
+        for (Birthday birthday : allBirthdays(context)) {
             if (birthday.date.equals(today)) return birthday;
         }
         return null;
@@ -212,35 +217,28 @@ public final class FamilyTheme {
     }
 
     public static void showPicker(Activity activity) {
-        String[] choices = {
-                "Automatic — use family dates",
-                "Preview a family birthday…",
-                "Preview standard theme"
-        };
-        int checked = MODE_BIRTHDAY.equals(mode(activity)) ? 1 : MODE_STANDARD.equals(mode(activity)) ? 2 : 0;
-        AlertDialog dialog = new AlertDialog.Builder(activity)
-                .setTitle("GharTV appearance")
-                .setSingleChoiceItems(choices, checked, null)
-                .setMessage("Family dates stay only on this TV. Birthday previews are lightweight and do not change the television clock.")
-                .setNegativeButton("Close", null)
-                .create();
-        dialog.setOnShowListener(ignored -> dialog.getListView().setOnItemClickListener((parent, view, position, id) -> {
-            dialog.dismiss();
-            if (position == 0) {
-                setMode(activity, MODE_AUTO);
-                activity.recreate();
-            } else if (position == 1) {
-                showBirthdayPicker(activity);
-            } else {
-                setMode(activity, MODE_STANDARD);
-                activity.recreate();
-            }
-        }));
-        dialog.show();
+        new AlertDialog.Builder(activity).setTitle("Appearance · birthdays use India Standard Time")
+            .setItems(new String[]{"Automatic — use family dates", "Edit family dates on this TV", "Preview a birthday for 5 minutes", "Standard theme"}, (d,which)->{
+                if(which==1){FamilyDatesEditor.show(activity);return;}
+                if(which==2){showBirthdayPicker(activity);return;}
+                setMode(activity,which==0?MODE_AUTO:MODE_STANDARD);activity.recreate();
+            }).setNegativeButton("Close",null).show();
     }
+    public static List<Birthday> allBirthdays(Context context) {
+        List<Birthday> list=new ArrayList<>();for(Birthday b:BIRTHDAYS.values())list.add(effective(context,b));return list;
+    }
+    private static Birthday effective(Context context,Birthday birthday) {
+        String date=prefs(context).getString("date_"+birthday.key, "");
+        if(!date.isEmpty())try{return new Birthday(birthday.key,birthday.name,MonthDay.parse(date),birthday.line);}catch(RuntimeException ignored){}
+        return birthday;
+    }
+    public static void setDate(Context context,String key,MonthDay date){
+        if(BIRTHDAYS.containsKey(key)&&date!=null)prefs(context).edit().putString("date_"+key,date.toString()).apply();
+    }
+    public static void resetDate(Context context,String key){prefs(context).edit().remove("date_"+key).apply();}
 
     private static void showBirthdayPicker(Activity activity) {
-        List<Birthday> birthdays = new ArrayList<>(BIRTHDAYS.values());
+        List<Birthday> birthdays = allBirthdays(activity);
         String[] labels = new String[birthdays.size()];
         for (int i = 0; i < birthdays.size(); i++) {
             Birthday birthday = birthdays.get(i);

@@ -134,6 +134,7 @@ public final class Telemetry {
                     "queue_depth", queuedCount(appContext)
             ));
             enqueueUpload(appContext, false);
+            HardwareDiagnostics.maybeReport(appContext);
         }
     }
 
@@ -154,6 +155,7 @@ public final class Telemetry {
         if (enabled) {
             event(context, "consent_changed", data("enabled", true, "source", "tv_settings"));
             enqueueUpload(context, true);
+            HardwareDiagnostics.maybeReport(context);
         } else {
             clearQueuedEvents(context, false);
         }

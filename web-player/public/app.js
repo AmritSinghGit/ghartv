@@ -21,7 +21,7 @@ function setConnected(connected, mobile = "") {
   state.connected = connected;
   $("accountButton").textContent = connected ? `JioTV ${mobile}` : "Connect JioTV";
   $("heroState").textContent = connected ? `Connected ${mobile}` : "Waiting to connect";
-  $("heroNote").textContent = connected ? "Choose a channel below. Playback permission is checked when you press play." : "Use your own Jio number and OTP. Nothing is saved when the local server stops.";
+  $("heroNote").textContent = connected ? "Choose a channel below. Playback permission is checked when you press play." : "Use your own Jio number and OTP. An existing sign-in can be restored from this Mac’s protected Keychain. Sign out to remove it.";
   $("browse").classList.toggle("hidden", !connected);
   $("hero").classList.toggle("hidden", connected);
   $("logoutButton").classList.toggle("hidden", !connected);
@@ -86,6 +86,7 @@ function renderChannels() {
     const image = node.querySelector("img");
     const fallback = node.querySelector(".channel-logo span");
     fallback.textContent = initials(channel.name);
+    image.loading="lazy";image.decoding="async";
     image.src = channel.logoUrl;
     image.alt = `${channel.name} logo`;
     image.onerror = () => { image.style.display = "none"; fallback.style.display = "block"; };
@@ -139,7 +140,7 @@ function programmeDescription(program) {
 function formatTime(value) {
   const date = new Date(value);
   if (!Number.isFinite(date.getTime())) return "";
-  return date.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+  return date.toLocaleTimeString("en-IN", { timeZone:"Asia/Kolkata", hour: "numeric", minute: "2-digit" });
 }
 
 function currentProgramme(now = Date.now()) {

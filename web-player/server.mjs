@@ -1,3 +1,4 @@
+import { ownerRoute } from "./owner-gateway.mjs";
 import { createServer } from "node:http";
 import { createReadStream } from "node:fs";
 import { stat } from "node:fs/promises";
@@ -12,7 +13,7 @@ const ROOT = dirname(fileURLToPath(import.meta.url));
 const PUBLIC = join(ROOT, "public");
 const HOST = process.env.GHARTV_WEB_HOST || "127.0.0.1";
 const PORT = Number(process.env.GHARTV_WEB_PORT || 8790);
-const APP_VERSION = "0.6.0-rc3-web-owner-review";
+const APP_VERSION = "0.6.0-rc4-owner-convergence";
 const SESSION_TTL_MS = 12 * 60 * 60 * 1000;
 const STREAM_TTL_MS = 4 * 60 * 60 * 1000;
 const MAX_BODY = 16 * 1024;
@@ -562,6 +563,8 @@ async function proxyStream(req, res, session, pathname, searchParams) {
     console.warn(JSON.stringify({
       event: "stream_proxy_failure",
       requestKind: searchParams.get("u") ? "manifest_child" : "root_manifest",
+      time_utc: new Date().toISOString(),
+      time_ist: new Intl.DateTimeFormat("en-IN",{timeZone:"Asia/Kolkata",dateStyle:"short",timeStyle:"medium",hour12:false}).format(new Date()),
       attempts: attemptStatuses,
       authorizationCookie: Boolean(ticket.headers.cookie),
       providerHost: finalUrl.hostname.endsWith(".jio.com"),
@@ -736,7 +739,13 @@ async function handleApi(req, res, url) {
 export function createAppServer() {
   return createServer(async (req, res) => {
     const url = new URL(req.url || "/", `http://${HOST}:${PORT}`);
+    if(!['127.0.0.1','localhost','::1'].includes(HOST))return apiError(res,403,'Loopback-only owner service.','invalid_bind');
+    if(!['127.0.0.1:'+PORT,'localhost:'+PORT,'[::1]:'+PORT].includes(req.headers.host||''))return apiError(res,403,'Host rejected.','invalid_host');
+    const began=Date.now();
+    res.once('finish',()=>{if(url.pathname.startsWith('/api/')||url.pathname.startsWith('/owner-api/'))console.info(JSON.stringify({event:'http_request',time_ist:new Intl.DateTimeFormat('en-IN',{timeZone:'Asia/Kolkata',dateStyle:'short',timeStyle:'medium',hour12:false}).format(new Date()),time_utc:new Date().toISOString(),route:/^\/api\/(stream|license)\//.test(url.pathname)?'/api/media/[redacted]':url.pathname,status:res.statusCode,duration_ms:Date.now()-began}));});
     try {
+      if(req.method==='GET'&&url.pathname==='/api/health'){json(res,200,{ok:true,service:'ghartv-web-player',version:APP_VERSION,commit:process.env.GHARTV_WEB_SHA||'working-tree',host:HOST,port:PORT,timezone:'Asia/Kolkata',owner_reader:true});return;}
+      if(await ownerRoute(req,res,url))return;
       if (url.pathname.startsWith("/api/")) await handleApi(req, res, url);
       else if (!(await serveStatic(res, url.pathname))) apiError(res, 404, "Not found.");
     } catch (error) {

@@ -54,6 +54,7 @@ public final class RemoteControl {
             .build();
 
     private static volatile Activity activeActivity;
+    private static volatile String visibleCommand="";
     private static final Runnable POLL = new Runnable() {
         @Override public void run() {
             Activity activity = activeActivity;
@@ -177,7 +178,10 @@ public final class RemoteControl {
     }
 
     private static void showMessage(Activity activity, String commandId, String text) {
-        if (activity.isFinishing() || activity.isDestroyed()) return;
+        if (activity.isFinishing() || activity.isDestroyed() || activeActivity!=activity || commandId.isEmpty()) return;
+        if(commandId.equals(visibleCommand)||prefs(activity).getString("last_shown", "").equals(commandId)) {acknowledge(activity,commandId);return;}
+        if(!visibleCommand.isEmpty())return;
+        visibleCommand=commandId;
         AlertDialog dialog = new AlertDialog.Builder(activity)
                 .setTitle("Message from Amrit")
                 .setMessage(text)
@@ -186,7 +190,9 @@ public final class RemoteControl {
         if (dialog.getWindow() != null) {
             dialog.getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
         }
+        dialog.setOnDismissListener(d->visibleCommand="");
         dialog.show();
+        prefs(activity).edit().putString("last_shown",commandId).apply();
         acknowledge(activity, commandId);
         Telemetry.event(activity, "owner_message_shown", Telemetry.data("message_length", text.length()));
     }

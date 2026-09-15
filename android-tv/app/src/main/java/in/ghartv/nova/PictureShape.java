@@ -62,11 +62,7 @@ public final class PictureShape {
                     apply(activity, view, channel);
                     TvUi.immersive(activity);
                 })
-                .setNegativeButton("What changes?", (dialog, which) -> new AlertDialog.Builder(activity)
-                        .setTitle("Shape is not source quality")
-                        .setMessage("Fit preserves a 4:3 picture with side bars. Zoom fills 16:9 by cropping. Stretch fills 16:9 by widening the picture. None of these adds detail that the provider's source does not contain; GharTV does not claim AI upscaling where it is not actually running.")
-                        .setPositiveButton("Back", (innerDialog, innerWhich) -> show(activity, view, channel))
-                        .show())
+                .setNegativeButton("Quality & live stats", (dialog, which) -> PictureControls.show(activity,view))
                 .show();
     }
 }

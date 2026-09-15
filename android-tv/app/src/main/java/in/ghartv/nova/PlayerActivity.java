@@ -87,7 +87,11 @@ public final class PlayerActivity extends Activity implements ChannelNavigator.L
     private Runnable bufferingWatchdog;
     private long panelShownAt;
     private long panelLastInteractionAt;
-    private int playbackGeneration;
+    private volatile int playbackGeneration;
+    private final java.util.concurrent.ThreadPoolExecutor playbackExecutor=(java.util.concurrent.ThreadPoolExecutor)Executors.newFixedThreadPool(2);
+    private java.util.concurrent.Future<?> pendingPlayback;
+    private long tuneElapsed;
+    private PlaybackProbe probe;
     private long tuneStartedAt;
     private long playbackReadyAt;
     private long bufferingStartedAt;
@@ -164,6 +168,7 @@ public final class PlayerActivity extends Activity implements ChannelNavigator.L
         mainHandler.removeCallbacks(progressTicker);
         releasePlayer();
         executor.shutdownNow();
+        playbackExecutor.shutdownNow();
         super.onDestroy();
     }
 
@@ -349,15 +354,21 @@ public final class PlayerActivity extends Activity implements ChannelNavigator.L
         repository.setLastChannel(next.number);
         historyStore.recordTune(next);
         int generation = ++playbackGeneration;
+        tuneElapsed=android.os.SystemClock.elapsedRealtime();
+        if(pendingPlayback!=null)pendingPlayback.cancel(true);
+        playbackExecutor.purge();
         cancelBufferingWatchdog();
         releasePlayer();
         loading.setVisibility(View.VISIBLE);
         refreshGuideContent();
         showGuide(false, null);
 
-        executor.execute(() -> {
+        pendingPlayback=playbackExecutor.submit(() -> {
+            if(generation!=playbackGeneration||Thread.currentThread().isInterrupted())return;
             try {
+                long authStart=android.os.SystemClock.elapsedRealtime();
                 PlaybackInfo info = repository.api().fetchPlayback(next);
+                Telemetry.event(this,"playback_authorization_timing",Telemetry.data("duration_ms",android.os.SystemClock.elapsedRealtime()-authStart));
                 mainHandler.post(() -> {
                     if (generation != playbackGeneration || isFinishing()) return;
                     info.normalizeAliases();
@@ -411,7 +422,13 @@ public final class PlayerActivity extends Activity implements ChannelNavigator.L
                 .setReadTimeoutMs(25_000)
                 .setDefaultRequestProperties(streamHeaders);
         DefaultMediaSourceFactory mediaSourceFactory = new DefaultMediaSourceFactory(dataSourceFactory);
-        player = new ExoPlayer.Builder(this).setMediaSourceFactory(mediaSourceFactory).build();
+        android.app.ActivityManager memory=(android.app.ActivityManager)getSystemService(ACTIVITY_SERVICE);
+        int targetBytes=(memory!=null&&memory.isLowRamDevice()?16:32)*1024*1024;
+        androidx.media3.exoplayer.DefaultLoadControl loadControl=new androidx.media3.exoplayer.DefaultLoadControl.Builder()
+            .setBufferDurationsMs(10_000,30_000,750,2000).setTargetBufferBytes(targetBytes)
+            .setPrioritizeTimeOverSizeThresholds(false).build();
+        player = new ExoPlayer.Builder(this).setLoadControl(loadControl).setMediaSourceFactory(mediaSourceFactory).build();
+        probe=new PlaybackProbe(this,player,tuneElapsed);
         playerView.setPlayer(player);
         PictureShape.apply(this, playerView, channel == null ? "" : channel.id);
         player.addListener(new Player.Listener() {
@@ -484,6 +501,7 @@ public final class PlayerActivity extends Activity implements ChannelNavigator.L
     private void releasePlayer() {
         cancelBufferingWatchdog();
         if (player != null) {
+            if(probe!=null){probe.close();probe=null;}
             playerView.setPlayer(null);
             player.release();
             player = null;
