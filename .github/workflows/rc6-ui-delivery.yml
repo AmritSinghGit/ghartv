@@ -48,6 +48,11 @@ jobs:
           s=s.replace(old,'Manual refresh only. Detailed event rows load only when you request them.')
           old='<p class="privacy-note">Reported recently';assert s.count(old)==1
           s=s.replace(old,'<p class="section-note">This page can run on your Mac, but report data is read from the existing Cloudflare collector and D1 database.</p>'+old);p.write_text(s)
+          p=Path('tools/rc6_browser_check.mjs');s=p.read_text()
+          old="await page.waitForFunction(()=>!!document.fullscreenElement);assert.equal(await page.locator('#fullscreenButton').getAttribute('aria-label'),'Exit fullscreen');";assert s.count(old)==1
+          s=s.replace(old,"await page.waitForFunction(()=>!!document.fullscreenElement && document.querySelector('#fullscreenButton').getAttribute('aria-label')==='Exit fullscreen');")
+          old="await page.waitForFunction(()=>!document.fullscreenElement);";assert s.count(old)==1
+          s=s.replace(old,"await page.waitForFunction(()=>!document.fullscreenElement && document.querySelector('#fullscreenButton').getAttribute('aria-label')==='Enter fullscreen');");p.write_text(s)
           Path('/tmp/ghartv-rc6-targets.json').write_text(json.dumps(list(data['targets'])))
           print('EXACT_SOURCE_OPERATIONS_VERIFIED=26_FILES; MANUAL_REPORTING_NOTICES_RETAINED=YES')
       - name: Focused family, scope, receipt and message checks
@@ -63,6 +68,13 @@ jobs:
           node --check web-player/review-sync.mjs
           node tools/rc6_receipt_check.mjs
           node tools/owner-convergence-check.mjs
+      - name: Real browser UI, keyboard, scope, fullscreen and private feedback checks
+        run: |
+          set -euo pipefail
+          npm --prefix web-player ci --ignore-scripts --no-audit --no-fund
+          npm --prefix /tmp/ghartv-browser install --ignore-scripts --no-audit --no-fund playwright@1.55.1
+          /tmp/ghartv-browser/node_modules/.bin/playwright install --with-deps chromium
+          node tools/rc6_browser_check.mjs
       - name: Compile actual Android RC6 release
         run: |
           set -euo pipefail
@@ -81,13 +93,6 @@ jobs:
           set -euo pipefail
           curl --proto '=https' --proto-redir '=https' -fLsS --max-time 90 https://github.com/AmritSinghGit/ghartv/releases/download/v0.5.4-rc8/GharTV-Jio-Live-v0.5.4-rc8-pre-birthday-recovery.apk -o /tmp/ghartv-public-reference.apk
           python tools/rc5_native_verify.py
-      - name: Real browser UI, keyboard, scope, fullscreen and private feedback checks
-        run: |
-          set -euo pipefail
-          npm --prefix web-player ci --ignore-scripts --no-audit --no-fund
-          npm --prefix /tmp/ghartv-browser install --ignore-scripts --no-audit --no-fund playwright@1.55.1
-          /tmp/ghartv-browser/node_modules/.bin/playwright install --with-deps chromium
-          node tools/rc6_browser_check.mjs
       - name: Commit checked source on the existing review branch
         run: |
           set -euo pipefail
