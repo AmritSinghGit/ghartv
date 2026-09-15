@@ -1,0 +1,55 @@
+name: Record verified RC6 owner delivery
+on:
+  push:
+    paths: ['.github/workflows/rc6-control-record.yml']
+permissions:
+  contents: write
+jobs:
+  record:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - uses: actions/checkout@v5
+      - name: Verify exact released bundle and update only owner control and Pages
+        run: |
+          set -euo pipefail
+          curl --proto '=https' --proto-redir '=https' -fLsS --max-time 90 https://github.com/AmritSinghGit/ghartv/releases/download/v0.6.0-rc6/GHARTV_RC6_REVIEW.zip -o /tmp/ghartv-rc6-control.zip
+          python - <<'PY'
+          from pathlib import Path
+          import hashlib,io,json,subprocess
+          import zipfile
+          source='1cbf03d50a2b706e901af5cc975183be1dd3566e';p=Path('/tmp/ghartv-rc6-control.zip');bundle_hash='4ae2585a64eaa0a589e20c99a1fe2059204ea2fda2dc791be0407a1b87b23d8b';command_hash='803cabaac2044338f09b49b2413f8dfe9c3786ce91952e32fbb2b41716d557f5'
+          assert hashlib.sha256(p.read_bytes()).hexdigest()==bundle_hash
+          with zipfile.ZipFile(p) as z:
+            assert z.testzip() is None
+            prefix='GHARTV_RC6_REVIEW/'
+            for row in z.read(prefix+'SHA256SUMS').decode().splitlines():
+              h,name=row.split('  ',1);assert hashlib.sha256(z.read(prefix+name)).hexdigest()==h,name
+            command=z.read(prefix+'GHARTV_SYNC_CURRENT_AND_REPORT.command');assert hashlib.sha256(command).hexdigest()==command_hash
+            raw=z.read(prefix+'assets/review-manifest.json');assert hashlib.sha256(raw).hexdigest()=='7d641329c56b87e31851b5522436d493157c31432be90ec3effe67751e5a40f1'
+            m=json.loads(raw);assert m['source_sha']==source and m['version_code']==22
+            companion=z.read(prefix+'assets/GharTV-review-companion.zip');assert hashlib.sha256(companion).hexdigest()==m['companion_sha256']
+          with zipfile.ZipFile(io.BytesIO(companion)) as z:
+            for name in ('CURRENT_HANDOFF.md','GHARTV_LANE_PROGRESS.md','docs/owner.html'):Path(name).write_bytes(z.read(name))
+          Path('GHARTV_SYNC_CURRENT_AND_REPORT.command').write_bytes(command)
+          p=Path('.ghartv-owner-state.json');s=json.loads(p.read_text());s.update(current_candidate=m['version_name'],current_candidate_sha=source,candidate_branch=m['branch'],candidate_pr=1,version_code=22,candidate_release='v0.6.0-rc6',candidate_release_status='FULL_BUNDLED_REVIEW_PUBLISHED_OWNER_EXECUTION_PENDING',unsigned_apk_sha256=m['unsigned_sha256'],apk_sha256=None,owner_decision='REVIEW_PENDING',owner_command_sha256=command_hash,owner_command_mode='BUNDLED_TYPED_SIGNING_SAFE_RECEIPT_MIRROR',mac_sync='AWAITING_CYAN8_RC6_RECEIPT',source_build_run=34989970299,source_build_result='ANDROID_AND_BROWSER_AND_RECEIPT_CHECKS_PASS',last_owner_run='GHARTV-CYAN-7-20260915T131648Z-51264',last_owner_result='RC5_CODE21_INSTALLED_BYTES_VERIFIED_AND_FOREGROUND',last_owner_source_sha='7915a279e78f3490fc599c4b7f0447d7a9f18ceb',last_owner_signed_apk_sha256='776495e2154a50e7f3460ba9b8e349678217f7c750d15061439894b015848472',last_owner_obsidian='WRITTEN_AND_READBACK_VERIFIED',last_owner_memory_bridge='HANDOFF_EXIT_0_SYNC_TIMEOUT_REPLICA_UNVERIFIED',next_action='Review RC6 first-open Next focus, family management, top-search keyboard web and manual owner console. Retrieve the managed safe PR receipt before requesting handoff copy/paste.');p.write_text(json.dumps(s,indent=2)+'\n')
+          Path('REVIEW_CANDIDATE.json').write_text(json.dumps({**m,'release_tag':'v0.6.0-rc6','build_run':34989970299,'build_job':104451782038,'owner_command_sha256':command_hash,'complete_bundle_sha256':bundle_hash,'starter_sha256':'c49d6b823e420b8462e48e6adbf6cf1c59549f1cfbd251787f528e2e3bda0801','owner_decision':'REVIEW_PENDING','production_version_code':17},indent=2)+'\n')
+          evidence={'schema':'ghartv.rc6-validation.v1','source_sha':source,'version':'0.6.0-rc6-family-focus','version_code':22,'native_and_browser_workflow_run':34989970299,'job':104451782038,'result':'SUCCESS','checks':['actual Android release compilation and aapt code22 identity','real typed APK verification; public reference and signed fixture accepted; unsigned/tampered rejected','JVM family Unicode/length/calendar rules and selected-channel order','mock-CLI safe receipt allowlist, idempotent comment update, exact readback and newer-run preservation','actual HTTP/Chromium top-bar search, keyboard arrows/Enter, category/search channel scope','browser first-open Next focus and real fullscreen enter/exit with accessible label','owner manual-only summary/details; no initial D1 or tab-change reads','private feedback saved with exact run identity in local and temporary Obsidian paths; lock clears UI','mobile horizontal overflow and JS errors','existing SQLite pairing/broadcast/revoke contracts'],'owner_data_or_provider_accounts_used':False,'real_owner_github_cli_mirror':'NOT_EXECUTED_HERE_MOCK_TRANSPORT_CHECKED','native_owner_tv_focus_test':'NOT_EXECUTED_SOURCE_FIX_AND_COMPILE_ONLY','new_owner_mac_run':'NOT_EXECUTED','public_update_promoted':False,'owner_signed_apk_sha256':None,'full_bundle_sha256':bundle_hash,'previous_owner_code21_run_confirmed':True}
+          Path('docs/rc6-review-validation.json').write_text(json.dumps(evidence,indent=2)+'\n')
+          agents=Path('AGENTS.md');text=agents.read_text();text=text.replace('Continue `AmritSinghGit/ghartv`, lane `ghartv`, main, package','Continue `AmritSinghGit/ghartv`, lane `ghartv`, existing review branch `codex/ghartv-remove-auto-preview` / PR1; main is public control/distribution, package')
+          text+='\n## Current review continuity\n\nRead the existing PR1 managed `GHARTV_SAFE_RECEIPT_V1` comment and CURRENT_HANDOFF.md before asking for a missing handoff. The owner already supplied five screenshots, code21 installation proof, and the requests tracked in OWNER_REVIEW_REQUIREMENTS.json on the review branch. Do not ask for those inputs again. Distinguish published source, the actual installed signed APK, and overall approval. A mirrored receipt can be pending; private feedback and screenshots are not automatically uploaded. No physical-TV or public promotion from REVIEW_READY. Preserve manual D1 refresh; no polling while redesigning the owner page.\n'
+          agents.write_text(text)
+          public=json.loads(Path('update/latest.json').read_text());assert public['versionCode']==17 and public['sourceCommit']=='de3106e3e97a9147b06347a3d66c4e5923cdbbcc'
+          subprocess.run(['bash','-n','GHARTV_SYNC_CURRENT_AND_REPORT.command'],check=True)
+          print('RC6_ALL_BUNDLE_CHECKSUMS_AND_PUBLIC_RC8_BOUNDARY_VERIFIED')
+          PY
+          test "$(git ls-remote origin refs/heads/main | cut -f1)" = "$GITHUB_SHA"
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add AGENTS.md CURRENT_HANDOFF.md GHARTV_LANE_PROGRESS.md docs/owner.html GHARTV_SYNC_CURRENT_AND_REPORT.command .ghartv-owner-state.json REVIEW_CANDIDATE.json docs/rc6-review-validation.json
+          git rm .github/workflows/rc6-control-record.yml
+          test -z "$(git diff --cached --name-only -- android-tv update/latest.json)"
+          git commit -m 'delivery: verified RC6 UI and safe-receipt control; public RC8 unchanged'
+          git push origin HEAD:main
+          echo "CURRENT_CONTROL_SHA=$(git rev-parse HEAD)"
+          rm /tmp/ghartv-rc6-control.zip
