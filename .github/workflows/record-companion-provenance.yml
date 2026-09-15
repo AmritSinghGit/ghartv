@@ -1,0 +1,58 @@
+name: Record exact companion source provenance
+on:
+  push:
+    paths: ['.github/workflows/record-companion-provenance.yml']
+permissions:
+  contents: write
+jobs:
+  record:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    env:
+      BRANCH: codex/ghartv-remove-auto-preview
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 2
+      - name: Commit the already-tested published Worker bytes, not a rebuild
+        run: |
+          set -euo pipefail
+          curl --proto '=https' --proto-redir '=https' -fLsS --max-time 60 https://github.com/AmritSinghGit/ghartv/releases/download/v0.6.0-rc4/GharTV-review-companion.zip -o /tmp/ghartv-companion-proof.zip
+          python - <<'PY'
+          from pathlib import Path
+          import hashlib,json,subprocess,zipfile
+          p=Path('/tmp/ghartv-companion-proof.zip'); expected='40b77d93ba163674c34130c48f093482ae442da3d4e7787598ca6a3edfde2a3f'
+          assert hashlib.sha256(p.read_bytes()).hexdigest()==expected
+          source='d2f364982ce2972d6a6c75588f206ef098edd65b'
+          differences=[]; records={}
+          with zipfile.ZipFile(p) as z:
+            assert z.testzip() is None
+            for item in z.infolist():
+              if item.is_dir():continue
+              name=item.filename
+              assert not name.startswith('/') and '..' not in Path(name).parts
+              if '/node_modules/' in name:continue
+              original=subprocess.run(['git','show',source+':'+name],capture_output=True)
+              value=z.read(item)
+              if original.returncode or original.stdout!=value:
+                assert name.startswith('telemetry/worker/'), 'Unexpected non-Worker source difference: '+name
+                assert name in ('telemetry/worker/src/index.js','telemetry/worker/schema.sql','telemetry/worker/package.json','telemetry/worker/wrangler.toml.template'), name
+                Path(name).write_bytes(value);differences.append(name)
+              records[name]=hashlib.sha256(value).hexdigest()
+          assert 'telemetry/worker/src/index.js' in differences
+          record={'schema':'ghartv.companion-source-provenance.v1','android_application_source':source,'release':'v0.6.0-rc4','companion_sha256':expected,'reconciled_paths':differences,'note':'The preparation job tested and packaged the changed Worker but omitted it from git add. This commit publishes those exact already-released and tested bytes. Android APK, owner command and companion bytes are unchanged. The later commit is Worker source authority, not a new Android build.','checks':{'native_build_run':34960401643,'browser_contract_run':34961147394,'published_companion_matches_committed_files':True},'source_files_sha256':records,'owner_runtime_execution':'NOT_PERFORMED'}
+          Path('COMPANION_PROVENANCE.json').write_text(json.dumps(record,indent=2)+'\n')
+          print('EXACT_COMPANION_SOURCE_RECONCILED='+json.dumps(differences))
+          PY
+          node --check telemetry/worker/src/index.js
+          node tools/owner-convergence-check.mjs
+          test -z "$(git diff d2f364982ce2972d6a6c75588f206ef098edd65b --name-only -- android-tv)"
+          test "$(git ls-remote origin refs/heads/$BRANCH | cut -f1)" = "$GITHUB_SHA"
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add telemetry/worker COMPANION_PROVENANCE.json
+          git rm .github/workflows/record-companion-provenance.yml
+          git commit -m 'delivery: record exact released Worker source and component provenance'
+          git push origin HEAD:refs/heads/$BRANCH
+          echo "COMPANION_SOURCE_COMMIT=$(git rev-parse HEAD)"
+          rm /tmp/ghartv-companion-proof.zip
