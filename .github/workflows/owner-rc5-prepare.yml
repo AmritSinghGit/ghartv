@@ -37,7 +37,9 @@ jobs:
             assert name.startswith(('android-tv/','web-player/','docs/','tools/')) or name in ('CURRENT_HANDOFF.md','GHARTV_LANE_PROGRESS.md','REVIEW_060_RC5.md','VALIDATE_SOURCE.command')
             if expected is None:assert not p.exists(),name
             else:assert hashlib.sha256(p.read_bytes()).hexdigest()==expected,name
-          patch=Path('/tmp/ghartv-rc5.diff');patch.write_text(data['patch'])
+          text=data['patch'];assert text[32772:32786]=='}--- /dev/null'
+          text=text[:32773]+'\n\\ No newline at end of file\n'+text[32773:]
+          patch=Path('/tmp/ghartv-rc5.diff');patch.write_text(text)
           subprocess.run(['git','apply','--check',str(patch)],check=True)
           subprocess.run(['git','apply',str(patch)],check=True)
           for name,expected in data['targets'].items():assert hashlib.sha256(Path(name).read_bytes()).hexdigest()==expected,name
