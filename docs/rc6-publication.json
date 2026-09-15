@@ -1,0 +1,16 @@
+{
+  "schema": "ghartv.rc6-publication.v1",
+  "version": "0.6.0-rc6-family-focus",
+  "version_code": 22,
+  "review_only": true,
+  "application_source_sha": "1cbf03d50a2b706e901af5cc975183be1dd3566e",
+  "review_branch_metadata_sha": "0d675d654800b791d27280b550aa7ccdb7a4e894",
+  "owner_console_content_sha": "0c6c62f4dcb5899f210dbbe06d07cbff2c5c11cc",
+  "release_tag": "v0.6.0-rc6",
+  "full_bundle_sha256": "4ae2585a64eaa0a589e20c99a1fe2059204ea2fda2dc791be0407a1b87b23d8b",
+  "verification_run": 34989970299,
+  "verification_result": "SUCCESS",
+  "public_tv_feed_changed": false,
+  "public_tv_version_code": 17,
+  "owner_execution_of_RC6": "PENDING"
+}
