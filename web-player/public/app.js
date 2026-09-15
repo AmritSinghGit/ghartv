@@ -1,5 +1,5 @@
 const $ = (id) => document.getElementById(id);
-const state = { connected: false, otpSent: false, channels: [], filtered: [], category: "All", currentIndex: -1, currentChannel: null, programs: [], scope: [], scopeLabel: "All", retryAttempt: 0, playerError: "", playbackAbort: null, hls: null, shaka: null, ticker: null, busy: false, playbackGeneration: 0, focusGuideAfterLoad: false, widevineSupport: null };
+const state = { connected: false, otpSent: false, channels: [], filtered: [], category: "All", currentIndex: -1, currentChannel: null, programs: [], scope: [], scopeLabel: "All", retryAttempt: 0, playerError: "", playbackAbort: null, hls: null, shaka: null, ticker: null, busy: false, playbackGeneration: 0, focusGuideAfterLoad: false, widevineSupport: null, returnChannelId: null, chromeTimer: null, keyboardMode: false };
 
 async function api(path, options = {}) {
   const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),25000);
@@ -61,7 +61,10 @@ function buildCategories() {
     button.type = "button";
     button.className = `category${category === state.category ? " active" : ""}`;
     button.textContent = category;
-    button.onclick = () => { state.category = category; buildCategories(); filterChannels(); };
+    button.dataset.category=category; button.setAttribute("aria-pressed",String(category===state.category));
+    button.tabIndex=category===state.category?0:-1;
+    button.onclick = () => { state.category = category; buildCategories(); filterChannels();
+      [...$("categoryBar").children].find(b=>b.dataset.category===category)?.focus(); };
     return button;
   }));
 }
@@ -94,7 +97,8 @@ function renderChannels() {
     node.querySelector(".channel-number").textContent = `CH ${String(channel.number).padStart(3, "0")}${channel.subscription ? " · SUBSCRIPTION" : ""}`;
     node.querySelector("h3").textContent = channel.name;
     node.querySelector(".channel-detail").textContent = `${channel.language} · ${channel.category}`;
-    node.onclick = () => { state.scope=state.filtered.map(c=>c.id);state.scopeLabel=state.category+($("search").value.trim()?" · search":"");playChannel(channel.id); };
+    node.dataset.channelId=channel.id;node.tabIndex=fragment.childNodes.length? -1:0;
+    node.onclick = () => { state.returnChannelId=channel.id;state.scope=state.filtered.map(c=>c.id);state.scopeLabel=state.category+($("search").value.trim()?" · search":"");playChannel(channel.id); };
     fragment.append(node);
   }
   $("channelGrid").replaceChildren(fragment);
@@ -371,7 +375,9 @@ async function playChannel(channelId, autoRetry=false) {
   $("guideChannelName").textContent = channel.name;
   $("programmeRail").replaceChildren();
   $("playerStatus").textContent = "Connecting…";
-  if (!$("playerDialog").open) $("playerDialog").showModal();
+  const opening=!$("playerDialog").open;
+  if(opening) { $("playerDialog").showModal(); $("nextChannel").focus(); }
+  showPlayerChrome();
   try {
     fetchProgrammeGuide(channel.id,generation,requestSignal).catch(()=>{});
     const playback=await api("/api/playback",{method:"POST",body:JSON.stringify({channelId:channel.id}),signal:requestSignal});
@@ -468,7 +474,7 @@ $("logoutButton").onclick = async () => {
   setConnected(false); $("loginDialog").close();
 };
 $("search").oninput = filterChannels;
-$("closePlayer").onclick = () => { destroyPlayback(); $("playerDialog").close(); };
+$("closePlayer").onclick = closePlayer;
 $("previousChannel").onclick = () => stepChannel(-1);
 $("nextChannel").onclick = () => stepChannel(1);
 $("retryChannel").onclick=()=>{if(state.currentChannel)playChannel(state.currentChannel.id);};
@@ -491,15 +497,81 @@ $("guideButton").onclick = () => {
   const guide = $("programmeGuide");
   const hidden = guide.classList.toggle("collapsed");
   $("guideButton").setAttribute("aria-expanded", String(!hidden));
-  $("guideButton").textContent = hidden ? "Show programme guide" : "Hide programme guide";
+  $("guideButton").textContent = hidden ? "Programmes" : "Hide programmes";
+  showPlayerChrome();
 };
 $("video").addEventListener("play", updatePlayerClock);
 $("video").addEventListener("pause", updatePlayerClock);
-$("playerDialog").addEventListener("close", destroyPlayback);
-document.addEventListener("keydown", (event) => {
-  if (!$("playerDialog").open) return;
-  if (event.key === "ArrowLeft") stepChannel(-1);
-  if (event.key === "ArrowRight") stepChannel(1);
-  if (event.key === "Escape") { destroyPlayback(); $("playerDialog").close(); }
+// One keyboard model: browse with arrows, select with Enter, change channels with Page keys.
+function moveFocus(elements,event){
+  const key=event.key,active=document.activeElement,list=[...elements].filter(e=>!e.disabled&&e.getClientRects().length);
+  const index=list.indexOf(active);if(index<0)return false;
+  const origin=active.getBoundingClientRect();let choices=[];
+  for(const node of list){if(node===active)continue;const r=node.getBoundingClientRect(),dx=(r.left+r.right-origin.left-origin.right)/2,dy=(r.top+r.bottom-origin.top-origin.bottom)/2;
+    const primary=key==="ArrowRight"?dx:key==="ArrowLeft"?-dx:key==="ArrowDown"?dy:-dy;
+    const secondary=(key==="ArrowLeft"||key==="ArrowRight")?Math.abs(dy):Math.abs(dx);
+    if(primary>3)choices.push({node,score:primary+secondary*4});}
+  if(choices.length){choices.sort((a,b)=>a.score-b.score);const node=choices[0].node;if(node.classList.contains("channel-card")){list.forEach(e=>e.tabIndex=-1);node.tabIndex=0;}node.focus();node.scrollIntoView({block:"nearest",inline:"nearest"});}
+  event.preventDefault();return true;
+}
+function showPlayerChrome(){
+  clearTimeout(state.chromeTimer);$("playerDialog").classList.remove("chrome-hidden");
+  if(!$("playerDialog").open)return;
+  state.chromeTimer=setTimeout(()=>{if(!$("playerDialog").open||state.keyboardMode||!$("programmeGuide").classList.contains("collapsed"))return;
+    $("playerDialog").focus({preventScroll:true});$("playerDialog").classList.add("chrome-hidden");},6500);
+}
+async function toggleFullscreen(){
+  try{if(document.fullscreenElement)await document.exitFullscreen();else if(document.querySelector(".player-shell").requestFullscreen)await document.querySelector(".player-shell").requestFullscreen();
+    else if($("video").webkitEnterFullscreen)$("video").webkitEnterFullscreen();else throw new Error("Unavailable");}
+  catch{$("playerStatus").textContent="Fullscreen not available in this browser. The player still fills this window.";}
+  showPlayerChrome();
+}
+function closePlayer(){
+  clearTimeout(state.chromeTimer);
+  if(document.fullscreenElement)document.exitFullscreen().catch(()=>{});
+  $("playerDialog").close();
+}
+$("fullscreenButton").onclick=toggleFullscreen;
+$("video").addEventListener("dblclick",toggleFullscreen);
+document.addEventListener("fullscreenchange",()=>{
+  const full=!!document.fullscreenElement;$("fullscreenButton").setAttribute("aria-label",full?"Exit fullscreen":"Enter fullscreen");
+  $("fullscreenButton").querySelector("span").textContent=full?"Window view":"Fullscreen";showPlayerChrome();
+});
+$("playerDialog").addEventListener("pointermove",()=>{state.keyboardMode=false;showPlayerChrome();});
+$("playerDialog").addEventListener("pointerdown",()=>{state.keyboardMode=false;showPlayerChrome();});
+$("playerDialog").addEventListener("close",()=>{
+  clearTimeout(state.chromeTimer);destroyPlayback();$("playerDialog").classList.remove("chrome-hidden");
+  const card=[...$("channelGrid").children].find(e=>e.dataset.channelId===state.returnChannelId);
+  if(card){[...$("channelGrid").children].forEach(e=>e.tabIndex=-1);card.tabIndex=0;card.focus({preventScroll:true});}
+});
+$("playerDialog").addEventListener("cancel",event=>{event.preventDefault();if(document.fullscreenElement)document.exitFullscreen().catch(()=>{});else closePlayer();});
+document.addEventListener("keydown",event=>{
+  if(event.defaultPrevented||event.altKey||event.metaKey||event.ctrlKey)return;
+  const target=event.target,typing=target instanceof HTMLElement&&(target.isContentEditable||target.matches("textarea,input:not([type=range])"));
+  if(typing){if(target===$("search")&&!$("playerDialog").open){
+      if(event.key==="ArrowDown"){event.preventDefault();$("channelGrid").querySelector(".channel-card")?.focus();}
+      else if(event.key==="Escape"){$("search").value="";filterChannels();event.preventDefault();}
+    }return;}
+  if($("loginDialog").open)return;
+  if($("playerDialog").open){
+    state.keyboardMode=true;const hidden=$("playerDialog").classList.contains("chrome-hidden");showPlayerChrome();
+    if(event.key==="Escape"){event.preventDefault();if(document.fullscreenElement)document.exitFullscreen().catch(()=>{});else closePlayer();return;}
+    if(event.repeat&&["PageDown","PageUp","n","p"].includes(event.key))return;
+    if(event.key==="PageDown"||event.key.toLowerCase()==="n"){event.preventDefault();stepChannel(1);return;}
+    if(event.key==="PageUp"||event.key.toLowerCase()==="p"){event.preventDefault();stepChannel(-1);return;}
+    if(event.key.toLowerCase()==="f"){event.preventDefault();toggleFullscreen();return;}
+    if(event.key===" "){event.preventDefault();$("playPauseButton").click();return;}
+    if(event.key.startsWith("Arrow")){
+      if(target===$("playerTimeline"))return;
+      if(hidden||target===$("playerDialog")){event.preventDefault();$("nextChannel").focus();return;}
+      moveFocus($("playerDialog").querySelectorAll("button,input:not(:disabled)"),event);
+    }
+    return;
+  }
+  if(event.key==="/"){event.preventDefault();$("search").focus();return;}
+  if(target.closest?.("#categoryBar")&&["ArrowLeft","ArrowRight","Home","End"].includes(event.key)){
+    const list=[...$("categoryBar").children],i=list.indexOf(target),next=event.key==="Home"?0:event.key==="End"?list.length-1:(i+(event.key==="ArrowRight"?1:-1)+list.length)%list.length;
+    list.forEach(e=>e.tabIndex=-1);list[next].tabIndex=0;list[next].focus();event.preventDefault();return;}
+  if(target.closest?.("#channelGrid")&&event.key.startsWith("Arrow"))moveFocus($("channelGrid").children,event);
 });
 loadStatus();

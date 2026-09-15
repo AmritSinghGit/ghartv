@@ -1,0 +1,41 @@
+{
+  "schema": "ghartv.owner-feedback-acceptance.v1",
+  "lane": "ghartv",
+  "baseline": {
+    "version": "0.6.0-rc5-navigation-review",
+    "version_code": 21,
+    "source": "7915a279e78f3490fc599c4b7f0447d7a9f18ceb",
+    "signed_apk_sha256": "776495e2154a50e7f3460ba9b8e349678217f7c750d15061439894b015848472",
+    "run": "GHARTV-CYAN-7-20260915T131648Z-51264",
+    "evidence": "owner pasted receipt plus five screenshots; no remote Mac inspection"
+  },
+  "accepted_behaviour": [
+    "channel next/previous stays within selected category"
+  ],
+  "items": [
+    {
+      "id": "RC6-01",
+      "request": "Next channel focused immediately on first visible player panel; preserve subsequent user focus"
+    },
+    {
+      "id": "RC6-02",
+      "request": "Correct Simrat display name; local edit/add/remove members, stable identity/date migration, confirm remove"
+    },
+    {
+      "id": "RC6-03",
+      "request": "Search in browser top navigation, keyboard, explicit fullscreen, lightweight translucent controls; scoped channel order retained"
+    },
+    {
+      "id": "RC6-04",
+      "request": "Clear owner hierarchy, report/data freshness and pairing/message UX; preserve manual summary/details"
+    },
+    {
+      "id": "RC6-05",
+      "request": "Local/Obsidian receipt saved without copying; bounded safe GitHub mirror/readback; private feedback saved against exact candidate"
+    }
+  ],
+  "implementation_state": "SOURCE_IMPLEMENTED_BUILD_AND_OWNER_REVIEW_REMAIN_SEPARATE",
+  "owner_decision": "REVIEW_PENDING",
+  "public_update_changed": false,
+  "screenshots_reupload_required": false
+}

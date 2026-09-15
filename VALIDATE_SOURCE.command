@@ -14,7 +14,7 @@ missing=[name for name in required if not (java/name).is_file()]
 if missing: raise SystemExit('Missing required source: '+', '.join(missing))
 for xml in (app/'src/main').rglob('*.xml'): ET.parse(xml)
 gradle=(app/'build.gradle.kts').read_text()
-assert 'versionCode = 21' in gradle and 'versionName = "0.6.0-rc5-navigation-review"' in gradle, gradle
+assert 'versionCode = 22' in gradle and 'versionName = "0.6.0-rc6-family-focus"' in gradle, gradle
 manifest=(app/'src/main/AndroidManifest.xml').read_text()
 assert 'android.software.leanback' in manifest and 'android.hardware.touchscreen' in manifest
 assert 'android:required="false"' in manifest
@@ -25,7 +25,7 @@ for forbidden in ['youtube.com','youtu.be','Fastway','WAVES']:
 for marker in [
  'Update live guide', 'EXTRA_SCOPE_NUMBERS', 'Next working channel', 'KEY_PREVIOUS_CHANNEL',
  'previousChannel()', 'public synchronized int indexedCount()', 'previous_launch_incomplete',
- 'RESIZE_MODE_FIT', 'Rajvinder', 'Manu', 'Simrit', 'Owner messages'
+ 'RESIZE_MODE_FIT', 'Rajvinder', 'Manu', 'Simrat', 'Owner messages'
 ]:
     if marker not in all_text: raise SystemExit('Missing RC1 marker: '+marker)
 # Check the active product surface only. Historical delivery scripts may retain
@@ -82,5 +82,5 @@ for path in java.glob('*.java'):
             if depth<0: raise SystemExit(f'Brace underflow: {path}')
         i+=1
     if depth or quote or block: raise SystemExit(f'Lexical balance failed: {path}')
-print(f'GHARTV_SOURCE_VALIDATION=PASS · {len(list(java.glob("*.java")))} Java files · 0.6.0 RC5 navigation review')
+print(f'GHARTV_SOURCE_VALIDATION=PASS · {len(list(java.glob("*.java")))} Java files · 0.6.0 RC6 family / first-focus review')
 PY

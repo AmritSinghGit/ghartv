@@ -1,3 +1,4 @@
+import {latestReview,publishReceipt,saveFeedback} from './review-sync.mjs';
 import {readFile} from 'node:fs/promises';
 import {homedir} from 'node:os';
 import {join,dirname} from 'node:path';
@@ -36,11 +37,25 @@ export async function ownerRoute(req,res,url){
     html=html.replace("const ENDPOINT='https://ghartv-telemetry.ghartv-47d9a0.workers.dev';",`const ENDPOINT=${JSON.stringify(origin+'/owner-api')};`)
       .replace('<!--OWNER_BOOTSTRAP-->','<script id="owner-bootstrap" type="application/json">'+JSON.stringify(boot).replace(/</g,'\\u003c')+'</script>')
       .replace('The Mac launcher opens a private copy with the existing local credential.','This local reader uses your existing saved collector configuration automatically. You do not need to find or paste its admin token here.');
-    html=html.replace(/<section id="access">[\s\S]*?<\/section>/,'<section id="access"><h2>Local owner connection</h2><p id="configStatus">Checking the existing collector configuration…</p><p class="muted">The admin credential stays on this Mac in ~/Library/Application Support/GharTV/telemetry/collector.env. This page never displays it. A missing file is not a reason to invent a new token or reset the Worker secret.</p><input id="token" type="password" hidden><button id="connect" hidden>Connect</button></section>');
+    html=html.replace(/<section id="access">[\s\S]*?<\/section>/,'<section id="access"><div class="connection-row"><span class="status-dot" aria-hidden="true"></span><div><h2>Private connection</h2><p id="configStatus">Checking saved configuration…</p></div></div><details><summary>Where is my collector credential?</summary><p class="muted">Saved on this Mac in ~/Library/Application Support/GharTV/telemetry/collector.env. It stays on the local server; this page never displays it. Report requests verify live authorization.</p></details><input id="token" type="password" hidden><button id="connect" hidden>Connect</button></section>');
     res.writeHead(200,{'Content-Type':'text/html; charset=utf-8' ,'Cache-Control':'no-store','X-Frame-Options':'DENY','Referrer-Policy':'no-referrer'});res.end(html);return true;
   }
   if(!url.pathname.startsWith('/owner-api/'))return false;
   const path=url.pathname.slice('/owner-api'.length);
+  if(['/review/status','/review/sync','/review/feedback'].includes(path)){
+    if(!authorized(req)){reply(res,401,{error:'local_owner_session_required'});return true;}
+    if(path==='/review/status'&&req.method==='GET'){
+      try{reply(res,200,await latestReview());}catch{reply(res,200,{ok:false,status:'NO_LOCAL_RECEIPT_YET'});}return true;
+    }
+    if(req.method!=='POST'){reply(res,405,{error:'method_not_allowed'});return true;}
+    if(req.headers.origin!==`http://${req.headers.host}`){reply(res,403,{error:'origin_rejected'});return true;}
+    try{
+      const chunks=[];let size=0;for await(const c of req){size+=c.length;if(size>32768){reply(res,413,{error:'too_large'});return true;}chunks.push(c);}
+      const body=JSON.parse(Buffer.concat(chunks).toString('utf8')||'{}');
+      if(path==='/review/sync'){reply(res,200,await publishReceipt());return true;}
+      reply(res,200,await saveFeedback(body));
+    }catch{reply(res,400,{error:'review_action_failed_or_candidate_changed'});}return true;
+  }
   if(path==='/config-status'&&req.method==='GET'){if(!authorized(req)){reply(res,401,{error:'local_owner_session_required'});return true;}await token();reply(res,200,{ok:true,config_status:configStatus,token_present:configStatus==='PRESENT',location:'~/Library/Application Support/GharTV/telemetry/collector.env',field:'GHARTV_TELEMETRY_ADMIN_TOKEN',token_returned:false});return true;}
   if(!allowed.has(path)||!['GET','POST'].includes(req.method)){reply(res,404,{error:'not_found'});return true;}
   if(!authorized(req)){reply(res,401,{error:'local_owner_session_required'});return true;}

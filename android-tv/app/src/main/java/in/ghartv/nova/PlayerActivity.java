@@ -645,6 +645,8 @@ public final class PlayerActivity extends Activity implements ChannelNavigator.L
         return TvUi.istTime(epochMs);
     }
 
+    private int panelFocusRequest = 0;
+
     private void showGuide(boolean interactive, View preferredFocus) {
         if (guidePanel == null) return;
         refreshGuideContent();
@@ -653,14 +655,20 @@ public final class PlayerActivity extends Activity implements ChannelNavigator.L
         panelShownAt = now;
         panelLastInteractionAt = now;
         if (hideGuide != null) mainHandler.removeCallbacks(hideGuide);
-        if (interactive) {
-            View target = preferredFocus == null ? guideButton : preferredFocus;
-            target.requestFocus();
-            scheduleHideGuide(7000L);
-        } else {
-            playerView.requestFocus();
-            scheduleHideGuide(5000L);
+        // First opening must be immediately usable, not a visible panel with focus behind it.
+        // Preserve a deliberate action focus during background refreshes; never steal it on a timer.
+        View target = preferredFocus != null ? preferredFocus :
+                (isGuideActionFocused() ? getCurrentFocus() : nextButton);
+        final int focusRequest = ++panelFocusRequest;
+        if (target != null && !target.requestFocus()) {
+            final View pending = target;
+            guidePanel.post(() -> {
+                if (focusRequest == panelFocusRequest && !isFinishing()
+                        && guidePanel.getVisibility() == View.VISIBLE && !isGuideActionFocused())
+                    pending.requestFocus();
+            });
         }
+        scheduleHideGuide(interactive ? 7000L : 5000L);
     }
 
     private void notePanelInteraction() {
@@ -692,6 +700,7 @@ public final class PlayerActivity extends Activity implements ChannelNavigator.L
 
     private void hideGuideNow() {
         if (guidePanel == null) return;
+        ++panelFocusRequest;
         guidePanel.setVisibility(View.GONE);
         playerView.requestFocus();
     }
@@ -700,7 +709,7 @@ public final class PlayerActivity extends Activity implements ChannelNavigator.L
         View focused = getCurrentFocus();
         return focused == rewindButton || focused == pauseButton || focused == liveButton
                 || focused == forwardButton || focused == previousButton
-                || focused == guideButton || focused == nextButton;
+                || focused == pictureButton || focused == guideButton || focused == nextButton;
     }
 
     private void refreshTransportState() {

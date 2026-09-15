@@ -42,7 +42,7 @@ public final class FamilyTheme {
         register("rajvinder", "Rajvinder", 8, 18, "Celebrating the heart of the family");
         register("manu", "Manu", 8, 22, "A special day for our sister");
         register("dad", "Dad", 9, 12, "A birthday tribute on his favourite television");
-        register("simrit", "Simrit", 10, 4, "A joyful day for our son");
+        register("simrit", "Simrat", 10, 4, "A joyful day for our son");
     }
 
     private FamilyTheme() {}
@@ -80,7 +80,10 @@ public final class FamilyTheme {
 
     public static void setBirthdayPreview(Context context, String key) {
         String requested = migrateLegacyKey(key);
-        String safe = BIRTHDAYS.containsKey(requested) ? requested : "dad";
+        List<Birthday> rows = allBirthdays(context);
+        if (rows.isEmpty()) { setMode(context, MODE_AUTO); return; }
+        String safe = rows.get(0).key;
+        for (Birthday row : rows) if (row.key.equals(requested)) { safe = requested; break; }
         prefs(context).edit()
                 .putString(KEY_MODE, MODE_BIRTHDAY)
                 .putString(KEY_PERSON, safe)
@@ -102,7 +105,9 @@ public final class FamilyTheme {
         if (MODE_BIRTHDAY.equals(mode)) {
             String stored = prefs(context).getString(KEY_PERSON, "dad");
             stored = migrateLegacyKey(stored);
-            return effective(context, BIRTHDAYS.getOrDefault(stored, BIRTHDAYS.get("dad")));
+            for (Birthday row : allBirthdays(context)) if (row.key.equals(stored)) return row;
+            prefs(context).edit().putString(KEY_MODE, MODE_AUTO).apply();
+            return null;
         }
         MonthDay today = MonthDay.from(LocalDate.now(java.time.ZoneId.of("Asia/Kolkata")));
         for (Birthday birthday : allBirthdays(context)) {
@@ -218,27 +223,85 @@ public final class FamilyTheme {
 
     public static void showPicker(Activity activity) {
         new AlertDialog.Builder(activity).setTitle("Appearance · birthdays use India Standard Time")
-            .setItems(new String[]{"Automatic — use family dates", "Edit family dates on this TV", "Preview a birthday for 5 minutes", "Standard theme"}, (d,which)->{
+            .setItems(new String[]{"Automatic — use family dates", "Manage family · names and birthdays", "Preview a birthday for 5 minutes", "Standard theme"}, (d,which)->{
                 if(which==1){FamilyDatesEditor.show(activity);return;}
                 if(which==2){showBirthdayPicker(activity);return;}
                 setMode(activity,which==0?MODE_AUTO:MODE_STANDARD);activity.recreate();
             }).setNegativeButton("Close",null).show();
     }
+    /** Preserve the original keys so existing birthday/date/photo preferences survive renaming. */
     public static List<Birthday> allBirthdays(Context context) {
-        List<Birthday> list=new ArrayList<>();for(Birthday b:BIRTHDAYS.values())list.add(effective(context,b));return list;
+        List<Birthday> list = new ArrayList<>();
+        java.util.Set<String> hidden = prefs(context).getStringSet("hidden_members", java.util.Collections.emptySet());
+        for (Birthday b : BIRTHDAYS.values()) if (!hidden.contains(b.key)) list.add(effective(context, b));
+        try {
+            org.json.JSONArray custom = customMembers(context);
+            for (int i=0; i<custom.length() && list.size()<FamilyMemberRules.MAX_MEMBERS; i++) {
+                org.json.JSONObject row=custom.getJSONObject(i);
+                String key=row.getString("key");
+                if (!key.matches("member_[a-f0-9]{32}")) continue;
+                list.add(effective(context,new Birthday(key,FamilyMemberRules.name(row.getString("name")),
+                    MonthDay.parse(row.getString("date")),"With love from everyone at home")));
+            }
+        } catch (RuntimeException | org.json.JSONException ignored) { /* Keep malformed stored data; never replace it silently. */ }
+        return list;
+    }
+    private static org.json.JSONArray customMembers(Context context) {
+        try { return new org.json.JSONArray(prefs(context).getString("custom_members_v1", "[]")); }
+        catch (org.json.JSONException e) { throw new IllegalStateException("Saved family data could not be read; nothing has been reset."); }
     }
     private static Birthday effective(Context context,Birthday birthday) {
-        String date=prefs(context).getString("date_"+birthday.key, "");
-        if(!date.isEmpty())try{return new Birthday(birthday.key,birthday.name,MonthDay.parse(date),birthday.line);}catch(RuntimeException ignored){}
-        return birthday;
+        String name=prefs(context).getString("name_"+birthday.key,birthday.name);
+        try { name=FamilyMemberRules.name(name); } catch(IllegalArgumentException ignored) { name=birthday.name; }
+        MonthDay date=birthday.date;
+        String saved=prefs(context).getString("date_"+birthday.key, "");
+        if(!saved.isEmpty()) try { date=MonthDay.parse(saved); } catch(RuntimeException ignored) {}
+        return new Birthday(birthday.key,name,date,birthday.line);
     }
+    public static String saveMember(Context context,String key,String name,MonthDay date) {
+        name=FamilyMemberRules.name(name);
+        if(date==null) throw new IllegalArgumentException("Choose a birthday.");
+        if(key!=null) {
+            boolean exists=false; for(Birthday b:allBirthdays(context)) if(b.key.equals(key)) exists=true;
+            if(!exists) throw new IllegalArgumentException("This person is no longer in the family list.");
+            prefs(context).edit().putString("name_"+key,name).putString("date_"+key,date.toString()).apply();
+            return key;
+        }
+        if(allBirthdays(context).size()>=FamilyMemberRules.MAX_MEMBERS)
+            throw new IllegalArgumentException("Up to 32 people can be saved on this TV.");
+        org.json.JSONArray rows=customMembers(context);
+        key="member_"+java.util.UUID.randomUUID().toString().replace("-","");
+        try { rows.put(new org.json.JSONObject().put("key",key).put("name",name).put("date",date.toString())); }
+        catch(org.json.JSONException e) { throw new IllegalArgumentException("Unable to save this person."); }
+        prefs(context).edit().putString("custom_members_v1",rows.toString()).apply();
+        return key;
+    }
+    public static void removeMember(Context context,String key) {
+        SharedPreferences.Editor edit=prefs(context).edit();
+        if(BIRTHDAYS.containsKey(key)) {
+            java.util.Set<String> hidden=new java.util.HashSet<>(prefs(context).getStringSet("hidden_members",java.util.Collections.emptySet()));
+            hidden.add(key); edit.putStringSet("hidden_members",hidden);
+        } else {
+            org.json.JSONArray old=customMembers(context),remaining=new org.json.JSONArray();
+            for(int i=0;i<old.length();i++) {
+                org.json.JSONObject row=old.optJSONObject(i);
+                if(row==null || !key.equals(row.optString("key"))) remaining.put(old.opt(i));
+            }
+            edit.putString("custom_members_v1",remaining.toString()).remove("name_"+key).remove("date_"+key);
+        }
+        if(key.equals(migrateLegacyKey(prefs(context).getString(KEY_PERSON,"")))) edit.putString(KEY_MODE,MODE_AUTO).remove("preview_expires_at");
+        edit.apply();
+    }
+    public static void restoreHiddenDefaults(Context context) { prefs(context).edit().remove("hidden_members").apply(); }
+    public static boolean hasHiddenDefaults(Context context) { return !prefs(context).getStringSet("hidden_members",java.util.Collections.emptySet()).isEmpty(); }
     public static void setDate(Context context,String key,MonthDay date){
-        if(BIRTHDAYS.containsKey(key)&&date!=null)prefs(context).edit().putString("date_"+key,date.toString()).apply();
+        for(Birthday b:allBirthdays(context)) if(b.key.equals(key)&&date!=null) prefs(context).edit().putString("date_"+key,date.toString()).apply();
     }
     public static void resetDate(Context context,String key){prefs(context).edit().remove("date_"+key).apply();}
 
     private static void showBirthdayPicker(Activity activity) {
         List<Birthday> birthdays = allBirthdays(activity);
+        if (birthdays.isEmpty()) { FamilyDatesEditor.show(activity); return; }
         String[] labels = new String[birthdays.size()];
         for (int i = 0; i < birthdays.size(); i++) {
             Birthday birthday = birthdays.get(i);
