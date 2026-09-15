@@ -1,0 +1,22 @@
+{
+  "schema": "ghartv.owner-feedback-acceptance.v1",
+  "lane": "ghartv",
+  "input_status": "FIVE_SCREENSHOTS_AND_CODE21_HANDOFF_RECEIVED",
+  "screenshots_reupload_required": false,
+  "accepted_baseline_source": "7915a279e78f3490fc599c4b7f0447d7a9f18ceb",
+  "accepted_behaviour": "Category-scoped channel navigation works and must be preserved",
+  "candidate_source": "1cbf03d50a2b706e901af5cc975183be1dd3566e",
+  "candidate_version": "0.6.0-rc6-family-focus",
+  "version_code": 22,
+  "items": [
+    {"id":"RC6-01","request":"First-open Next channel focus; no hide/reopen required"},
+    {"id":"RC6-02","request":"Simrat display spelling, edit name/date, add/remove member with identity preservation"},
+    {"id":"RC6-03","request":"Top navigation search, keyboard/fullscreen and selected-category browser navigation"},
+    {"id":"RC6-04","request":"Clearer owner console while preserving manual reporting"},
+    {"id":"RC6-05","request":"No mandatory handoff paste: local/Obsidian persistence and safe GitHub receipt readback"}
+  ],
+  "implementation_state": "PUBLISHED_RC6_SOURCE_AND_BUNDLE",
+  "validation": "docs/rc6-review-validation.json",
+  "owner_review_of_RC6": "PENDING",
+  "public_update_changed": false
+}
