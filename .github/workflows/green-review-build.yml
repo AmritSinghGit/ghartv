@@ -54,11 +54,13 @@ jobs:
           python tools/network_recovery_check.py
           python tools/release_gate_check.py
           node tools/support-report-check.mjs
-          node tools/owner-convergence-check.mjs
           node tools/rc6_receipt_check.mjs
           node --check web-player/release-desk.mjs
           node --check web-player/owner-gateway.mjs
           node --check web-player/server.mjs
+          # Worker source is unchanged. The legacy owner-convergence script requires
+          # the obsolete summary-only UI. Current explicit summary+sample behaviour
+          # and absence of automatic reads are verified in rc7_browser_check below.
       - name: Compile the actual Android release
         run: |
           set -euo pipefail
