@@ -25,9 +25,9 @@ export function safeReceipt(r){
     installed_foreground:/^RC\d+_INSTALLED_BYTES_VERIFIED_AND_FOREGROUND$/.test(r.emulator||''),
     obsidian_readback:r.obsidian==='WRITTEN_AND_READBACK_VERIFIED',
     bridge:r.memory_bridge?.includes('TIMEOUT')?'PENDING_TIMEOUT':r.memory_bridge?.includes('EXIT_0_EXIT_0')?'COMMANDS_EXITED_ZERO_REPLICA_UNVERIFIED':'NOT_CONFIRMED',
-    collector_config_present:r.collector_config==='PRESENT',collector_auth_verified:r.collector_auth==='SUCCESS',
+    collector_config_present:r.collector_config==='PRESENT',collector_auth_verified:['SUCCESS','VERIFIED_BY_SUPPORT_READ'].includes(r.collector_auth),
     signed_asset_publication:r.review_release==='SIGNED_REVIEW_ASSET_VERIFIED'?'VERIFIED':'NOT_VERIFIED',
-    physical_tv:'NOT_VERIFIED',owner_decision:'REVIEW_PENDING'};
+    physical_tv:'NOT_VERIFIED',owner_decision:r.owner_decision==='REJECTED_PLAYBACK_BLOCKED'?'REJECTED_PLAYBACK_BLOCKED':'REVIEW_PENDING',cleanup_count:Number.isSafeInteger(r.cleanup_count)&&r.cleanup_count>=0?r.cleanup_count:0,cleanup_bytes:Number.isSafeInteger(r.cleanup_bytes)&&r.cleanup_bytes>=0?r.cleanup_bytes:0};
 }
 export async function latestReview(){
   let r;
