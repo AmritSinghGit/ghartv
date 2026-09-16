@@ -40,7 +40,9 @@ const JIO = Object.freeze({
 
 const sessions = new Map();
 const streamTickets = new Map();
-let catalogueCache = { expiresAt: 0, channels: [] };
+let catalogueCache = { expiresAt: 0, fetchedAt: 0, channels: [] };
+let catalogueFlight = null;
+let catalogueOutcome = { status: "not_loaded" };
 let persistedAccount = null;
 let persistedAccountLoaded = false;
 
@@ -181,10 +183,17 @@ async function readBytes(req, limit = 2 * 1024 * 1024) {
 
 function assertLocalOrigin(req) {
   const origin = req.headers.origin;
-  if(req.ghartvViewer?.preview){if(origin!==req.ghartvViewer.origin)throw new Error("Preview origin rejected");return;}
-  if (!origin) return;
+  if(req.ghartvViewer?.preview){if(origin!==req.ghartvViewer.origin)throw Object.assign(new Error("Preview origin rejected"),{status:403});return;}
+  // Fabric preserves Origin while rewriting Host to the loopback upstream.
+  // Accept ONLY the explicitly observed local player alias, never wildcard
+  // localhost subdomains or arbitrary Forwarded/X-Forwarded-* headers.
   const allowed = new Set([`http://${HOST}:${PORT}`, `http://localhost:${PORT}`, `http://127.0.0.1:${PORT}`]);
-  if (!allowed.has(origin)) throw new Error("This local review only accepts requests from its own page.");
+  if(PORT === 8790) allowed.add("http://ghartv-api-8790.localhost:43918");
+  const peer=req.socket.remoteAddress;
+  const loopback=["127.0.0.1","::1","::ffff:127.0.0.1"].includes(peer);
+  const site=req.headers["sec-fetch-site"];
+  if(!loopback || (origin && !allowed.has(origin)) || (site && !["same-origin","none"].includes(site)))
+    throw Object.assign(new Error("Player request origin rejected. Open the local player or the configured Fabric player address."),{status:403});
 }
 
 async function upstreamJson(url, options = {}) {
@@ -294,20 +303,39 @@ export function channelFromRaw(raw, number, categories = {}, languages = {}) {
   };
 }
 
-async function fetchCatalogue() {
-  if (catalogueCache.expiresAt > now() && catalogueCache.channels.length) return catalogueCache.channels;
+async function fetchCatalogue(force=false) {
+  if (!force && catalogueCache.expiresAt > now() && catalogueCache.channels.length) {
+    catalogueOutcome={status:"cached",fetched_at:catalogueCache.fetchedAt};
+    return catalogueCache.channels;
+  }
+  if(catalogueFlight) return catalogueFlight;
+  catalogueFlight=loadCatalogue().finally(()=>{catalogueFlight=null;});
+  return catalogueFlight;
+}
+
+async function loadCatalogue() {
   const headers = { "user-agent": MOBILE_USER_AGENT };
-  let categories = {}, languages = {};
-  try {
-    const { payload } = await upstreamJson(JIO.dictionary, { headers, timeout: 18_000 });
-    categories = stringMap(payload.channelCategoryMapping);
-    languages = stringMap(payload.languageIdMapping);
-  } catch {}
-  const first = await upstreamJson(JIO.channels14, { headers, timeout: 25_000 });
-  let second = { payload: { result: [] } };
-  try { second = await upstreamJson(JIO.channels31, { headers, timeout: 25_000 }); } catch {}
+  // Independent requests: an unavailable v1.4 endpoint must not suppress v3.1.
+  // One in-flight refresh per process. Total deadline is the longest individual
+  // request, not dictionary + v1.4 + v3.1 sequential waits.
+  const [dictionary,...lists] = await Promise.allSettled([
+    upstreamJson(JIO.dictionary,{headers,timeout:4000}),
+    upstreamJson(JIO.channels14,{headers,timeout:10000}),
+    upstreamJson(JIO.channels31,{headers,timeout:10000})
+  ]);
+  const sources=lists.filter(x=>x.status==="fulfilled"&&Array.isArray(x.value.payload.result)&&x.value.payload.result.length)
+      .map(x=>x.value.payload);
+  if(!sources.length){
+    if(catalogueCache.channels.length && now()-catalogueCache.fetchedAt<=72*60*60*1000){
+      catalogueOutcome={status:"stale",fetched_at:catalogueCache.fetchedAt,message:"Guide refresh unavailable. Showing the last successful guide; channel access is checked when you play."};
+      return catalogueCache.channels;
+    }
+    throw Object.assign(new Error("The channel guide service did not return a usable guide. Retry guide; your sign-in has been kept."),{status:503});
+  }
+  const mapping=dictionary.status==="fulfilled"?dictionary.value.payload:{};
+  const categories=stringMap(mapping.channelCategoryMapping),languages=stringMap(mapping.languageIdMapping);
   const merged = new Map();
-  for (const raw of [...(first.payload.result || []), ...(second.payload.result || [])]) {
+  for (const raw of sources.flatMap(item=>item.result)) {
     const channelId = String(raw.channel_id ?? raw.channelId ?? "");
     if (!channelId || raw.channelIdForRedirect) continue;
     if (!merged.has(channelId)) merged.set(channelId, raw);
@@ -326,7 +354,12 @@ async function fetchCatalogue() {
     channels.push(channelFromRaw(raw, requested, categories, languages));
   }
   channels.sort((a, b) => a.number - b.number || a.name.localeCompare(b.name));
-  catalogueCache = { expiresAt: now() + 6 * 60 * 60 * 1000, channels };
+
+  if(!channels.length)throw Object.assign(new Error("The provider returned an empty guide. Your sign-in has been kept; retry guide."),{status:503});
+  // Never overwrite a useful guide with an empty/error response.
+  catalogueCache = { expiresAt: now() + 6 * 60 * 60 * 1000, fetchedAt:now(), channels };
+  catalogueOutcome={status:sources.length===2?"fresh":"partial_source",fetched_at:catalogueCache.fetchedAt,
+    message:sources.length===2?"":"One guide endpoint is unavailable. Showing channels from the responding endpoint."};
   return channels;
 }
 
@@ -714,8 +747,8 @@ async function handleApi(req, res, url) {
   }
   if (req.method === "GET" && url.pathname === "/api/channels") {
     if (!session.account) return apiError(res, 401, "Connect your Jio number first.", "auth_required");
-    const channels = await fetchCatalogue();
-    json(res, 200, { ok: true, channels, count: channels.length, provider: { id: "jio", label: "JioTV", authorization: "experimental_owner_local" } });
+    const channels = await fetchCatalogue(url.searchParams.get("refresh")==="1");
+    json(res, 200, { ok: true, guide:catalogueOutcome, channels, count: channels.length, provider: { id: "jio", label: "JioTV", authorization: "experimental_owner_local" } });
     return;
   }
   if (req.method === "GET" && url.pathname === "/api/epg") {

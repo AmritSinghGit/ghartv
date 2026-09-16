@@ -48,17 +48,34 @@ async function loadStatus() {
   } catch { setConnected(false); }
 }
 
-async function loadChannels() {
+let guideLoading=false;
+const guideFeedback=document.createElement("div");guideFeedback.id="guideFeedback";guideFeedback.setAttribute("role","status");
+$("resultCount").insertAdjacentElement("afterend",guideFeedback);
+function guideMessage(message){
+  guideFeedback.replaceChildren();
+  if(!message)return;
+  const text=document.createElement("p");text.textContent=message;
+  const retry=document.createElement("button");retry.className="button secondary";retry.type="button";retry.textContent="Retry guide";retry.disabled=guideLoading;
+  retry.onclick=()=>loadChannels(true);guideFeedback.append(text,retry);
+}
+async function loadChannels(force=false) {
+  if(guideLoading)return;
+  guideLoading=true;
+  guideMessage("");
   $("resultCount").textContent = "Loading the live channel guide…";
   try {
-    const result = await api("/api/channels");
+    const result = await api("/api/channels"+(force?"?refresh=1":""));
     state.channels = (result.channels || []).map(c=>({...c,language:languageName(c.language)}));
     buildLanguages();
     buildCategories();
     filterChannels();
+    guideLoading=false;
+    if(result.guide?.status==="stale"||result.guide?.status==="partial_source")guideMessage(result.guide.message);
   } catch (error) {
-    $("resultCount").textContent = error.message;
-  }
+    guideLoading=false;
+    if(state.channels.length)filterChannels();else $("resultCount").textContent="Guide unavailable";
+    guideMessage(state.channels.length?"The guide could not be refreshed. Your existing channel list and filters are preserved.":"The guide service did not respond successfully. Your sign-in has been kept. Retry the guide without reinstalling or signing out.");
+  } finally {guideLoading=false;}
 }
 
 function buildLanguages(){

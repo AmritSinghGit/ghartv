@@ -1,0 +1,14 @@
+{
+  "schema": "ghartv.rc7-transport-check.v1",
+  "workflow_run": "35124874514",
+  "test_input_sha": "89724d9ebe7e9acc3e4a275c7cc2249debb79751",
+  "result": "PASS",
+  "installed_application_source": "211c2624f5a553b041c1fc8d2194625f8d6b435a",
+  "application_code_unchanged": 23,
+  "private_data_used": false,
+  "native_dns_repaired": false,
+  "live_provider_playback_verified": false,
+  "owner_execution": "NOT_PERFORMED",
+  "release_approval": "REJECTED_PLAYBACK_BLOCKED",
+  "production_changed": false
+}

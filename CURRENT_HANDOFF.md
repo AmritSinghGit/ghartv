@@ -1,3 +1,7 @@
+# Current owner decision: RC7 PLAYBACK BLOCKED
+
+See RC7_REVIEW_FAILURE.md. Successful installation is not successful playback. New web source repairs are not installed on the owner Mac. Public promotion remains on hold.
+
 # GharTV RC7 — one GREEN review / exact approved promotion
 
 Same independent lane ghartv, repository AmritSinghGit/ghartv, implementation branch codex/ghartv-remove-auto-preview / PR1, package in.ghartv.nova. Public release remains RC8/code17. This is0.6.0-rc7-network-diagnostics/code23, built on RC6 plus the hash-verified Punjabi web repair, not a new checkout or public deployment.
