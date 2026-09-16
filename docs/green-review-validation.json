@@ -1,0 +1,29 @@
+{
+  "schema": "ghartv.green-review-validation.v1",
+  "application_source_sha": "211c2624f5a553b041c1fc8d2194625f8d6b435a",
+  "version": "0.6.0-rc7-network-diagnostics",
+  "version_code": 23,
+  "build_run": 35106534780,
+  "build_job": 104829096690,
+  "conclusion": "SUCCESS",
+  "checks": [
+    "actual Android release compilation and aapt package23",
+    "typed Android signature valid and invalid paths with disposable fixtures",
+    "JVM family/scope/update/network rules",
+    "guarded emulator recovery decisions with simulated probes",
+    "exact approval/source/run/hash, concurrent feed, asset conflict and readback safeguards with simulated GitHub",
+    "private diagnostic projection filters",
+    "safe receipt transport fixtures",
+    "real HTTP/Chromium manual summary+1000 sample, failure independence, reference lookup, Punjabi scope, keyboard/fullscreen",
+    "real browser release desk confirmation/cancellation and locked-state access"
+  ],
+  "production_or_owner_key_used_for_fixture_signing": false,
+  "actual_owner_mac_signing": "NOT_PERFORMED",
+  "actual_emulator_dns_recovery": "NOT_PERFORMED",
+  "live_private_collector_export_read_here": false,
+  "real_production_promotion_tested": false,
+  "public_feed_changed": false,
+  "full_bundle_sha256": "d926b8db27174459463d4e3a466390c56c82a48e9f55cec3364ff8d7cd1d40be",
+  "publication_scope": "after approval only: exact Android APK plus public update/download feed; not cloud web hosting or cousin deployment",
+  "no_duplicate_repo_runtime_or_tenant": true
+}

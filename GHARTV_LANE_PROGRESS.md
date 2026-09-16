@@ -1,23 +1,33 @@
----
-lane: ghartv
-entity_type: project
-analytics_tenant: ghartv
-updated: 2026-09-15
-status: RC6_REVIEW_PENDING_RC5_RUNNING_BASELINE_CONFIRMED
----
 <!-- GHARTV-MANAGED-LANE-NOTE:v1 -->
-# GharTV — current progress and screenshot acceptance
+# GharTV RC7 — one GREEN review / exact approved promotion
 
-The owner's five screenshots, written UI feedback and successful RC5 receipt are received. No repeated upload or handoff is required for that evidence. Continue existing GharTV repo/PR1/branch, independent of VCNow; existing Analytics tenant ghartv/PR61 and owner-control39 remain the authorities for their respective lanes.
+Same independent lane ghartv, repository AmritSinghGit/ghartv, implementation branch codex/ghartv-remove-auto-preview / PR1, package in.ghartv.nova. Public release remains RC8/code17. This is0.6.0-rc7-network-diagnostics/code23, built on RC6 plus the hash-verified Punjabi web repair, not a new checkout or public deployment.
 
-Confirmed baseline: 0.6.0-rc5-navigation-review/code21, source7915a279e78f3490fc599c4b7f0447d7a9f18ceb, signed APK776495e2154a50e7f3460ba9b8e349678217f7c750d15061439894b015848472. Run GHARTV-CYAN-7-20260915T131648Z-51264 reported installed bytes verified, MainActivity foreground and REVIEW_READY. Owner confirms selected-category navigation works. Keep it. Owner decision remains REVIEW_PENDING, not promotion approval.
+## Received evidence
+The September16 network/Fabric owner run left APK RC6/code22 unchanged: source publication did not start because the two source-read workflow commits advanced the expected branch head. The canonical branch is reconciled before this new cloud build. The working web overlay is integrated in source. Screenshot evidence establishes that an explicit manual summary request returned data, not that the app error reached the collector. Detailed private collector records were not directly accessible in this environment; no model claim of having read those records is made.
 
-New RC6/code22 implementation: first-open Next button focus; Simrat display spelling with stable legacy identity/date; local family edit/add/confirmed remove; browser topbar search, arrow/Enter navigation, scoped PageUp/PageDown, F/fullscreen and Escape, lighter translucent controls; clearer owner tabs/connection/messages/review desk. Manual D1 reporting is intentional and remains. OWNER_REVIEW_REQUIREMENTS.json maps each screenshot request to explicit acceptance.
+## Repair
+- Compiled APK, not a pending source patch. Existing key/typed-signature/payload gates retained.
+- Explicit app connection check separates system validation, per-service DNS, HTTPS and clock offset. No provider session/stream/auth requests. Network failures offer Connection check, Retry, Guide instead of suggesting another channel will fix a service-wide DNS failure. Reference visibility explicitly explains opt-out/queued versus accepted states.
+- Owner launcher measures app network before repair. Only if at least2 domains fail DNS inside the named emulator while the Mac resolves them, it may cold-boot that SAME AVD with already-configured, directly verified Mac DNS servers. No host DNS change, public-DNS substitution, TLS bypass, data clear or physical-TV action. Rechecks network and foreground. HTTPS reachability is NOT proof of playback/account entitlement.
+- Telemetry sends pending errors first, removes only exact acknowledged records, retains incomplete/unacknowledged batches and drains bounded backlog. Automatic errors no longer replace an in-progress worker. Consent still gates upload; a displayed error reference is not proof of upload.
+- Manual Refresh reports loads summary and a latest1000-event sample independently. Failed parts are identified; no automatic polling. Explicit full sample remains capped at5000. HTTP0 displays as Not reported; failure channel/fingerprint and event references are visible. Empty, stale, error, partial and not-requested states remain distinct. Version-separated support groups prevent attributing every old error to the current candidate.
+- Local diagnostic search checks latest5000 received events in30 days. An absent match is not proof of absence, especially with offline queues/opt-out/retention/export limits. No matching backend deploy is required.
+- Support capture explicitly reads existing collector summary/export through saved credentials on the Mac. Raw records stay private; a projected support report excludes identities, arbitrary strings/attributes, tokens, paths, channel viewing history. The launcher performs one requested diagnostic capture; it is not a new polling service or public receipt upload.
+- Punjabi/category/search intersection and keyboard/fullscreen rules retained. Family names/date controls and first-Next focus retained. No AI-upscaling claim.
 
-New handoff transport: persist the local receipt and Obsidian automatically, then attempt safe technical receipt mirroring to the existing GharTV PR using existing authenticated gh CLI. Exact run/body readback is required for GITHUB_READBACK_VERIFIED. Network/CLI failure becomes PENDING, leaves local receipt and does not block playback. A managed single mirror comment, local pending state and newer-run protection prevent duplicate/current-record confusion. Private family names/dates, raw logs, paths, device/account identities, free feedback and screenshots are never auto-uploaded. Owner feedback can be saved privately in the existing vault against the actual candidate; that local write is not a chat submission.
+## Limits and publication
+Owner-signed APK/actual emulator recovery, live collector capture and stream playback await owner execution. Cloud tests use synthetic reports/disposable signing keys. The package does not create a public tunnel, modify Local Fabric, deploy to cousin or change production update/latest.json. Prior internet test was revoked; Fabric version0.8.6 inventory integration remains a separate unresolved issue. Do not call code23 production or call a successful DNS check channel playback.
 
-On each continuation, retrieve the current PR mirror and requirements before asking the owner to paste anything. An interruption is not evidence the feedback was lost. Publication/readback and another chat actually retrieving content are distinct. Never claim every replica is synced because a local write or bridge handoff returned zero.
+## Continuity
+Obsidian is written/read back in the existing note. Existing allowlisted GitHub technical receipt retains code/source/signed digest; no raw diagnostic data is mirrored. The private SUPPORT_SIGNALS.json/NETWORK_CHECK.json can be explicitly shared with the chat by the owner. No extra controller/tenant/runtime.
 
-Public update stays RC8/code17/source de3106e3e97a9147b06347a3d66c4e5923cdbbcc. New app and companion hashes live in the v0.6.0-rc6 review manifest. No production promotion, PR merge, physical-TV action, collector deployment or commercial approval is performed here. RC6 native signing/install/screenshot review and new local Obsidian/receipt publication await owner execution.
+## Owner release workflow, September16
 
-Use existing full-bundle launcher and signing key, same AVD, same browser8790. Never reset/switch/clean the development checkout to review binaries, uninstall to solve signer mismatch, generate a replacement key, create another lane/service or sweep unknown files. Exact previous owner-state and future requests are preserved in CURRENT_HANDOFF.md. Account-aware discovery and AI super-resolution remain pending, not delivered by this UI candidate.
+User explicitly reported no new execution of the source patch. Do not infer an installed RC7. BLUE is the currently advertised household update; GREEN is one local three-surface review on the same AVD/port8790; development is source only. No second Mac environment. The complete compiled review bundle replaces manual APK import and source patching.
+
+New owner release desk verifies the exact signed local APK, installed emulator bytes, original X.509 certificate and web identity before an approval can publish. Review & feedback contains three explicit reviewed confirmations and a final confirmation displaying the exact hash. Only that reviewed APK is uploaded; no rebuild. The public update file is changed with a current-file-SHA precondition; conflicting newer feeds/assets stop. User has NOT yet approved code23, so no production write or public notification is claimed. No private data, keys or logs accompany publication.
+
+This action covers Android distribution and download/update feed only. Browser streaming-server deployment and cousin hosting are separately held; no main-source merge is assumed from binary promotion. Old household apps prompt on their next successful check and Android requires installation confirmation. No forced update, live push guarantee or automatic downgrade.
+
+The release desk is inside existing owner.html, using its existing nonce and Origin protection. It is not a new service/controller. Launch and publication share the existing local run lock; the launcher releases it before clipboard prompts so owner controls remain usable after preparation.
