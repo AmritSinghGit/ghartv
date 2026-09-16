@@ -45,3 +45,7 @@ telemetry/worker/.wrangler/
 web-player/node_modules/
 collector.env
 telemetry-admin*.json
+
+# Regenerable Python cache
+__pycache__/
+*.py[cod]
