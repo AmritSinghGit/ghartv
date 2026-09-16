@@ -22,6 +22,10 @@ import org.json.JSONObject;
 import java.io.File;
 import java.io.FileOutputStream;
 import java.io.InputStream;
+import java.io.ByteArrayOutputStream;
+import java.nio.charset.StandardCharsets;
+import java.util.concurrent.atomic.AtomicBoolean;
+import android.util.Base64;
 import java.security.MessageDigest;
 import java.util.Locale;
 import java.util.concurrent.ExecutorService;
@@ -43,61 +47,98 @@ public final class UpdateManager {
 
     private UpdateManager() {}
 
+    private static final AtomicBoolean CHECKING = new AtomicBoolean(false);
+    private static final String VERIFIED_SUCCESS = "ghartv_update_last_verified_success_v2";
+    private static final String LAST_FAILURE = "ghartv_last_failed_update_check";
+    private static final OkHttpClient MANIFEST_CLIENT = new OkHttpClient.Builder()
+            .connectTimeout(5, TimeUnit.SECONDS).readTimeout(6, TimeUnit.SECONDS)
+            .callTimeout(10, TimeUnit.SECONDS).followRedirects(false).retryOnConnectionFailure(false).build();
+    private static final String API_MIRROR = "https://api.github.com/repos/AmritSinghGit/ghartv/contents/update/latest.json?ref=main";
+
     public static void check(Activity activity, boolean ownerInitiated) {
         long now = System.currentTimeMillis();
-        long last = activity.getSharedPreferences(AppConfig.PREFS, Activity.MODE_PRIVATE)
-                .getLong(AppConfig.KEY_LAST_UPDATE_CHECK, 0L);
-        if (!ownerInitiated && now - last < AppConfig.UPDATE_CHECK_INTERVAL_MS) return;
-        activity.getSharedPreferences(AppConfig.PREFS, Activity.MODE_PRIVATE)
-                .edit().putLong(AppConfig.KEY_LAST_UPDATE_CHECK, now).apply();
-        Telemetry.event(activity, "update_check", Telemetry.data("manual", ownerInitiated, "result", "started"));
-
-        if (ownerInitiated) Toast.makeText(activity, "Checking for GharTV updates…", Toast.LENGTH_SHORT).show();
+        android.content.SharedPreferences prefs = activity.getSharedPreferences(AppConfig.PREFS, Activity.MODE_PRIVATE);
+        long success = prefs.getLong(VERIFIED_SUCCESS, 0L);
+        long failed = prefs.getLong(LAST_FAILURE, 0L);
+        if (!ownerInitiated && ((now >= success && now-success < AppConfig.UPDATE_CHECK_INTERVAL_MS)
+                || (now >= failed && now-failed < 5*60_000L))) return;
+        if (!CHECKING.compareAndSet(false,true)) {
+            if(ownerInitiated) Toast.makeText(activity,"An update check is already running…",Toast.LENGTH_SHORT).show();
+            return;
+        }
+        if(ownerInitiated) Toast.makeText(activity,"Checking the public GharTV update channel…",Toast.LENGTH_SHORT).show();
         EXECUTOR.execute(() -> {
             try {
                 UpdateInfo update = fetchManifest();
+                prefs.edit().putLong(VERIFIED_SUCCESS,System.currentTimeMillis()).putLong(AppConfig.KEY_LAST_UPDATE_CHECK,System.currentTimeMillis()).remove(LAST_FAILURE).apply();
                 activity.runOnUiThread(() -> {
-                    if (activity.isFinishing() || activity.isDestroyed()) return;
-                    boolean available = update.versionCode > BuildConfig.VERSION_CODE;
-                    Telemetry.event(activity, "update_check", Telemetry.data(
-                            "manual", ownerInitiated,
-                            "result", "success",
-                            "update_available", available,
-                            "offered_version_code", update.versionCode));
-                    if (available) showUpdate(activity, update);
-                    else if (ownerInitiated) Toast.makeText(activity, "GharTV is up to date", Toast.LENGTH_SHORT).show();
+                    if(activity.isFinishing() || activity.isDestroyed()) return;
+                    UpdatePolicy.State state = UpdatePolicy.compare(BuildConfig.VERSION_CODE,update.versionCode);
+                    Telemetry.event(activity,"update_check",Telemetry.data("manual",ownerInitiated,"result",state.name(),"offered_version_code",update.versionCode));
+                    if(state == UpdatePolicy.State.AVAILABLE) showUpdate(activity,update);
+                    else if(ownerInitiated) new AlertDialog.Builder(activity)
+                        .setTitle(state == UpdatePolicy.State.AHEAD_OF_PUBLIC ? "You are testing a newer review" : "No newer public update")
+                        .setMessage("Installed: "+BuildConfig.VERSION_NAME+" (code "+BuildConfig.VERSION_CODE+")\nPublic channel: "+update.versionName+" (code "+update.versionCode+")\n\n"+
+                            (state == UpdatePolicy.State.AHEAD_OF_PUBLIC ? "The public channel has not been promoted to this review yet. Your review will not be downgraded." : "The public update check succeeded. This is the current public version."))
+                        .setPositiveButton("Continue watching",null).show();
                 });
             } catch (Exception error) {
-                Telemetry.error(activity, "update_check", error, Telemetry.data("manual", ownerInitiated));
+                prefs.edit().putLong(LAST_FAILURE,System.currentTimeMillis()).apply();
+                String code=UpdatePolicy.failureCode(error);
+                Telemetry.event(activity,"update_check",Telemetry.data("manual",ownerInitiated,"result","NOT_CHECKED","reason",code));
                 activity.runOnUiThread(() -> {
-                    if (ownerInitiated && !activity.isFinishing()) {
-                        Toast.makeText(activity, "Update check failed: " + readable(error), Toast.LENGTH_LONG).show();
-                    }
+                    if(!ownerInitiated || activity.isFinishing() || activity.isDestroyed()) return;
+                    String detail="DNS_UNAVAILABLE".equals(code) ? "This device could not resolve the update service address." :
+                        "REQUEST_TIMED_OUT".equals(code) ? "The update service took too long to respond." :
+                        "MANIFEST_REJECTED".equals(code) ? "The server returned update information that could not be verified." : "The update service is temporarily unavailable.";
+                    new AlertDialog.Builder(activity).setTitle("Update check unavailable")
+                        .setMessage(detail+"\n\nNo update result could be confirmed. Your installed app and saved settings have not changed. Check this TV’s connection and try again; playback is not blocked.")
+                        .setPositiveButton("Retry check",(d,w)->check(activity,true))
+                        .setNeutralButton("Connection check",(d,w)->NetworkDiagnostics.show(activity))
+                        .setNegativeButton("Continue watching",null).show();
                 });
-            }
+            } finally { CHECKING.set(false); }
         });
     }
 
     private static UpdateInfo fetchManifest() throws Exception {
-        Request request = new Request.Builder()
-                .url(AppConfig.UPDATE_MANIFEST)
-                .header("User-Agent", "GharTV-Jio-Live/" + BuildConfig.VERSION_NAME)
-                .build();
-        try (Response response = CLIENT.newCall(request).execute()) {
-            if (!response.isSuccessful()) throw new IllegalStateException("GitHub returned HTTP " + response.code());
-            String body = response.body() == null ? "{}" : response.body().string();
-            JSONObject json = new JSONObject(body);
-            UpdateInfo info = new UpdateInfo();
-            info.versionCode = json.optInt("versionCode", 0);
-            info.versionName = json.optString("versionName", "new version");
-            info.apkUrl = json.optString("apkUrl", "");
-            info.sha256 = json.optString("sha256", "").toLowerCase(Locale.ROOT);
-            info.notes = json.optString("notes", "A newer GharTV build is available.");
-            if (info.versionCode <= 0 || info.apkUrl.isEmpty() || info.sha256.length() != 64) {
-                throw new IllegalStateException("The update manifest is incomplete");
-            }
-            return info;
+        Exception last = null;
+        // Same repository file over two official HTTPS hosts. No alternate DNS, TLS bypass or unofficial APK source.
+        for (String endpoint : new String[]{AppConfig.UPDATE_MANIFEST,API_MIRROR}) {
+            try {
+                Request request = new Request.Builder().url(endpoint)
+                    .header("User-Agent","GharTV-Jio-Live/"+BuildConfig.VERSION_NAME)
+                    .header("Accept","application/vnd.github+json").build();
+                try (Response response = MANIFEST_CLIENT.newCall(request).execute()) {
+                    if(!response.isSuccessful() || response.body()==null) throw new java.io.IOException("Update service unavailable");
+                    ByteArrayOutputStream buffer = new ByteArrayOutputStream();
+                    try(InputStream input=response.body().byteStream()) {
+                        byte[] bytes=new byte[4096];int count;
+                        while((count=input.read(bytes))!=-1){if(buffer.size()+count>65536)throw new SecurityException("Manifest too large");buffer.write(bytes,0,count);}
+                    }
+                    JSONObject json = new JSONObject(new String(buffer.toByteArray(),StandardCharsets.UTF_8));
+                    if(endpoint.equals(API_MIRROR)) {
+                        if(!"base64".equals(json.optString("encoding")) || !"update/latest.json".equals(json.optString("path")))
+                            throw new SecurityException("Unexpected repository file");
+                        byte[] content=Base64.decode(json.getString("content"),Base64.DEFAULT);
+                        if(content.length>32768)throw new SecurityException("Manifest too large");
+                        json=new JSONObject(new String(content,StandardCharsets.UTF_8));
+                    }
+                    UpdateInfo info = new UpdateInfo();
+                    info.versionCode=json.optInt("versionCode",0);
+                    info.versionName=json.optString("versionName","");
+                    info.apkUrl=json.optString("apkUrl","");
+                    info.sha256=json.optString("sha256","").toLowerCase(Locale.ROOT);
+                    info.notes=json.optString("notes","A newer public GharTV build is available.");
+                    if(info.notes.length()>1800)info.notes=info.notes.substring(0,1800);
+                    if(info.versionCode<=0 || info.versionName.isEmpty() || info.versionName.length()>100 || !UpdatePolicy.allowedApk(info.apkUrl)
+                        || !info.sha256.matches("[a-f0-9]{64}") || !json.optString("sourceCommit").matches("[a-f0-9]{40}")
+                        || !"production".equals(json.optString("channel"))) throw new SecurityException("Update identity rejected");
+                    return info;
+                }
+            } catch(Exception error) { last=error; }
         }
+        throw last == null ? new java.io.IOException("Update service unavailable") : last;
     }
 
     private static void showUpdate(Activity activity, UpdateInfo update) {
@@ -154,7 +195,11 @@ public final class UpdateManager {
                     try (InputStream input = response.body().byteStream(); FileOutputStream output = new FileOutputStream(target)) {
                         byte[] buffer = new byte[64 * 1024];
                         int count;
-                        while ((count = input.read(buffer)) >= 0) output.write(buffer, 0, count);
+                        long total=0;
+                        while ((count = input.read(buffer)) >= 0) {
+                            total+=count; if(total>64L*1024*1024) throw new SecurityException("APK exceeds allowed size");
+                            output.write(buffer,0,count);
+                        }
                         output.getFD().sync();
                     }
                 }
@@ -162,7 +207,7 @@ public final class UpdateManager {
                 if (!actual.equalsIgnoreCase(update.sha256)) {
                     //noinspection ResultOfMethodCallIgnored
                     target.delete();
-                    throw new SecurityException("Downloaded APK checksum did not match the signed release manifest");
+                    throw new SecurityException("Downloaded APK checksum did not match the public update manifest");
                 }
                 File verified = target;
                 Telemetry.event(activity, "update_download", Telemetry.data(

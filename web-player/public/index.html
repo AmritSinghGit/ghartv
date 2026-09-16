@@ -5,18 +5,19 @@
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <meta name="referrer" content="no-referrer">
   <title>GharTV · Live television</title>
-  <link rel="stylesheet" href="/styles.css">
-  <link rel="stylesheet" href="/player.css">
-  <script defer src="/vendor/hls.min.js"></script>
-  <script defer src="/shaka-player.compiled.js"></script>
-  <script defer src="/app.js"></script>
+  <link rel="stylesheet" href="./styles.css">
+  <link rel="stylesheet" href="./player.css">
+  <script defer src="./vendor/hls.min.js"></script>
+  <script defer src="./shaka-player.compiled.js"></script>
+  <script defer src="./viewer-context.js"></script>
+  <script defer src="./app.js"></script>
 </head>
 <body>
   <div class="aurora one"></div><div class="aurora two"></div>
   <header class="topbar">
     <a class="brand" href="#" aria-label="GharTV home">GHAR<span>TV</span></a>
     <label class="search nav-search"><span aria-hidden="true">⌕</span><input id="search" type="search" autocomplete="off" aria-label="Search channels, language or category" placeholder="Find a channel, language or category"><kbd aria-hidden="true">/</kbd></label>
-    <div class="top-actions"><a class="owner-link" href="/owner.html">Owner console ↗</a>
+    <div class="top-actions"><a class="owner-link" href="./owner.html">Owner console ↗</a>
       <button id="accountButton" class="account" type="button">Connect JioTV</button>
     </div>
   </header>
@@ -36,6 +37,7 @@
         <div><p class="eyebrow">LIVE &amp; PROGRAMMES</p><h2>Your channels.<span class="quiet"> Your way.</span></h2></div>
         <details class="keyboard-help"><summary>⌨ Keyboard guide</summary><p><kbd>/</kbd> Search · <kbd>Arrows</kbd> Browse · <kbd>Enter</kbd> Watch<br><kbd>Page ↑ / ↓</kbd> Channels in selection · <kbd>F</kbd> Fullscreen · <kbd>Esc</kbd> Back</p></details>
       </div>
+      <div class="language-row"><label for="language">Language</label><select id="language" aria-label="Channel language"><option value="All">All languages</option></select><button id="punjabiQuick" class="category" type="button" aria-pressed="false">ਪੰਜਾਬੀ · Punjabi</button><button id="resetFilters" class="category" type="button">Reset filters</button><span id="previewNotice" role="status"></span></div>
       <nav id="categoryBar" class="categories" aria-label="Channel categories"></nav>
       <p id="resultCount" class="result-count" role="status"></p>
       <div id="channelGrid" class="channel-grid"></div>

@@ -19,7 +19,7 @@ public final class DiagnosticsDialog {
         boolean enabled = Telemetry.isEnabled(activity);
         int queued = Telemetry.queuedCount(activity);
         long last = Telemetry.lastUploadAt(activity);
-        String lastText = last <= 0 ? "Never" : DateFormat.getDateTimeInstance().format(new Date(last));
+        String lastText = last <= 0 ? "Never" : new java.text.SimpleDateFormat("dd MMM yyyy HH:mm:ss", java.util.Locale.ENGLISH) {{ setTimeZone(java.util.TimeZone.getTimeZone("Asia/Kolkata")); }}.format(new Date(last)) + " IST";
         String message = "Technical diagnostics: " + (enabled ? "ON" : "OFF")
                 + "\nReports waiting: " + queued
                 + "\nLast successful send: " + lastText
@@ -30,11 +30,15 @@ public final class DiagnosticsDialog {
                 "Preview queued diagnostics",
                 "Delete queued diagnostics and reset ID",
                 "What GharTV collects",
-                "Open privacy policy"
+                "Open privacy policy",
+                "Check TV connection (DNS / HTTPS)"
         };
+        TextView statusTitle = new TextView(activity);
+        statusTitle.setText("Diagnostics & privacy\n\n" + message);
+        statusTitle.setTextSize(16);
+        statusTitle.setPadding(28,20,28,16);
         new AlertDialog.Builder(activity)
-                .setTitle("Diagnostics & privacy")
-                .setMessage(message)
+                .setCustomTitle(statusTitle)
                 .setItems(items, (dialog, which) -> {
                     switch (which) {
                         case 0:
@@ -61,6 +65,9 @@ public final class DiagnosticsDialog {
                             break;
                         case 5:
                             activity.startActivity(new Intent(Intent.ACTION_VIEW, Uri.parse(AppConfig.PRIVACY_PAGE)));
+                            break;
+                        case 6:
+                            NetworkDiagnostics.show(activity);
                             break;
                         default:
                             break;

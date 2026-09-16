@@ -162,7 +162,7 @@ public final class ChannelAdapter extends RecyclerView.Adapter<ChannelAdapter.Ho
         bindProgrammes(holder,channel);
 
         if (channel.isSubscriptionChannel() && channel.isAvailable()) {
-            holder.status.setText("INCLUDED");
+            holder.status.setText("PLAYED BEFORE");
             holder.status.setTextColor(TvUi.MINT);
         } else if (channel.isSubscriptionChannel()) {
             holder.status.setText("SUBSCRIPTION");
@@ -171,7 +171,7 @@ public final class ChannelAdapter extends RecyclerView.Adapter<ChannelAdapter.Ho
             holder.status.setText("NEEDS ATTENTION");
             holder.status.setTextColor(TvUi.ERROR);
         } else if (channel.isAvailable()) {
-            holder.status.setText("WORKING");
+            holder.status.setText("LAST PLAYED");
             holder.status.setTextColor(TvUi.MINT);
         } else {
             holder.status.setText("LIVE");

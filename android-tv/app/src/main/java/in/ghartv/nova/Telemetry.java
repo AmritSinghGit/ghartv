@@ -272,6 +272,8 @@ public final class Telemetry {
         try {
             attrs.put("stage", safeToken(stage, 48, "unknown"));
             attrs.put("error_type", error == null ? "Unknown" : error.getClass().getSimpleName());
+            attrs.put("cause_type", NetworkFailure.rootType(error));
+            attrs.put("failure_kind", NetworkFailure.classify(error));
             attrs.put("message", scrubString(error == null ? "Unknown error" : readable(error)));
             attrs.put("fingerprint", errorFingerprint(error));
             attrs.put("stack_frames", stackFrames(error));
@@ -280,7 +282,7 @@ public final class Telemetry {
         Context application = context.getApplicationContext();
         IO.execute(() -> {
             appendEvent(application, buildEvent(application, eventId, "app_error", attrs));
-            enqueueUpload(application, true);
+            enqueueUpload(application, false);
         });
         return reference(eventId);
     }
@@ -362,6 +364,7 @@ public final class Telemetry {
                 return UploadOutcome.PERMANENT_FAILURE;
             }
 
+            if(!isEnabled(context)) return UploadOutcome.DISABLED;
             JSONArray events = new JSONArray();
             for (String line : lines) events.put(new JSONObject(line));
             JSONObject batch = new JSONObject();
@@ -386,7 +389,11 @@ public final class Telemetry {
             try (Response response = CLIENT.newCall(request).execute()) {
                 int code = response.code();
                 if (response.isSuccessful()) {
-                    removeFirst(context, lines.size());
+                    JSONObject ack = new JSONObject(response.body()==null?"{}":response.body().string());
+                    if(!ack.optBoolean("ok",false) || ack.optInt("accepted",-1)!=lines.size() || ack.optInt("rejected",0)!=0) {
+                        saveStatus(context,"Collector acknowledgement incomplete; local reports retained",false); return UploadOutcome.RETRY;
+                    }
+                    removeAcknowledged(context, lines);
                     saveStatus(context, "Sent " + lines.size() + " diagnostics", true);
                     return UploadOutcome.SUCCESS;
                 }
@@ -403,6 +410,10 @@ public final class Telemetry {
 
     public static int queuedCount(Context context) {
         synchronized (FILE_LOCK) { return readAllLocked(context).size(); }
+    }
+
+    public static String deliveryHint(Context context) {
+        return isEnabled(context) ? "Diagnostics are enabled; this reference may still be queued. Cloud visibility requires a successful send. Open Diagnostics & privacy for queue/send status." : "Diagnostics are off. This reference was not uploaded; turning diagnostics on does not recover this earlier error.";
     }
 
     public static String lastStatus(Context context) {
@@ -517,6 +528,7 @@ public final class Telemetry {
 
     private static void appendEvent(Context context, JSONObject event) {
         synchronized (FILE_LOCK) {
+            if(!isEnabled(context))return;
             try {
                 File file = queueFile(context);
                 File parent = file.getParentFile();
@@ -537,7 +549,13 @@ public final class Telemetry {
         synchronized (FILE_LOCK) {
             List<String> all = readAllLocked(context);
             if (all.isEmpty()) return Collections.emptyList();
-            return new ArrayList<>(all.subList(0, Math.min(max, all.size())));
+            java.util.List<String> errors = new ArrayList<>(), other = new ArrayList<>();
+            for(String line : all) try {
+                String name=new JSONObject(line).optString("name", "");
+                if(name.equals("app_error") || name.equals("app_crash")) errors.add(line); else other.add(line);
+            } catch(Exception ignored) { other.add(line); }
+            errors.addAll(other);
+            return new ArrayList<>(errors.subList(0, Math.min(max, errors.size())));
         }
     }
 
@@ -555,12 +573,14 @@ public final class Telemetry {
         return lines;
     }
 
-    private static void removeFirst(Context context, int count) {
+    private static void removeAcknowledged(Context context, List<String> sent) {
+        // The queue may have been trimmed or changed during the HTTP request. Never
+        // remove a positional prefix: remove only exact acknowledged event records.
         synchronized (FILE_LOCK) {
-            List<String> all = readAllLocked(context);
-            if (all.isEmpty()) return;
-            int from = Math.min(count, all.size());
-            rewriteLocked(context, new ArrayList<>(all.subList(from, all.size())));
+            java.util.Set<String> acknowledged = new java.util.HashSet<>(sent);
+            List<String> remaining = readAllLocked(context);
+            remaining.removeAll(acknowledged);
+            rewriteLocked(context, remaining);
         }
     }
 

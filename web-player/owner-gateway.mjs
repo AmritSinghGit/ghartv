@@ -1,3 +1,6 @@
+import {releaseRoute} from './release-desk.mjs';
+import {captureSupport,readSupport,validReference,projectEvent} from './support-report.mjs';
+import {fabricControl} from './fabric-preview.mjs';
 import {latestReview,publishReceipt,saveFeedback} from './review-sync.mjs';
 import {readFile} from 'node:fs/promises';
 import {homedir} from 'node:os';
@@ -29,7 +32,20 @@ async function token(){
 }
 function reply(res,status,body){const data=JSON.stringify(body);res.writeHead(status,{'Content-Type':'application/json','Cache-Control':'no-store','X-Content-Type-Options':'nosniff'});res.end(data);}
 function authorized(req){const supplied=Buffer.from((req.headers.authorization||'').replace(/^Bearer /,'')),wanted=Buffer.from(nonce);return supplied.length===wanted.length&&timingSafeEqual(supplied,wanted);}
+async function collectorRead(path) {
+  const secret=await token();
+  if(!secret)throw Object.assign(new Error('Collector configuration unavailable'),{code:configStatus});
+  if(!/^\/v1\/admin\/(summary|export)\?days=(1|7|30)(?:&limit=5000)?$/.test(path))throw Error('READ_PATH_REJECTED');
+  const response=await fetch(COLLECTOR+path,{headers:{Authorization:'Bearer '+secret},redirect:'error',signal:AbortSignal.timeout(30000)});
+  if(!response.ok)throw Object.assign(Error('COLLECTOR_HTTP_'+response.status),{code:'COLLECTOR_HTTP_'+response.status});
+  const text=await response.text();if(text.length>8*1024*1024)throw Error('REPORT_TOO_LARGE');
+  const data=JSON.parse(text);if(data.ok!==true)throw Error('INVALID_COLLECTOR_RESPONSE');return data;
+}
+function readFailure(e){const c=e?.cause?.code||e?.code||e?.name||'';return /ENOTFOUND|EAI_AGAIN/.test(c)?'COLLECTOR_DNS_FAILED':/Timeout|Abort|TIMEOUT/.test(c)?'COLLECTOR_TIMED_OUT':/CERT|TLS|SSL/.test(c)?'COLLECTOR_TLS_FAILED':'COLLECTOR_CONNECTION_FAILED';}
 export async function ownerRoute(req,res,url){
+  if(req.headers['x-operon-preview']){reply(res,404,{error:'owner_routes_private'});return true;}
+  if(await releaseRoute(req,res,url,authorized))return true;
+  if(await fabricControl(req,res,url,authorized))return true;
   if(url.pathname==='/owner.html'&&req.method==='GET'){
     let html=await readFile(join(ROOT,'../docs/owner.html'),'utf8');
     const origin=`http://${req.headers.host}`;
@@ -57,16 +73,33 @@ export async function ownerRoute(req,res,url){
     }catch{reply(res,400,{error:'review_action_failed_or_candidate_changed'});}return true;
   }
   if(path==='/config-status'&&req.method==='GET'){if(!authorized(req)){reply(res,401,{error:'local_owner_session_required'});return true;}await token();reply(res,200,{ok:true,config_status:configStatus,token_present:configStatus==='PRESENT',location:'~/Library/Application Support/GharTV/telemetry/collector.env',field:'GHARTV_TELEMETRY_ADMIN_TOKEN',token_returned:false});return true;}
+  if(path.startsWith('/support/')){
+    if(!authorized(req)){reply(res,401,{error:'local_owner_session_required'});return true;}
+    if(req.method==='POST'&&req.headers.origin!==`http://${req.headers.host}`){reply(res,403,{error:'origin_rejected'});return true;}
+    try{
+      if(path==='/support/capture'&&req.method==='POST'){
+        let raw='';for await(const c of req){raw+=c;if(raw.length>2048){reply(res,413,{error:'too_large'});return true;}}
+        const body=JSON.parse(raw||'{}');reply(res,200,await captureSupport(collectorRead,Number(body.days||7),String(body.reference||'').trim().toUpperCase()));return true;
+      }
+      if(path==='/support/reference'&&req.method==='GET'){
+        const ref=String(url.searchParams.get('ref')||'').toUpperCase();if(!validReference(ref)){reply(res,400,{error:'Use a GH-XXXXXXXX reference'});return true;}
+        const data=await collectorRead('/v1/admin/export?days=30&limit=5000');
+        reply(res,200,{ok:true,reference:ref,matches:(data.events||[]).filter(e=>String(e.reference).toUpperCase()===ref).slice(0,50).map(projectEvent),sample_count:data.events.length,cap_reached:data.events.length>=5000,window_days:30,checked_at:new Date().toISOString(),scope:'latest5000_received_events_not_all_history'});return true;
+      }
+      if(path.startsWith('/support/download/')&&req.method==='GET'){reply(res,200,await readSupport(path.split('/').pop()));return true;}
+      reply(res,404,{error:'not_found'});
+    }catch(e){reply(res,502,{error:e.code&&/^[A-Z_0-9]{1,80}$/.test(e.code)?e.code:readFailure(e)});}return true;
+  }
   if(!allowed.has(path)||!['GET','POST'].includes(req.method)){reply(res,404,{error:'not_found'});return true;}
   if(!authorized(req)){reply(res,401,{error:'local_owner_session_required'});return true;}
   const origin=req.headers.origin;
   if(req.method==='POST'&&origin!==`http://${req.headers.host}`){reply(res,403,{error:'origin_rejected'});return true;}
   const secret=await token();if(!secret){reply(res,503,{error:'existing_private_collector_config_unavailable',config_status:configStatus});return true;}
-  const target=new URL(path+url.search,COLLECTOR),controller=new AbortController(),timer=setTimeout(()=>controller.abort(),12000);
+  const target=new URL(path+url.search,COLLECTOR),controller=new AbortController(),timer=setTimeout(()=>controller.abort(),30000);
   try{
     let body;if(req.method==='POST'){const chunks=[];let size=0;for await(const chunk of req){size+=chunk.length;if(size>16384){reply(res,413,{error:'too_large'});return true;}chunks.push(chunk);}body=Buffer.concat(chunks);}
     const upstream=await fetch(target,{method:req.method,headers:{Authorization:'Bearer '+secret,...(body?{'Content-Type':'application/json'}:{})},body,redirect:'error',signal:controller.signal});
     const text=await upstream.text();if(text.length>8*1024*1024)throw new Error('too_large');
     res.writeHead(upstream.status,{'Content-Type':'application/json','Cache-Control':'no-store','Referrer-Policy':'no-referrer','X-Content-Type-Options':'nosniff'});res.end(text);
-  }catch{reply(res,502,{error:'collector_unavailable_or_timed_out'});}finally{clearTimeout(timer);}return true;
+  }catch(e){reply(res,502,{error:readFailure(e)});}finally{clearTimeout(timer);}return true;
 }

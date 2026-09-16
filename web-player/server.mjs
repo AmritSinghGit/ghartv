@@ -1,3 +1,4 @@
+import {previewContext,isPreviewActive} from './fabric-preview.mjs';
 import { ownerRoute } from "./owner-gateway.mjs";
 import { createServer } from "node:http";
 import { createReadStream } from "node:fs";
@@ -13,7 +14,8 @@ const ROOT = dirname(fileURLToPath(import.meta.url));
 const PUBLIC = join(ROOT, "public");
 const HOST = process.env.GHARTV_WEB_HOST || "127.0.0.1";
 const PORT = Number(process.env.GHARTV_WEB_PORT || 8790);
-const APP_VERSION = "0.6.0-rc6-family-focus";
+const APP_VERSION = "0.6.0-rc7-network-diagnostics";
+const WEB_REPAIR = "RC6-WEB-FABRIC-R1";
 const SESSION_TTL_MS = 12 * 60 * 60 * 1000;
 const STREAM_TTL_MS = 4 * 60 * 60 * 1000;
 const MAX_BODY = 16 * 1024;
@@ -65,24 +67,26 @@ function parseCookies(header = "") {
 
 function sessionFor(req, res, create = true) {
   const cookies = parseCookies(req.headers.cookie);
-  let sid = cookies.ghartv_web;
+  const preview=req.ghartvViewer?.preview?req.ghartvViewer:null;
+  const cookieName=preview?'ghartv_preview_'+preview.id:'ghartv_web';
+  let sid = cookies[cookieName];
   let session = sid ? sessions.get(sid) : null;
-  if (session && session.touchedAt + SESSION_TTL_MS < now()) {
+  if (session && (session.touchedAt + SESSION_TTL_MS < now() || (session.previewId||null)!==(preview?.id||null) || (session.previewId && !isPreviewActive(session.previewId)))) {
     sessions.delete(sid);
     session = null;
   }
   if (!session && create) {
     sid = id();
-    session = { id: sid, touchedAt: now(), pendingMobile: "", account: null };
+    session = { id: sid, touchedAt: now(), pendingMobile: "", account: null, previewId:preview?.id||null, prefix:preview?.prefix||"" };
     sessions.set(sid, session);
-    res.setHeader("Set-Cookie", `ghartv_web=${encodeURIComponent(sid)}; HttpOnly; SameSite=Strict; Path=/; Max-Age=43200`);
+    res.setHeader("Set-Cookie", `${cookieName}=${encodeURIComponent(sid)}; HttpOnly; SameSite=Strict; Path=${preview?preview.prefix+"/":"/"}; Max-Age=${preview?Math.max(1,Math.floor((preview.expiresAt-now())/1000)):43200}${preview?"; Secure":""}`);
   }
   if (session) session.touchedAt = now();
   return session;
 }
 
 function cleanup() {
-  for (const [sid, session] of sessions) if (session.touchedAt + SESSION_TTL_MS < now()) sessions.delete(sid);
+  for (const [sid, session] of sessions) if (session.touchedAt + SESSION_TTL_MS < now() || (session.previewId&&!isPreviewActive(session.previewId))) sessions.delete(sid);
   for (const [ticket, item] of streamTickets) if (item.createdAt + STREAM_TTL_MS < now()) streamTickets.delete(ticket);
 }
 setInterval(cleanup, 60_000).unref();
@@ -107,7 +111,7 @@ async function readKeychainAccount() {
 }
 
 async function restorePersistedAccount(session) {
-  if (session.account) return;
+  if (session.account || session.previewId) return;
   if (!persistedAccountLoaded) {
     persistedAccount = await readKeychainAccount();
     persistedAccountLoaded = true;
@@ -177,6 +181,7 @@ async function readBytes(req, limit = 2 * 1024 * 1024) {
 
 function assertLocalOrigin(req) {
   const origin = req.headers.origin;
+  if(req.ghartvViewer?.preview){if(origin!==req.ghartvViewer.origin)throw new Error("Preview origin rejected");return;}
   if (!origin) return;
   const allowed = new Set([`http://${HOST}:${PORT}`, `http://localhost:${PORT}`, `http://127.0.0.1:${PORT}`]);
   if (!allowed.has(origin)) throw new Error("This local review only accepts requests from its own page.");
@@ -354,7 +359,7 @@ function playbackHeaders(account, channel) {
   };
 }
 
-async function refreshAccount(account) {
+async function refreshAccount(account, persist = true) {
   if (!account?.refreshToken) return account;
   try {
     const { payload } = await upstreamJson(JIO.tokenRefresh, {
@@ -369,7 +374,7 @@ async function refreshAccount(account) {
       account.authToken = payload.authToken;
       account.refreshToken = payload.refreshToken || account.refreshToken;
       account.expiryEpochSeconds = jwtExpiry(payload.authToken) || Math.floor(now() / 1000) + 864000;
-      await savePersistedAccount(account);
+      if(persist)await savePersistedAccount(account);
     }
   } catch {}
   return account;
@@ -399,7 +404,7 @@ async function authorizePlayback(session, channel, retry = true) {
   let payload = {};
   try { payload = raw ? JSON.parse(raw) : {}; } catch {}
   if ([401, 419, 403].includes(response.status) && retry) {
-    await refreshAccount(session.account);
+    await refreshAccount(session.account, !session.previewId);
     return authorizePlayback(session, channel, false);
   }
   if ([401, 419].includes(response.status)) throw Object.assign(new Error("Your Jio session expired. Sign in again."), { status: 401 });
@@ -428,6 +433,7 @@ async function authorizePlayback(session, channel, retry = true) {
   } : null;
   streamTickets.set(ticket, {
     sessionId: session.id,
+    prefix:session.prefix||"",
     createdAt: now(),
     streamUrl: streamUrl.href,
     headers: streamHeaders,
@@ -438,10 +444,10 @@ async function authorizePlayback(session, channel, retry = true) {
   });
   return {
     ticket,
-    url: protocol === "dash" ? `/api/stream/${ticket}/manifest.mpd` : `/api/stream/${ticket}`,
+    url: protocol === "dash" ? `${session.prefix||""}/api/stream/${ticket}/manifest.mpd` : `${session.prefix||""}/api/stream/${ticket}`,
     protocol,
     drm: Boolean(license),
-    licenseUrl: license ? `/api/license/${ticket}` : "",
+    licenseUrl: license ? `${session.prefix||""}/api/license/${ticket}` : "",
     channel: { id: channel.id, number: channel.number, name: channel.name },
   };
 }
@@ -473,7 +479,7 @@ export function mediaUrlCandidates(input, authorization = "") {
 }
 
 function mediaRoute(ticket, target) {
-  return `/api/stream/${ticket}?u=${Buffer.from(target).toString("base64url")}`;
+  return `${streamTickets.get(ticket)?.prefix||""}/api/stream/${ticket}?u=${Buffer.from(target).toString("base64url")}`;
 }
 
 export function rewriteHlsManifest(text, base, ticket, onUrl = () => {}) {
@@ -693,7 +699,7 @@ async function handleApi(req, res, url) {
     if (!session.pendingMobile) return apiError(res, 409, "Send an OTP first.", "otp_not_sent");
     const body = await readJson(req);
     session.account = await verifyOtp(session.pendingMobile, body.otp);
-    const persisted = await savePersistedAccount(session.account);
+    const persisted = session.previewId ? false : await savePersistedAccount(session.account);
     session.pendingMobile = "";
     json(res, 200, { ok: true, connected: true, persistentLogin: persisted, mobile: `••••••${session.account.mobile.slice(-4)}` });
     return;
@@ -701,7 +707,7 @@ async function handleApi(req, res, url) {
   if (req.method === "POST" && url.pathname === "/api/auth/logout") {
     session.account = null;
     session.pendingMobile = "";
-    await deletePersistedAccount();
+    if(!session.previewId)await deletePersistedAccount();
     for (const [ticket, item] of streamTickets) if (item.sessionId === session.id) streamTickets.delete(ticket);
     json(res, 200, { ok: true });
     return;
@@ -744,8 +750,13 @@ export function createAppServer() {
     const began=Date.now();
     res.once('finish',()=>{if(url.pathname.startsWith('/api/')||url.pathname.startsWith('/owner-api/'))console.info(JSON.stringify({event:'http_request',time_ist:new Intl.DateTimeFormat('en-IN',{timeZone:'Asia/Kolkata',dateStyle:'short',timeStyle:'medium',hour12:false}).format(new Date()),time_utc:new Date().toISOString(),route:/^\/api\/(stream|license)\//.test(url.pathname)?'/api/media/[redacted]':url.pathname,status:res.statusCode,duration_ms:Date.now()-began}));});
     try {
-      if(req.method==='GET'&&url.pathname==='/api/health'){json(res,200,{ok:true,service:'ghartv-web-player',version:APP_VERSION,commit:process.env.GHARTV_WEB_SHA||'working-tree',host:HOST,port:PORT,timezone:'Asia/Kolkata',owner_reader:true});return;}
-      if(await ownerRoute(req,res,url))return;
+      req.ghartvViewer=previewContext(req,res,url);if(req.ghartvViewer.handled)return;
+      if(req.method==='GET'&&url.pathname==='/viewer-context.js'){
+        res.writeHead(200,{'Content-Type':'text/javascript','Cache-Control':'no-store'});
+        res.end('window.GHARTV_VIEWER='+JSON.stringify({preview:!!req.ghartvViewer.preview})+';');return;
+      }
+      if(req.method==='GET'&&url.pathname==='/api/health'){json(res,200,{ok:true,service:'ghartv-web-player',version:APP_VERSION,commit:process.env.GHARTV_WEB_SHA||'working-tree',host:HOST,port:PORT,timezone:'Asia/Kolkata',owner_reader:!req.ghartvViewer.preview,web_revision:WEB_REPAIR,base_source:process.env.GHARTV_WEB_SHA||'working-tree',web_overlay:process.env.GHARTV_WEB_OVERLAY||'not_verified',fabric_preview:{isolated_sessions:true,owner_routes_exposed:false,header_gate:true}});return;}
+      if(!req.ghartvViewer.preview && await ownerRoute(req,res,url))return;
       if (url.pathname.startsWith("/api/")) await handleApi(req, res, url);
       else if (!(await serveStatic(res, url.pathname))) apiError(res, 404, "Not found.");
     } catch (error) {

@@ -1,6 +1,6 @@
 {
   "name": "ghartv-local-web-player",
-  "version": "0.6.0-rc6-family-focus",
+  "version": "0.6.0-rc7-network-diagnostics",
   "private": true,
   "type": "module",
   "scripts": {

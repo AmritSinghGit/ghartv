@@ -1,0 +1,5 @@
+import assert from 'node:assert/strict';
+import {supportProjection,validReference} from '../web-player/support-report.mjs';
+const report=supportProjection({ok:true,totals:{events:6000,installations:2},versions:[{app_version:'0.6.0-rc7',version_code:23,events:12,installations:1}],generated_at:new Date().toISOString(),window_days:7},{ok:true,events:[{event_name:'app_error',reference:'GH-A1B2C3D4',version_code:23,app_version:'0.6.0-rc7',received_at:Date.now(),install_hash:'private-id',attributes:{stage:'playback',failure_kind:'DNS_UNAVAILABLE',http_status:0,message:'PRIVATE_SECRET_SHOULD_NOT_APPEAR',failed_channel_id:'267'}}]},'GH-A1B2C3D4');
+assert.equal(report.matching_errors.length,1);assert.equal(report.failure_groups[0].http_status,null);assert.equal(report.failure_groups[0].count,1);assert.ok(!JSON.stringify(report).includes('PRIVATE_SECRET'));assert.ok(!JSON.stringify(report).includes('private-id'));assert.ok(!validReference('../../etc/passwd'));
+console.log('SUPPORT_PROJECTION_PRIVACY_REFERENCE_COVERAGE=PASS');

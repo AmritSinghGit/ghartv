@@ -33,7 +33,7 @@ for name,h in expected.items():
  with open(target,'xb') as f:f.write((root/'assets'/name).read_bytes())
  target.chmod(0o600)
 target=managed/'GHARTV_SYNC_CURRENT_AND_REPORT.command';safe(target)
-known={'38a92415bda87e4a6035c5a62248b668cf6c81528bd33ba198544a71f9059828','f9d11248be07981968cdc0b0e5808cc05daa8d1faccca66cb80b2178129adab2','22fba74fae70ff7523543669d8362dc7661882efa225397eb28037462aa64456',command_hash}
+known={'803cabaac2044338f09b49b2413f8dfe9c3786ce91952e32fbb2b41716d557f5','38a92415bda87e4a6035c5a62248b668cf6c81528bd33ba198544a71f9059828','f9d11248be07981968cdc0b0e5808cc05daa8d1faccca66cb80b2178129adab2','22fba74fae70ff7523543669d8362dc7661882efa225397eb28037462aa64456',command_hash}
 if target.exists() and sha(target) not in known:raise SystemExit('Managed launcher has advanced or was edited; preserved without overwrite')
 fd,tmp=tempfile.mkstemp(prefix='.verified-review-',dir=managed)
 with os.fdopen(fd,'wb') as f:f.write(script.read_bytes())

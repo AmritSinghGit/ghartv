@@ -37,5 +37,18 @@
   "implementation_state": "SOURCE_IMPLEMENTED_BUILD_AND_OWNER_REVIEW_REMAIN_SEPARATE",
   "owner_decision": "REVIEW_PENDING",
   "public_update_changed": false,
-  "screenshots_reupload_required": false
+  "screenshots_reupload_required": false,
+  "rc7_followup": {
+    "baseline": "RC6 code22 installed; later web-only network overlay did not upgrade Android",
+    "required": [
+      "compiled full bundle",
+      "fixed-host emulator-vs-host DNS and HTTPS checks",
+      "conditional same-AVD recovery, no wipe or new DNS",
+      "manual summary plus bounded detail with separate failure states",
+      "private reference correlation and version-separated support export",
+      "retain Punjabi/category and first focus/family controls"
+    ],
+    "collector_access": "owner screenshots are not independent access to private rows",
+    "public_feed_change": false
+  }
 }

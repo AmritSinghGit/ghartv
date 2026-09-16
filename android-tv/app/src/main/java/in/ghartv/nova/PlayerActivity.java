@@ -912,6 +912,7 @@ public final class PlayerActivity extends Activity implements ChannelNavigator.L
         releasePlayer();
         String technical = diagnostic(error);
         String lower = technical.toLowerCase(Locale.ROOT);
+        boolean dns = NetworkFailure.classify(error).equals("DNS_UNAVAILABLE");
         boolean auth = lower.contains("401") || lower.contains("419")
                 || lower.contains("token") || lower.contains("unauthor");
         boolean forbidden = lower.contains("403") || lower.contains("forbidden");
@@ -923,7 +924,7 @@ public final class PlayerActivity extends Activity implements ChannelNavigator.L
         } else if (forbidden) {
             friendly = "Jio did not authorise this channel after refreshing the session. It may need a subscription or may be restricted on this TV.";
             markAccess(Channel.ACCESS_UNAVAILABLE, technical);
-        } else if (lower.contains("unable to resolve host") || lower.contains("unknownhost")) {
+        } else if (dns) {
             friendly = "This TV could not resolve the Jio service address. Check the TV internet or DNS, then retry; other cached screens may still open.";
         } else if (lower.contains("timeout") || lower.contains("timed out") || lower.contains("connection reset")) {
             friendly = "The Jio stream took too long to respond. GharTV retried once; you can retry again or continue to the next channel.";
@@ -936,9 +937,10 @@ public final class PlayerActivity extends Activity implements ChannelNavigator.L
 
         AlertDialog.Builder builder = new AlertDialog.Builder(this)
                 .setTitle("Live channel unavailable")
-                .setMessage(withReference(friendly, reference))
+                .setMessage(withReference(friendly, reference)+"\n\n"+Telemetry.deliveryHint(this))
                 .setPositiveButton("Next working channel", (dialog, which) -> changeChannel(1, true))
                 .setNegativeButton("Guide", (dialog, which) -> finish());
+        if (dns) builder.setPositiveButton("Connection check", (dialog, which) -> NetworkDiagnostics.show(this));
         if (auth) builder.setNeutralButton("Reconnect Jio", (dialog, which) -> reconnectJio());
         else builder.setNeutralButton("Retry", (dialog, which) -> retryCurrent());
         errorDialog=builder.show();

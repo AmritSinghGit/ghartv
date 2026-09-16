@@ -1,12 +1,15 @@
 const $ = (id) => document.getElementById(id);
-const state = { connected: false, otpSent: false, channels: [], filtered: [], category: "All", currentIndex: -1, currentChannel: null, programs: [], scope: [], scopeLabel: "All", retryAttempt: 0, playerError: "", playbackAbort: null, hls: null, shaka: null, ticker: null, busy: false, playbackGeneration: 0, focusGuideAfterLoad: false, widevineSupport: null, returnChannelId: null, chromeTimer: null, keyboardMode: false };
+const state = { connected: false, otpSent: false, channels: [], filtered: [], category: "All", language: "All", currentIndex: -1, currentChannel: null, programs: [], scope: [], scopeLabel: "All", retryAttempt: 0, playerError: "", playbackAbort: null, hls: null, shaka: null, ticker: null, busy: false, playbackGeneration: 0, focusGuideAfterLoad: false, widevineSupport: null, returnChannelId: null, chromeTimer: null, keyboardMode: false };
 
+const viewer = window.GHARTV_VIEWER || {preview:false};
+function localUrl(path){return new URL(String(path).replace(/^\/+/,""),document.baseURI).href;}
+function languageName(v){const x=String(v||"").trim();return /^(punjabi|panjabi|ਪੰਜਾਬੀ|پنجابی)$/i.test(x)?"Punjabi":x;}
 async function api(path, options = {}) {
   const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),25000);
   const cancel=()=>controller.abort();
   if(options.signal){if(options.signal.aborted)controller.abort();else options.signal.addEventListener("abort",cancel,{once:true});}
   try{
-    const response=await fetch(path,{...options,headers:{"content-type":"application/json",...(options.headers||{})},credentials:"same-origin",signal:controller.signal});
+    const response=await fetch(localUrl(path),{...options,headers:{"content-type":"application/json",...(options.headers||{})},credentials:"same-origin",signal:controller.signal});
     const payload=await response.json().catch(()=>({message:`Request returned HTTP ${response.status}.`}));
     if(!response.ok)throw Object.assign(new Error(payload.message||"Request failed."),{status:response.status,code:payload.code});
     return payload;
@@ -31,6 +34,10 @@ function setConnected(connected, mobile = "") {
   $("loginAction").classList.toggle("hidden", connected);
   $("loginTitle").textContent = connected ? "JioTV connected" : "Connect JioTV";
   $("loginCopy").textContent = connected ? `This local browser session is connected as ${mobile}.` : "Enter the 10-digit mobile number that receives your Jio OTP.";
+  if(viewer.preview){
+    $("heroNote").textContent="This temporary viewer does not use the Mac owner’s saved login. Sign in with your own eligible account; it is not saved to the Mac’s Keychain.";
+    $("loginCopy").textContent=connected?"Your temporary session only. Logout does not affect the owner’s session.":"Sign in for this temporary test. Your session expires with the preview and is not retained in Keychain.";
+  }
   if (connected && !state.channels.length) loadChannels();
 }
 
@@ -45,12 +52,28 @@ async function loadChannels() {
   $("resultCount").textContent = "Loading the live channel guide…";
   try {
     const result = await api("/api/channels");
-    state.channels = result.channels || [];
+    state.channels = (result.channels || []).map(c=>({...c,language:languageName(c.language)}));
+    buildLanguages();
     buildCategories();
     filterChannels();
   } catch (error) {
     $("resultCount").textContent = error.message;
   }
+}
+
+function buildLanguages(){
+  const select=$("language"),languages=[...new Set(state.channels.map(c=>c.language).filter(Boolean))].sort((a,b)=>a.localeCompare(b));
+  select.replaceChildren(...["All",...languages].map(x=>{const o=document.createElement("option");o.value=x;o.textContent=x==="All"?"All languages":x;o.selected=x===state.language;return o;}));
+  const present=languages.includes("Punjabi");$("punjabiQuick").disabled=!present;
+  $("punjabiQuick").title=present?"Filter the current catalogue to Punjabi":"No Punjabi-labelled channels returned by this catalogue";
+  $("punjabiQuick").setAttribute("aria-pressed",String(state.language==="Punjabi"));
+}
+$("language").onchange=()=>{state.language=$("language").value;buildLanguages();filterChannels();};
+$("punjabiQuick").onclick=()=>{state.language="Punjabi";buildLanguages();filterChannels();};
+$("resetFilters").onclick=()=>{state.language="All";state.category="All";$("search").value="";buildLanguages();buildCategories();filterChannels();};
+if(viewer.preview){
+  document.querySelector(".owner-link")?.remove();
+  $("previewNotice").textContent="Private temporary preview · separate sign-in · expires in 15 minutes";
 }
 
 function buildCategories() {
@@ -74,7 +97,8 @@ function filterChannels() {
   state.filtered = state.channels.filter((channel) => {
     const category = state.category === "All" || channel.category === state.category;
     const searchable = `${channel.number} ${channel.name} ${channel.language} ${channel.category}`.toLocaleLowerCase();
-    return category && (!query || searchable.includes(query));
+    const language=state.language === "All" || channel.language === state.language;
+    return category && language && (!query || searchable.includes(query) || (query==="ਪੰਜਾਬੀ" && channel.language==="Punjabi"));
   });
   renderChannels();
 }
@@ -98,7 +122,7 @@ function renderChannels() {
     node.querySelector("h3").textContent = channel.name;
     node.querySelector(".channel-detail").textContent = `${channel.language} · ${channel.category}`;
     node.dataset.channelId=channel.id;node.tabIndex=fragment.childNodes.length? -1:0;
-    node.onclick = () => { state.returnChannelId=channel.id;state.scope=state.filtered.map(c=>c.id);state.scopeLabel=state.category+($("search").value.trim()?" · search":"");playChannel(channel.id); };
+    node.onclick = () => { state.returnChannelId=channel.id;state.scope=state.filtered.map(c=>c.id);state.scopeLabel=[state.language==="All"?"All languages":state.language,state.category,$("search").value.trim()?"search":""].filter(Boolean).join(" · ");playChannel(channel.id); };
     fragment.append(node);
   }
   $("channelGrid").replaceChildren(fragment);
@@ -547,7 +571,7 @@ $("playerDialog").addEventListener("close",()=>{
 $("playerDialog").addEventListener("cancel",event=>{event.preventDefault();if(document.fullscreenElement)document.exitFullscreen().catch(()=>{});else closePlayer();});
 document.addEventListener("keydown",event=>{
   if(event.defaultPrevented||event.altKey||event.metaKey||event.ctrlKey)return;
-  const target=event.target,typing=target instanceof HTMLElement&&(target.isContentEditable||target.matches("textarea,input:not([type=range])"));
+  const target=event.target,typing=target instanceof HTMLElement&&(target.isContentEditable||target.matches("textarea,select,input:not([type=range])"));
   if(typing){if(target===$("search")&&!$("playerDialog").open){
       if(event.key==="ArrowDown"){event.preventDefault();$("channelGrid").querySelector(".channel-card")?.focus();}
       else if(event.key==="Escape"){$("search").value="";filterChannels();event.preventDefault();}
