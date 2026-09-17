@@ -11,7 +11,7 @@ export function invokeRelease(action,body={}){
  return new Promise(resolve=>{
   const p=spawn('python3',[join(ROOT,'../tools/release_control.py'),action,source],{stdio:['pipe','pipe','ignore'],env:{...process.env,GH_PROMPT_DISABLED:'1'}});let out='',done=false;
   const finish=x=>{if(done)return;done=true;clearTimeout(timer);resolve(x);};
-  const timer=setTimeout(()=>{p.kill('SIGTERM');setTimeout(()=>p.kill('SIGKILL'),400).unref();finish({ok:false,error:'RELEASE_ACTION_TIMED_OUT_CHECK_PUBLIC_FEED_BEFORE_RETRY'});},action==='publish'?240000:90000);
+  const timer=setTimeout(()=>{p.kill('SIGTERM');setTimeout(()=>p.kill('SIGKILL'),400).unref();finish({ok:false,error:'RELEASE_ACTION_TIMED_OUT_CHECK_PUBLIC_FEED_BEFORE_RETRY'});},action==='publish'?240000:action==='open-tv'?210000:90000);
   p.stdout.on('data',chunk=>{out+=chunk;if(out.length>256000){p.kill();finish({ok:false,error:'RELEASE_RESPONSE_BOUND'});}});
   p.on('error',()=>finish({ok:false,error:'LOCAL_PYTHON_UNAVAILABLE'}));
   p.on('close',()=>{try{finish(JSON.parse(out));}catch{finish({ok:false,error:'RELEASE_RESPONSE_INVALID'});}});

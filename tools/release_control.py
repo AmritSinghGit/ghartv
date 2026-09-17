@@ -196,6 +196,9 @@ def main():
     if action not in ('status','verify','open-tv','publish'):raise Hold('UNKNOWN_RELEASE_ACTION')
     safe(RELEASE);RELEASE.mkdir(parents=True,exist_ok=True,mode=0o700)
     if action=='status':return snapshot(source)
+    if action=='open-tv':
+        from tv_local import main_action
+        return main_action('open', source)
     lockpath=STATE/'owner-run.lock';safe(lockpath)
     with lockpath.open('a') as lock:
         try:fcntl.flock(lock,fcntl.LOCK_EX|fcntl.LOCK_NB)

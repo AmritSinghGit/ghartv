@@ -187,21 +187,21 @@ function showRelease(data){
  text('blueIdentity',b?.sourceCommit?'Source '+b.sourceCommit:'');
  text('releaseDetail',JSON.stringify(data,null,2));
  if(data.promotion?.state==='PUBLIC_UPDATE_VERIFIED'||data.publication?.state==='PUBLIC_UPDATE_VERIFIED')text('publishStatus','Published and update-feed readback verified. TVs receive the prompt on their next successful check. Physical installation remains unverified.');
- $('releaseOpenTV').disabled=releaseBusy||g?.state!=='INSTALLED_REVIEW_READY';$('approvePublish').disabled=!releaseAllowed();
+ $('releaseOpenTV').disabled=releaseBusy||!auth;$('approvePublish').disabled=!releaseAllowed();
 }
 async function releaseRequest(action,body){
  if(!auth||!ENDPOINT.startsWith(location.origin+'/owner-api'))throw Error('Use the local, unlocked owner console.');
- const response=await fetch(ENDPOINT+'/release/'+action,{method:body?'POST':'GET',headers:{Authorization:'Bearer '+auth,...(body?{'Content-Type':'application/json'}:{})},body:body?JSON.stringify(body):undefined,redirect:'error',cache:'no-store',signal:AbortSignal.timeout(action==='publish'?250000:95000)});
+ const response=await fetch(ENDPOINT+'/release/'+action,{method:body?'POST':'GET',headers:{Authorization:'Bearer '+auth,...(body?{'Content-Type':'application/json'}:{})},body:body?JSON.stringify(body):undefined,redirect:'error',cache:'no-store',signal:AbortSignal.timeout(action==='publish'?250000:action==='open-tv'?220000:95000)});
  const data=await response.json();if(!data.ok)throw Error(data.error||'Release action not confirmed');return data;
 }
 async function loadReleaseDesk(){const epoch=generation;try{const data=await releaseRequest('status');if(epoch===generation)showRelease(data);}catch(e){if(epoch===generation)text('releaseActionStatus',e.message);}}
 async function releaseAction(action,body={}){
  if(releaseBusy)return;releaseBusy=true;const epoch=generation;
  for(const id of ['releaseOpenTV','releaseVerify','approvePublish'])$(id).disabled=true;
- text('releaseActionStatus',action==='publish'?'Checking the exact approved bytes, uploading, then verifying the public update feed…':'Verifying the saved APK, original signer, installed TV and running web source…');
- try{const data=await releaseRequest(action,body);if(epoch!==generation)return;showRelease(data);text('releaseActionStatus',action==='publish'?'Publication completed. Check the evidence below.':action==='open-tv'?'The verified GharTV app was opened in the existing emulator.':'Candidate checks completed. Public connectivity is reported separately.');}
+ text('releaseActionStatus',action==='publish'?'Checking the exact approved bytes, uploading, then verifying the public update feed…':action==='open-tv'?'Opening your existing GharTV emulator and installed app. No download, approval or network check is required…':'Verifying the saved APK, original signer, installed TV and running web source…');
+ try{const data=await releaseRequest(action,body);if(epoch!==generation)return;if(action!=='open-tv')showRelease(data);text('releaseActionStatus',action==='publish'?'Publication completed. Check the evidence below.':action==='open-tv'?(data.window==='MAC_ACTIVATION_ACCEPTED'?'GharTV is foregrounded in Android; the Mac emulator window was activated. Playback approval is unchanged.':'GharTV is foregrounded in Android. Select the Android Emulator icon in the Dock if its Mac window remains behind this browser. Playback approval is unchanged.'):'Candidate checks completed. Public connectivity is reported separately.');}
  catch(e){if(epoch===generation)text('releaseActionStatus','Not completed: '+e.message+'. No forced reset or downgrade was attempted.');}
- finally{releaseBusy=false;$('releaseVerify').disabled=false;$('releaseOpenTV').disabled=releaseDesk?.green?.state!=='INSTALLED_REVIEW_READY';$('approvePublish').disabled=!releaseAllowed();}
+ finally{releaseBusy=false;$('releaseVerify').disabled=false;$('releaseOpenTV').disabled=!auth;$('approvePublish').disabled=!releaseAllowed();}
 }
 $('releaseVerify').onclick=()=>releaseAction('verify');$('releaseOpenTV').onclick=()=>releaseAction('open-tv');
 for(const id of ['reviewedTV','reviewedWeb','reviewedOwner'])$(id).onchange=()=>{$('approvePublish').disabled=!releaseAllowed();};

@@ -1,0 +1,6 @@
+{
+  "tools/release_control.py": "4ff32e388c8c43b79bc8315030f3721b853171970683cebb1bb8c95d9372e992",
+  "web-player/release-desk.mjs": "382a9cc804db5292dd79463da30620539860dc89ce421c589bfd7378b7d61aa2",
+  "docs/owner.html": "8e60e90a916803d904a58d2e13e6d6491354285bb4771d10a51c74a79c9c3dd9",
+  "web-player/server.mjs": "d578cc7ca37c6ae770c7cb67de96046436dfe2009354b633d97213001aae704c"
+}
