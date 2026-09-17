@@ -1,0 +1,54 @@
+name: Record compiled RC8 performance review
+on:
+  push:
+    paths: ['.github/workflows/rc8-delivery-record.yml']
+permissions:
+  contents: write
+jobs:
+  record:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - uses: actions/checkout@v5
+      - name: Verify published immutable candidate bytes before control-only update
+        run: |
+          set -euo pipefail
+          curl --proto '=https' --proto-redir '=https' -fLsS --max-time 90 https://github.com/AmritSinghGit/ghartv/releases/download/v0.6.0-rc8/GHARTV_RC8_REVIEW.zip -o /tmp/ghartv-rc8.zip
+          python - <<'PY'
+          from pathlib import Path
+          import json,hashlib,zipfile,io
+          source='59c130abc1283e66607315db916973553164064d'
+          data=Path('/tmp/ghartv-rc8.zip').read_bytes()
+          assert hashlib.sha256(data).hexdigest()=='db511279015a5bcba2ff286673df92372692a04ed5b242f96af51ce0e6776abc'
+          with zipfile.ZipFile(io.BytesIO(data)) as z:
+            assert z.testzip() is None
+            for line in z.read('GHARTV_RC8_REVIEW/SHA256SUMS').decode().splitlines():
+              h,n=line.split('  ',1);assert hashlib.sha256(z.read('GHARTV_RC8_REVIEW/'+n)).hexdigest()==h
+            m=json.loads(z.read('GHARTV_RC8_REVIEW/assets/review-manifest.json'));assert m['source_sha']==source and m['version_code']==24
+            command=z.read('GHARTV_RC8_REVIEW/GHARTV_SYNC_CURRENT_AND_REPORT.command');assert hashlib.sha256(command).hexdigest()=='d57ebf548b6eccaf5d4e31c9bc13f2060419b04e043c880bd227ee4f893ffdd4'
+            companion=z.read('GHARTV_RC8_REVIEW/assets/GharTV-review-companion.zip');assert hashlib.sha256(companion).hexdigest()==m['companion_sha256']=='dcb8c9c67f6990f7f3d4e24bc625772539fa50ae4105c391c83ab0a5c435e124'
+          with zipfile.ZipFile(io.BytesIO(companion)) as z:
+            for n in ('CURRENT_HANDOFF.md','GHARTV_LANE_PROGRESS.md'):Path(n).write_bytes(z.read(n))
+          Path('GHARTV_SYNC_CURRENT_AND_REPORT.command').write_bytes(command)
+          previous={'run':'GHARTV-CYAN-12-OPEN-20260917T062031Z-52257','version_code':23,'source':'211c2624f5a553b041c1fc8d2194625f8d6b435a','signed_apk_sha256':'6962628dc8a6c670a7341cbbdd3c94a06a5a580e3f4ca71681420e09e80dc9dc','owner_decision':'REJECTED_PLAYBACK_BLOCKED','foreground':True,'mac_and_emulator_dns':'4_OF_4_RESOLVED_IN_RUN12_NOT_CURRENT_PLAYBACK_PROOF'}
+          record={**m,'application_source_sha':source,'release_tag':'v0.6.0-rc8','build_run':35260333672,'build_job':105334160704,'build_result':'SUCCESS','owner_decision':'REVIEW_PENDING_NOT_EXECUTED','production_approval':False,'owner_command_sha256':'d57ebf548b6eccaf5d4e31c9bc13f2060419b04e043c880bd227ee4f893ffdd4','full_bundle_sha256':'db511279015a5bcba2ff286673df92372692a04ed5b242f96af51ce0e6776abc','starter_sha256':'a7e13962fd471bd14d69a7aba3c1ea5dfbddd38d74ca761844a110e76d03b51d','last_owner_execution':previous,'host_pressure':'NOT_YET_MEASURED_ON_OWNER_MAC','measured_speedup':None,'native_flixmomo_playback':'NOT_IMPLEMENTED','automatic_tor_routing':'NOT_IMPLEMENTED','cousin_server_deployment':'NOT_PERFORMED','delivery_mode':'FULL_CLOUD_COMPILED_BUNDLE_NO_MAC_SOURCE_BUILD_OR_PUSH'}
+          Path('REVIEW_CANDIDATE.json').write_text(json.dumps(record,indent=2)+'\n')
+          p=Path('.ghartv-owner-state.json');s=json.loads(p.read_text());s.update(current_candidate=m['version_name'],current_candidate_sha=source,candidate_branch=m['branch'],candidate_pr=1,version_code=24,candidate_release='v0.6.0-rc8',candidate_release_status='COMPILED_PERFORMANCE_REVIEW_PUBLISHED_OWNER_EXECUTION_PENDING',unsigned_apk_sha256=m['unsigned_sha256'],apk_sha256=None,owner_decision='REVIEW_PENDING_NOT_EXECUTED',owner_command_sha256=record['owner_command_sha256'],owner_command_mode='FULL_BUNDLED_GREEN_REVIEW_WITH_PRIVATE_HOST_MEASUREMENTS',mac_sync='AWAITING_RC8_RECEIPT',source_build_run=35260333672,source_build_result='SUCCESS',last_owner_execution=previous,public_approval=False,next_action='Download and run exact RC8 full bundle; measure host/app privately; review picture/audio, input, comfort and web/owner before explicit publication. No Mac source build/push.');p.write_text(json.dumps(s,indent=2)+'\n')
+          validation={'schema':'ghartv.smooth-performance-validation.v1','source':source,'workflow_run':35260333672,'job':105334160704,'result':'SUCCESS','actual_android_compile':'PASS_CODE24','typed_signature_cases':'PASS_DISPOSABLE_FIXTURES','browser':'PASS_REAL_HTTP_CHROMIUM_WITH_CONTROLLED_PROVIDER_AND_COLLECTOR_DATA','browser_coverage':['96_card_paging','Punjabi_category_search_scope','keyboard_next_previous_fullscreen','manual_reports_partial_failure','local_performance_button_and_lock','comfort_save_warning_rest_guide_disabled','explicit_publication_confirmation_cancel'],'host_measurements':'NOT_RUN_ON_OWNER_MAC','live_provider_playback':False,'measured_speedup':None,'public_feed_write':False,'private_data_published':False}
+          Path('docs/rc8-performance-validation.json').write_text(json.dumps(validation,indent=2)+'\n')
+          for n in ('CURRENT_HANDOFF.md','GHARTV_LANE_PROGRESS.md'):
+            with Path(n).open('a') as f:f.write('\n\n## Verified delivery\n\nApplication source `'+source+'`, build35260333672/job105334160704 SUCCESS. Full bundle SHA256 `'+record['full_bundle_sha256']+'`. RC8 owner execution and measured speedup are pending. Last actual owner app remains rejected code23/run12; do not confuse code17 v0.5.4-rc8 public with code24 v0.6.0-rc8 review.\n')
+          pub=json.loads(Path('update/latest.json').read_text());assert pub['versionCode']==17 and pub['sourceCommit']=='de3106e3e97a9147b06347a3d66c4e5923cdbbcc'
+          print('RC8_CONTROL_VERIFIED; PUBLIC_CODE17_UNCHANGED')
+          PY
+          bash -n GHARTV_SYNC_CURRENT_AND_REPORT.command
+          test "$(git ls-remote origin refs/heads/main | cut -f1)" = "$GITHUB_SHA"
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add CURRENT_HANDOFF.md GHARTV_LANE_PROGRESS.md GHARTV_SYNC_CURRENT_AND_REPORT.command REVIEW_CANDIDATE.json .ghartv-owner-state.json docs/rc8-performance-validation.json
+          git rm .github/workflows/rc8-delivery-record.yml
+          test -z "$(git diff --cached --name-only -- android-tv update/latest.json)"
+          git commit -m 'delivery: current RC8 performance review with verified bundle and private Mac observations; BLUE unchanged'
+          git push origin HEAD:main
+          echo "CONTROL_SHA=$(git rev-parse HEAD)"
+          rm /tmp/ghartv-rc8.zip
