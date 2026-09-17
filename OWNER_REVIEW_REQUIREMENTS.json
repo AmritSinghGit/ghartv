@@ -50,5 +50,23 @@
     ],
     "collector_access": "owner screenshots are not independent access to private rows",
     "public_feed_change": false
+  },
+  "rc8_followup": {
+    "state": "PREPARED_FOR_CLOUD_COMPILE_AND_OWNER_REVIEW",
+    "previous_installed": "RC7 code23 / run12",
+    "required": [
+      "focus-owned bounded previews default off",
+      "network outside shared guide lock",
+      "cancellable channel responses",
+      "local memory and frame observations without automatic process kills",
+      "configurable still watching",
+      "same exact candidate APK web owner and existing opener"
+    ],
+    "not_delivered": [
+      "FlixMomo movie relay and federated streaming",
+      "AI super-resolution",
+      "cousin-server deployment",
+      "universal link access"
+    ]
   }
 }

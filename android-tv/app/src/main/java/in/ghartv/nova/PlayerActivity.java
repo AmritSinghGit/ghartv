@@ -65,6 +65,9 @@ public final class PlayerActivity extends Activity implements ChannelNavigator.L
     private boolean recoveryPending;
 
     private ExoPlayer player;
+    private PlaybackComfort comfort;
+    private Runnable firstFrameDeadline;
+    private long lastChannelKey;
     private PlayerView playerView;
     private ProgressBar loading;
     private LinearLayout guidePanel;
@@ -148,6 +151,7 @@ public final class PlayerActivity extends Activity implements ChannelNavigator.L
         setContentView(buildUi());
         Telemetry.screen(this, "player");
         mainHandler.post(progressTicker);
+        comfort=new PlaybackComfort(this,()->{playbackGeneration++;repository.api().cancelPlayback();if(pendingPlayback!=null)pendingPlayback.cancel(true);cancelBufferingWatchdog();releasePlayer();playerView.setKeepScreenOn(false);loading.setVisibility(View.GONE);},()->startChannel(channel,true),()->finish());
         startChannel(channel, true);
     }
 
@@ -161,14 +165,18 @@ public final class PlayerActivity extends Activity implements ChannelNavigator.L
         super.onResume();
         TvUi.immersive(this);
         if (player != null) player.play();
+        if(comfort!=null)comfort.resume();
     }
 
     @Override protected void onPause() {
+        if(comfort!=null)comfort.pause();
         if (player != null) player.pause();
         super.onPause();
     }
 
     @Override protected void onDestroy() {
+        if(comfort!=null)comfort.close();
+        if(repository!=null)repository.api().cancelPlayback();
         reportPlaybackSession("activity_destroyed");
         playbackGeneration++;
         if (hideGuide != null) mainHandler.removeCallbacks(hideGuide);
@@ -343,6 +351,7 @@ public final class PlayerActivity extends Activity implements ChannelNavigator.L
 
     private void startChannel(Channel next, boolean resetRecovery) {
         if (next == null) return;
+        playerView.setKeepScreenOn(true);
         recoveryPending=false;
         if(errorDialog!=null){errorDialog.dismiss();errorDialog=null;}
         if (resetRecovery) {
@@ -367,6 +376,7 @@ public final class PlayerActivity extends Activity implements ChannelNavigator.L
         historyStore.recordTune(next);
         int generation = ++playbackGeneration;
         tuneElapsed=android.os.SystemClock.elapsedRealtime();
+        repository.api().cancelPlayback();
         if(pendingPlayback!=null)pendingPlayback.cancel(true);
         playbackExecutor.purge();
         cancelBufferingWatchdog();
@@ -443,14 +453,21 @@ public final class PlayerActivity extends Activity implements ChannelNavigator.L
         probe=new PlaybackProbe(this,player,tuneElapsed);
         playerView.setPlayer(player);
         PictureShape.apply(this, playerView, channel == null ? "" : channel.id);
+        if(PlaybackComfort.light(this))player.setTrackSelectionParameters(player.getTrackSelectionParameters().buildUpon().setMaxVideoSize(1280,720).build());
+        final int listenerGeneration=playbackGeneration;
+        firstFrameDeadline=()->{if(listenerGeneration==playbackGeneration){repository.api().cancelPlayback();releasePlayer();loading.setVisibility(View.GONE);showPlaybackError(new java.io.IOException("First picture timed out; retry or select another channel"));}};
+        mainHandler.postDelayed(firstFrameDeadline,18000L);
         player.addListener(new Player.Listener() {
+            @Override public void onRenderedFirstFrame(){if(listenerGeneration!=playbackGeneration)return;if(firstFrameDeadline!=null)mainHandler.removeCallbacks(firstFrameDeadline);LocalPerformance.record(PlayerActivity.this,"first_picture_ms",android.os.SystemClock.elapsedRealtime()-tuneElapsed);}
+
             @Override public void onPlaybackStateChanged(int state) {
+                if(listenerGeneration!=playbackGeneration)return;
                 if (state == Player.STATE_READY) {
                     cancelBufferingWatchdog();
                     endBuffering();
                     loading.setVisibility(View.GONE);
                     guideStatus = "Live now";
-                    markAccess(Channel.ACCESS_AVAILABLE, "Playable on this connected Jio account.");
+                    if(playbackReadyAt==0)markAccess(Channel.ACCESS_AVAILABLE, "Playable on this connected Jio account.");
                     recordPlaybackReady();
                     refreshTransportState();
                     refreshGuideContent();
@@ -482,6 +499,8 @@ public final class PlayerActivity extends Activity implements ChannelNavigator.L
             }
 
             @Override public void onPlayerError(PlaybackException error) {
+                if(listenerGeneration!=playbackGeneration)return;
+                if(firstFrameDeadline!=null)mainHandler.removeCallbacks(firstFrameDeadline);
                 endBuffering();
                 loading.setVisibility(View.GONE);
                 cancelBufferingWatchdog();
@@ -511,6 +530,7 @@ public final class PlayerActivity extends Activity implements ChannelNavigator.L
     }
 
     private void releasePlayer() {
+        if(firstFrameDeadline!=null){mainHandler.removeCallbacks(firstFrameDeadline);firstFrameDeadline=null;}
         cancelBufferingWatchdog();
         if (player != null) {
             if(probe!=null){probe.close();probe=null;}
@@ -964,7 +984,9 @@ public final class PlayerActivity extends Activity implements ChannelNavigator.L
     }
 
     private void markAccess(String state, String message) {
-        repository.applyAccessState(channel, state, message);
+        final Channel observed=channel;if(observed==null)return;
+        observed.accessState=state;observed.accessMessage=message;observed.accessUpdatedAt=System.currentTimeMillis();
+        executor.execute(()->repository.updateAccessState(observed.id,state,message));
         for (Channel scoped : playbackScope) {
             if (channel != null && scoped.id.equals(channel.id)) {
                 scoped.accessState = channel.accessState;
@@ -1154,7 +1176,16 @@ public final class PlayerActivity extends Activity implements ChannelNavigator.L
         startChannel(requested, true);
     }
 
+    @Override public void onUserInteraction(){super.onUserInteraction();if(comfort!=null)comfort.touch();}
     @Override public boolean dispatchKeyEvent(KeyEvent event) {
+        if(event.isCtrlPressed()||event.isAltPressed()||event.isMetaPressed())return super.dispatchKeyEvent(event);
+        if(event.getAction()==KeyEvent.ACTION_DOWN){
+            if(comfort!=null&&comfort.resting())return super.dispatchKeyEvent(event);
+            int k=event.getKeyCode();
+            if(k==KeyEvent.KEYCODE_PAGE_DOWN||k==KeyEvent.KEYCODE_PAGE_UP){if(event.getRepeatCount()==0)changeChannel(k==KeyEvent.KEYCODE_PAGE_DOWN?1:-1);return true;}
+            if(k==KeyEvent.KEYCODE_ESCAPE){finish();return true;}
+            if(event.getRepeatCount()>0&&(k==KeyEvent.KEYCODE_CHANNEL_UP||k==KeyEvent.KEYCODE_CHANNEL_DOWN))return true;
+        }
         if (event.getAction() != KeyEvent.ACTION_DOWN) return super.dispatchKeyEvent(event);
         int key = event.getKeyCode();
         if (key >= KeyEvent.KEYCODE_0 && key <= KeyEvent.KEYCODE_9) {

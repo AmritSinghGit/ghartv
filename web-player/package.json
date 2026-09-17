@@ -1,6 +1,6 @@
 {
   "name": "ghartv-local-web-player",
-  "version": "0.6.0-rc7-network-diagnostics",
+  "version": "0.6.0-rc8-smooth-performance",
   "private": true,
   "type": "module",
   "scripts": {

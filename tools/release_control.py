@@ -9,7 +9,7 @@ from pathlib import Path
 HOME=Path.home(); STATE=HOME/'Library/Application Support/GharTV/owner-review'
 CURRENT=STATE/'current'; RUNTIME=STATE/'runtime-current'; RELEASE=STATE/'release-control'
 REPO='AmritSinghGit/ghartv'; PACKAGE='in.ghartv.nova'; AVD='GharTV_Nova_Manual_google_tv_API36'
-TAG='v0.6.0-rc7'; CODE=23; VERSION='0.6.0-rc7-network-diagnostics'; ASSET='GharTV-review-current.apk'
+TAG='v0.6.0-rc8'; CODE=24; VERSION='0.6.0-rc8-smooth-performance'; ASSET='GharTV-review-current.apk'
 CERT='40a9d8bf6b1c557b3d6fd02acef075368dd13e28691f207a297202d0d5ec233c'
 class Hold(RuntimeError): pass
 def safe(path):
@@ -49,7 +49,7 @@ def identity(expected):
     marker=read_json(RUNTIME/'.ghartv-managed.json');r=read_json(CURRENT/'receipt.json');a=read_json(CURRENT/'review-artifact.json')
     if marker.get('source')!=expected or r.get('review_source')!=expected or a.get('source')!=expected:raise Hold('CANDIDATE_IDENTITY_CHANGED_REFRESH_FIRST')
     if r.get('version_code')!=CODE or r.get('version')!=VERSION:raise Hold('WRONG_REVIEW_VERSION')
-    if r.get('status')!='REVIEW_READY' or r.get('emulator')!='RC7_INSTALLED_BYTES_VERIFIED_AND_FOREGROUND':raise Hold('GREEN_INSTALLATION_NOT_READY')
+    if r.get('status')!='REVIEW_READY' or r.get('emulator')!='RC8_INSTALLED_BYTES_VERIFIED_AND_FOREGROUND':raise Hold('GREEN_INSTALLATION_NOT_READY')
     if not re.fullmatch('[a-f0-9]{64}',r.get('signed_apk_sha256','')) or a.get('sha256')!=r['signed_apk_sha256']:raise Hold('SIGNED_IDENTITY_NOT_VERIFIED')
     return r
 class NoRedirect(urllib.request.HTTPRedirectHandler):
@@ -111,7 +111,7 @@ def verify_green(expected,open_tv=False):
     verified=json.loads(command([java,'-cp',signer.parent/'lib/apksigner.jar',RUNTIME/'tools/GharTVApkVerifier.java',apk],45))
     if verified.get('ok') is not True or verified.get('certificate_sha256')!=[CERT]:raise Hold('ORIGINAL_RELEASE_CERTIFICATE_NOT_VERIFIED')
     badging=command([signer.parent/'aapt','dump','badging',apk])
-    if not all(x in badging for x in ("name='"+PACKAGE+"'","versionCode='23'","versionName='"+VERSION+"'")):raise Hold('APK_PACKAGE_VERSION_MISMATCH')
+    if not all(x in badging for x in ("name='"+PACKAGE+"'","versionCode='24'","versionName='"+VERSION+"'")):raise Hold('APK_PACKAGE_VERSION_MISMATCH')
     if open_tv:
         command([adb,'-s',serial,'shell','input','keyevent','KEYCODE_WAKEUP'])
         launched=command([adb,'-s',serial,'shell','am','start','-W','-n',PACKAGE+'/.MainActivity'])
@@ -130,7 +130,7 @@ def verify(expected,open_tv=False):
 
 def validate_approval(body,r):
     if body.get('run_id')!=r['run_id'] or body.get('source')!=r['review_source'] or body.get('sha256')!=r['signed_apk_sha256']:raise Hold('APPROVAL_DOES_NOT_MATCH_CURRENT_GREEN')
-    if body.get('confirmation')!='PUBLISH EXACT CODE 23':raise Hold('EXPLICIT_PRODUCTION_APPROVAL_REQUIRED')
+    if body.get('confirmation')!='PUBLISH EXACT CODE 24':raise Hold('EXPLICIT_PRODUCTION_APPROVAL_REQUIRED')
     if body.get('reviewed')!={'tv':True,'web':True,'owner':True}:raise Hold('THREE_REVIEW_CONFIRMATIONS_REQUIRED')
     if body.get('scope')!='ANDROID_UPDATE_AND_DOWNLOAD_FEED_ONLY':raise Hold('PUBLICATION_SCOPE_NOT_CONFIRMED')
 
@@ -163,11 +163,11 @@ def publish(expected,body):
     if identity(expected)['signed_apk_sha256']!=h or digest(apk)!=h:raise Hold('GREEN_CHANGED_BEFORE_PUBLICATION')
     feed={'versionCode':CODE,'versionName':VERSION,'apkUrl':f'https://github.com/{REPO}/releases/download/{TAG}/{ASSET}',
           'sha256':h,'sourceCommit':expected,'artifactTag':TAG,'channel':'production','publishedAt':at,
-          'notes':'Owner-reviewed exact code23: network diagnostics, manual reports, Punjabi selection and release desk. Update in place; do not uninstall.',
+          'notes':'Owner-reviewed exact code24: network diagnostics, manual reports, Punjabi selection and release desk. Update in place; do not uninstall.',
           'ownerDecision':'EXPLICIT_LOCAL_THREE_SURFACE_APPROVAL','distributionMode':'promote-exact-reviewed-signed-apk-no-rebuild',
           'mandatoryUpdateSupported':False,'silentInstallSupported':False,'previousVersionCode':blue['versionCode'],'previousArtifactSha256':blue['sha256']}
     encoded=base64.b64encode((json.dumps(feed,indent=2)+'\n').encode()).decode()
-    changed=github('repos/'+REPO+'/contents/update/latest.json','PUT',{'message':'release: promote owner-approved exact code23 APK; no rebuild','branch':'main','sha':blob,'content':encoded})
+    changed=github('repos/'+REPO+'/contents/update/latest.json','PUT',{'message':'release: promote owner-approved exact code24 APK; no rebuild','branch':'main','sha':blob,'content':encoded})
     commit=changed.get('commit',{}).get('sha')
     _,observed=live_blue()
     if any(observed.get(k)!=feed[k] for k in ('sourceCommit','sha256','versionCode','apkUrl')):raise Hold('PUBLICATION_READBACK_PENDING_CHECK_FEED')
@@ -182,11 +182,11 @@ def finish_publication(source,h,commit,feed,already=False):
     write_json(RELEASE/'publication.json',state)
     try:
         vault=HOME/'Documents/Amrit Executive Memory';safe(vault)
-        if vault.is_dir():write_json(vault/'90 System/Operon Portfolio/Handoffs/Terminal Runs/ghartv'/('promotion-code23-'+source[:12]+'.json'),state)
+        if vault.is_dir():write_json(vault/'90 System/Operon Portfolio/Handoffs/Terminal Runs/ghartv'/('promotion-code24-'+source[:12]+'.json'),state)
     except (Hold,OSError):state['obsidian']='PUBLICATION_NOTE_PENDING'
     try:
         # Same PR, only release identity. No local paths, owner data or support records.
-        comment='Owner approved and published exact GharTV code23. Source `'+source+'`, signed APK SHA256 `'+h+'`. No rebuild. Public update feed readback verified. Physical TV install and hosted browser deployment are not established by this publication.'
+        comment='Owner approved and published exact GharTV code24. Source `'+source+'`, signed APK SHA256 `'+h+'`. No rebuild. Public update feed readback verified. Physical TV install and hosted browser deployment are not established by this publication.'
         command(['gh','pr','comment','1','--repo',REPO,'--body',comment],15)
     except Hold:state['cross_lane_notice']='PENDING';write_json(RELEASE/'publication.json',state)
     return {**snapshot(source),'publication':state}

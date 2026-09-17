@@ -34,18 +34,24 @@ public final class JioApiClient {
     private static final String PLAYER_USER_AGENT = "plaYtv/7.1.5 (Linux;Android 9) ExoPlayerLib/2.11.7";
 
     private final Context context;
-    private final OkHttpClient client;
-
-    public JioApiClient(Context context) {
-        this.context = context.getApplicationContext();
-        this.client = new OkHttpClient.Builder()
-                .connectTimeout(12, TimeUnit.SECONDS)
-                .readTimeout(18, TimeUnit.SECONDS)
-                .writeTimeout(18, TimeUnit.SECONDS)
-                .callTimeout(25, TimeUnit.SECONDS)
-                .retryOnConnectionFailure(true)
-                .connectionPool(new ConnectionPool(5, 5, TimeUnit.MINUTES))
-                .build();
+    private static final OkHttpClient SHARED = new OkHttpClient.Builder()
+            .connectTimeout(8, TimeUnit.SECONDS).readTimeout(12, TimeUnit.SECONDS)
+            .writeTimeout(12, TimeUnit.SECONDS).callTimeout(16, TimeUnit.SECONDS)
+            .retryOnConnectionFailure(true).connectionPool(new ConnectionPool(8,5,TimeUnit.MINUTES)).build();
+    private final OkHttpClient client = SHARED;
+    private final java.util.Set<okhttp3.Call> playbackCalls = java.util.concurrent.ConcurrentHashMap.newKeySet();
+    public JioApiClient(Context context) { this.context=context.getApplicationContext(); }
+    public void cancelPlayback() { for(okhttp3.Call c:playbackCalls)c.cancel(); }
+    private final class TrackedPlayback implements java.io.Closeable {
+        final okhttp3.Call call; final Response response;
+        TrackedPlayback(okhttp3.Call c,Response r){call=c;response=r;}
+        @Override public void close(){try{response.close();}finally{playbackCalls.remove(call);}}
+    }
+    private TrackedPlayback playbackExecute(Request request) throws IOException {
+        if(Thread.currentThread().isInterrupted())throw new java.io.InterruptedIOException("Superseded request");
+        okhttp3.Call call=client.newCall(request);playbackCalls.add(call);
+        try {if(Thread.currentThread().isInterrupted())call.cancel();return new TrackedPlayback(call,call.execute());}
+        catch(IOException | RuntimeException e){playbackCalls.remove(call);throw e;}
     }
 
     public void prewarm() {
@@ -255,7 +261,12 @@ public final class JioApiClient {
         return channels;
     }
 
+    private static final java.util.LinkedHashMap<String,EpgEntry> EPG_CACHE=new java.util.LinkedHashMap<>(32,.75f,true);
+    private static final class EpgEntry {final long until;final List<Program> programs;EpgEntry(List<Program> p){until=android.os.SystemClock.elapsedRealtime()+60000;programs=new ArrayList<>(p);}}
     public List<Program> fetchEpg(String channelId, int offsetDays) throws Exception {
+        String cacheKey=channelId+":"+offsetDays;
+        synchronized(EPG_CACHE){EpgEntry e=EPG_CACHE.get(cacheKey);if(e!=null&&e.until>android.os.SystemClock.elapsedRealtime())return new ArrayList<>(e.programs);}
+
         String url = String.format(AppConfig.EPG, offsetDays, channelId);
         JSONObject payload = fetchJson(url, new Headers.Builder().add("User-Agent", MOBILE_USER_AGENT).build());
         JSONArray epg = payload.optJSONArray("epg");
@@ -266,6 +277,7 @@ public final class JioApiClient {
             Program p=Program.fromJson(row);if(p.startEpochMs>0&&p.endEpochMs>p.startEpochMs)programs.add(p);
         }
         programs.sort((a,b)->Long.compare(a.startEpochMs,b.startEpochMs));
+        synchronized(EPG_CACHE){EPG_CACHE.put(cacheKey,new EpgEntry(programs));while(EPG_CACHE.size()>32)EPG_CACHE.remove(EPG_CACHE.keySet().iterator().next());}
         return programs;
     }
 
@@ -285,7 +297,8 @@ public final class JioApiClient {
                 .add("channel_id", channel.id)
                 .build();
         Request request = new Request.Builder().url(AppConfig.PLAYBACK).headers(headers).post(form).build();
-        try (Response response = client.newCall(request).execute()) {
+        try (TrackedPlayback tracked = playbackExecute(request)) {
+            Response response=tracked.response;
             int status = response.code();
             String raw = response.body() == null ? "" : response.body().string();
 

@@ -91,13 +91,14 @@ public final class ChannelRepository {
         return new ArrayList<>(channels);
     }
 
-    public synchronized List<Channel> refreshJio() throws Exception {
+    public List<Channel> refreshJio() throws Exception {
+        List<Channel> fresh = api.fetchChannels();
+        if (fresh.isEmpty()) throw new IllegalStateException("JioTV returned an empty television guide");
+        synchronized (this) {
         List<Channel> previous = loadAll();
         Map<String, Channel> previousById = new HashMap<>();
         for (Channel channel : previous) previousById.put(channel.id, channel);
 
-        List<Channel> fresh = api.fetchChannels();
-        if (fresh.isEmpty()) throw new IllegalStateException("JioTV returned an empty television guide");
         long now = System.currentTimeMillis();
         for (Channel channel : fresh) {
             channel.requiresSubscription = channel.requiresSubscription || channel.subscriptionHint;
@@ -129,6 +130,7 @@ public final class ChannelRepository {
         memoryFileModified = Long.MIN_VALUE;
         invalidateIndex();
         return loadAll();
+        }
     }
 
     /** Persist a channel access result. Stale results are later expired automatically. */

@@ -11,5 +11,3 @@ Owner Mac & TV performance button is explicit/local-only:3 short process snapsho
 Reuse same emulator5580, port8790, original signing identity and saved data. No code build/push is required on the Mac. Download/checksum/start full bundle. Prior runtime retained for rollback; known obsolete ZIPs only removed by hash. No broad Downloads, Docker or Git cleanup. Existing Obsidian and safe GitHub mirror remain; last owner-installed baseline code23/run12.
 
 Acceptance: verify first picture and audio in actual provider account, fast focus and category switching, no preview while Find owns focus, still-watching resume/guide, web/owner manual refresh. Cloud/browser tests are controlled fixtures; no measured Mac speedup or universal entitlement is claimed.
-
-Production baseline is read separately. Pending review24 is not an owner installation. Main/PR histories retained. Current app source is the cloud-tested commit recorded by delivery manifest; do not substitute branch head for installed APK.

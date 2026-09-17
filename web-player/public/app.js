@@ -117,16 +117,17 @@ function filterChannels() {
     const language=state.language === "All" || channel.language === state.language;
     return category && language && (!query || searchable.includes(query) || (query==="ਪੰਜਾਬੀ" && channel.language==="Punjabi"));
   });
-  renderChannels();
+  renderedLimit=96;renderChannels();
 }
 
 function initials(name) {
   return String(name || "TV").split(/\s+/).slice(0, 2).map((part) => part[0]).join("").toUpperCase();
 }
 
+let renderedLimit=96;
 function renderChannels() {
   const fragment = document.createDocumentFragment();
-  for (const channel of state.filtered) {
+  for (const channel of state.filtered.slice(0,renderedLimit)) {
     const node = $("channelTemplate").content.firstElementChild.cloneNode(true);
     const image = node.querySelector("img");
     const fallback = node.querySelector(".channel-logo span");
@@ -143,6 +144,8 @@ function renderChannels() {
     fragment.append(node);
   }
   $("channelGrid").replaceChildren(fragment);
+  let more=document.getElementById("moreChannels");if(!more){more=document.createElement("button");more.id="moreChannels";more.className="button secondary";more.textContent="Show more channels";$("channelGrid").insertAdjacentElement("afterend",more);more.onclick=()=>{const old=renderedLimit;renderedLimit+=96;renderChannels();const card=$("channelGrid").children[old];if(card){card.tabIndex=0;card.focus();}};}
+  more.hidden=renderedLimit>=state.filtered.length;
   $("resultCount").textContent = `${state.filtered.length.toLocaleString()} of ${state.channels.length.toLocaleString()} channels`;
   if (state.focusGuideAfterLoad) {
     state.focusGuideAfterLoad = false;
@@ -431,7 +434,7 @@ async function playChannel(channelId, autoRetry=false) {
       $("playerStatus").textContent = playback.drm ? "Opening protected stream…" : "Opening stream…";
       await playDash(video, playback, generation);
     } else if (window.Hls?.isSupported()) {
-      state.hls = new Hls({ enableWorker: true, lowLatencyMode: true, backBufferLength: 30 });
+      state.hls = new Hls({ enableWorker: true, lowLatencyMode: true, backBufferLength: 5, maxBufferLength: 20 });
       state.hls.attachMedia(video);
       state.hls.on(Hls.Events.MEDIA_ATTACHED, () => {if(generation===state.playbackGeneration)state.hls?.loadSource(playback.url);});
       state.hls.on(Hls.Events.MANIFEST_PARSED, () => {
@@ -593,7 +596,7 @@ document.addEventListener("keydown",event=>{
       if(event.key==="ArrowDown"){event.preventDefault();$("channelGrid").querySelector(".channel-card")?.focus();}
       else if(event.key==="Escape"){$("search").value="";filterChannels();event.preventDefault();}
     }return;}
-  if($("loginDialog").open)return;
+  if($("loginDialog").open||document.getElementById("comfortSettings")?.open||document.getElementById("idlePrompt")?.open)return;
   if($("playerDialog").open){
     state.keyboardMode=true;const hidden=$("playerDialog").classList.contains("chrome-hidden");showPlayerChrome();
     if(event.key==="Escape"){event.preventDefault();if(document.fullscreenElement)document.exitFullscreen().catch(()=>{});else closePlayer();return;}
@@ -613,6 +616,40 @@ document.addEventListener("keydown",event=>{
   if(target.closest?.("#categoryBar")&&["ArrowLeft","ArrowRight","Home","End"].includes(event.key)){
     const list=[...$("categoryBar").children],i=list.indexOf(target),next=event.key==="Home"?0:event.key==="End"?list.length-1:(i+(event.key==="ArrowRight"?1:-1)+list.length)%list.length;
     list.forEach(e=>e.tabIndex=-1);list[next].tabIndex=0;list[next].focus();event.preventDefault();return;}
-  if(target.closest?.("#channelGrid")&&event.key.startsWith("Arrow"))moveFocus($("channelGrid").children,event);
+  if(target.closest?.("#channelGrid")&&event.key.startsWith("Arrow")){
+    const cards=[...$("channelGrid").children],index=cards.indexOf(target.closest(".channel-card"));
+    if(event.key==="ArrowDown"&&index>=cards.length-6&&renderedLimit<state.filtered.length){
+      const id=target.closest(".channel-card")?.dataset.channelId;renderedLimit+=96;renderChannels();
+      const keep=[...$("channelGrid").children].find(e=>e.dataset.channelId===id);if(keep)keep.focus();
+    }
+    moveFocus($("channelGrid").children,event);
+  }
 });
 loadStatus();
+
+// Local-only playback comfort. Never use playback progress as user activity.
+let comfortConfig={enabled:true,minutes:60,guide:false};
+try{comfortConfig={...comfortConfig,...JSON.parse(localStorage.getItem("ghartv_comfort_v1")||"{}")};}catch{}
+let idleTimer=null,idleGrace=null,resting=false;
+const comfortButton=document.createElement("button");comfortButton.className="button secondary";comfortButton.textContent="Playback & comfort";$("resetFilters").insertAdjacentElement("afterend",comfortButton);
+const comfortDialog=document.createElement("dialog");comfortDialog.id="comfortSettings";comfortDialog.innerHTML='<form method="dialog" style="padding:24px"><h2>Playback & comfort</h2><label><input id="stillEnabled" type="checkbox"> Ask: Still watching?</label><p><label>Minutes without input <input id="stillMinutes" type="number" min="1" max="240" required></label></p><label><input id="stillGuide" type="checkbox"> Return to guide instead of Resume screen</label><p><button value="cancel" formnovalidate>Cancel</button> <button id="saveComfort" value="save">Save</button></p></form>';document.body.append(comfortDialog);
+comfortButton.onclick=()=>{$("stillEnabled").checked=comfortConfig.enabled;$("stillMinutes").value=comfortConfig.minutes;$("stillGuide").checked=comfortConfig.guide;comfortDialog.showModal();};
+// Save in the submit action, not the asynchronously dispatched dialog close event.
+comfortDialog.querySelector("form").addEventListener("submit",event=>{
+ event.preventDefault();
+ if(event.submitter?.value!=="save"){comfortDialog.close("cancel");return;}
+ if(!event.currentTarget.reportValidity())return;
+ const n=Number($("stillMinutes").value);if(!Number.isInteger(n)||n<1||n>240)return;
+ comfortConfig={enabled:$("stillEnabled").checked,minutes:n,guide:$("stillGuide").checked};
+ try{localStorage.setItem("ghartv_comfort_v1",JSON.stringify(comfortConfig));}catch{}
+ comfortDialog.close("save");activity();
+});
+const idlePrompt=document.createElement("dialog");idlePrompt.id="idlePrompt";idlePrompt.innerHTML='<div style="padding:28px"><h2 id="idleTitle">Still watching?</h2><p id="idleCopy">Streaming stops in 30 seconds without a response.</p><button id="keepWatching">Keep watching</button> <button id="restGuide">Back to guide</button></div>';document.body.append(idlePrompt);
+function activity(){if(resting||idlePrompt.open)return;clearTimeout(idleTimer);if(comfortConfig.enabled&&$("playerDialog").open)idleTimer=setTimeout(warnIdle,Math.max(1,Math.min(240,comfortConfig.minutes))*60000);}
+function warnIdle(){if(!$("playerDialog").open)return;$("idleTitle").textContent="Still watching?";$("idleCopy").textContent="Streaming stops in 30 seconds without a response.";$("keepWatching").textContent="Keep watching";idlePrompt.showModal();$("keepWatching").focus();idleGrace=setTimeout(()=>{resting=true;destroyPlayback();if(comfortConfig.guide){idlePrompt.close();closePlayer();resting=false;}else{$("idleTitle").textContent="Your TV is resting";$("idleCopy").textContent="Streaming has stopped. Resume the same channel live.";$("keepWatching").textContent="Resume live TV";}},30000);}
+$("keepWatching").onclick=()=>{clearTimeout(idleGrace);idlePrompt.close();const resume=resting;resting=false;if(resume&&state.currentChannel)playChannel(state.currentChannel.id);activity();};
+$("restGuide").onclick=()=>{clearTimeout(idleGrace);idlePrompt.close();resting=false;closePlayer();};
+idlePrompt.addEventListener("cancel",e=>{e.preventDefault();$("keepWatching").click();});
+for(const event of ["keydown","pointerdown","touchstart"])document.addEventListener(event,activity,{passive:true});
+$("video").addEventListener("playing",()=>{if(!idleTimer)activity();});
+$("playerDialog").addEventListener("close",()=>{clearTimeout(idleTimer);idleTimer=null;clearTimeout(idleGrace);if(idlePrompt.open)idlePrompt.close();resting=false;});

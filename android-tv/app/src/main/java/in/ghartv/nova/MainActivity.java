@@ -94,6 +94,10 @@ public final class MainActivity extends Activity implements ChannelNavigator.Lis
         }
     };
 
+    private boolean initialResume=true;
+    private int diskLoadGeneration;
+    private final long screenStarted=android.os.SystemClock.elapsedRealtime();
+    private boolean guideMeasured;
     @Override protected void onCreate(Bundle state) {
         super.onCreate(state);
         requestWindowFeature(Window.FEATURE_NO_TITLE);
@@ -118,11 +122,12 @@ public final class MainActivity extends Activity implements ChannelNavigator.Lis
         FamilyTheme.applyPreviewIntent(this);
         Telemetry.launchStage(this, "ui_build");
         setContentView(buildUi());
+        LocalPerformance.sampleStartupFrames(this);
         Telemetry.screen(this, "guide");
         Telemetry.launchStage(this, "guide_content_set");
         mainHandler.postDelayed(() -> Telemetry.maybeRequestConsent(this), 1200L);
         mainHandler.post(clockTicker);
-        loadFromDisk(true);
+        mainHandler.post(()->loadFromDisk(true));
         mainHandler.postDelayed(() -> UpdateManager.check(this, false), 2600L);
     }
 
@@ -132,7 +137,7 @@ public final class MainActivity extends Activity implements ChannelNavigator.Lis
         if (repository == null) return;
         guideActive=true;
         if (!JioSession.load(this).isPresent()) routeToLogin();
-        else loadFromDisk(false);
+        else if(initialResume)initialResume=false;else loadFromDisk(false);
     }
 
     @Override protected void onPause() {
@@ -351,6 +356,9 @@ public final class MainActivity extends Activity implements ChannelNavigator.Lis
         LinearLayout.LayoutParams favouriteParams = new LinearLayout.LayoutParams(TvUi.dp(this, 126), TvUi.dp(this, 46));
         favouriteParams.leftMargin = TvUi.dp(this, 8);
         actions.addView(favouriteButton, favouriteParams);
+        Button previewButton=TvUi.button(this,"Preview 12s",false);
+        previewButton.setOnClickListener(v->{if(heroPreviewController!=null)heroPreviewController.previewNow();});
+        hero.addView(previewButton,new LinearLayout.LayoutParams(-1,TvUi.dp(this,30)));
         hero.addView(actions, new LinearLayout.LayoutParams(-1, TvUi.dp(this, 46)));
 
         TextView hints = TvUi.label(this, "NUMBER to tune  •  CH ± to switch  •  GUIDE to come back", 10, TvUi.MUTED, false);
@@ -404,6 +412,12 @@ public final class MainActivity extends Activity implements ChannelNavigator.Lis
             @Override public void onFavourite(Channel channel) { toggleFavourite(channel); }
         });
         channelGrid.setAdapter(channelAdapter);
+        channelGrid.setItemAnimator(null);
+        getWindow().getDecorView().getViewTreeObserver().addOnGlobalFocusChangeListener((oldFocus,newFocus)->{
+            boolean inGrid=false;android.view.ViewParent parent=newFocus==null?null:newFocus.getParent();
+            while(parent!=null){if(parent==channelGrid){inGrid=true;break;}parent=parent.getParent();}
+            if(heroPreviewController!=null)heroPreviewController.focused(guideActive&&inGrid);
+        });
         channelGrid.addOnScrollListener(new RecyclerView.OnScrollListener(){
             @Override public void onScrollStateChanged(RecyclerView v,int state){if(state==RecyclerView.SCROLL_STATE_IDLE)scheduleVisibleEpg();}
         });
@@ -439,14 +453,21 @@ public final class MainActivity extends Activity implements ChannelNavigator.Lis
         String mobile = session.mobile;
         String suffix = mobile.length() >= 4 ? mobile.substring(mobile.length() - 4) : "connected";
         accountButton.setText("Jio ••••" + suffix);
-        allChannels = repository.loadAll();
+        final int loadId=++diskLoadGeneration;
+        executor.execute(()->{
+        final List<Channel> loaded=repository.loadAll();
+        mainHandler.post(()->{
+        if(isFinishing()||isDestroyed()||loadId!=diskLoadGeneration)return;
+        allChannels = loaded;
         Telemetry.launchStage(this, "catalogue_loaded");
         renderGuide(focus);
+        if(!guideMeasured){guideMeasured=true;LocalPerformance.record(this,"guide_ready_ms",android.os.SystemClock.elapsedRealtime()-screenStarted);}
         updateCatalogueStatus(null);
 
         long age = System.currentTimeMillis() - repository.lastUpdatedAt();
         if (allChannels.isEmpty()) refreshCatalogue(true);
         else if (age > AppConfig.CATALOGUE_REFRESH_MS) refreshCatalogue(false);
+        });});
     }
 
     private void refreshCatalogue(boolean ownerInitiated) {
@@ -653,6 +674,7 @@ public final class MainActivity extends Activity implements ChannelNavigator.Lis
     }
 
     private void showSearch() {
+        if(heroPreviewController!=null)heroPreviewController.stop(false);
         EditText input = new EditText(this);
         input.setSingleLine(true);
         input.setText(searchQuery);
@@ -678,6 +700,7 @@ public final class MainActivity extends Activity implements ChannelNavigator.Lis
     }
 
     private void showAccountMenu() {
+        if(heroPreviewController!=null)heroPreviewController.stop(false);
         JioSession session = JioSession.load(this);
         String mobile = session.mobile;
         String masked = mobile.length() >= 4 ? "••••••" + mobile.substring(mobile.length() - 4) : "Connected";
@@ -689,7 +712,8 @@ public final class MainActivity extends Activity implements ChannelNavigator.Lis
                 "Owner messages  •  " + RemoteControl.status(this),
                 "Diagnostics & privacy  •  " + diagnostics,
                 "Hardware & picture diagnostics",
-                "Sign out of JioTV"
+                "Sign out of JioTV",
+                "Playback & comfort · preview / still watching / quality"
         };
         new AlertDialog.Builder(this)
                 .setTitle("JioTV account  •  " + masked)
@@ -701,6 +725,7 @@ public final class MainActivity extends Activity implements ChannelNavigator.Lis
                     else if (which == 4) DiagnosticsDialog.show(this);
                     else if (which == 5) HardwareDiagnostics.show(this);
                     else if (which == 6) confirmSignOut();
+                    else if (which == 7) PlaybackComfort.settings(this);
                 })
                 .setNegativeButton("Close", null)
                 .show();

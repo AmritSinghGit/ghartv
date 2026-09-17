@@ -1,3 +1,4 @@
+import {performanceRoute} from './performance-desk.mjs';
 import {providerRoute} from './provider-access.mjs';
 import {releaseRoute} from './release-desk.mjs';
 import {captureSupport,readSupport,validReference,projectEvent} from './support-report.mjs';
@@ -54,6 +55,7 @@ export async function ownerRoute(req,res,url){
       'Content-Security-Policy':"default-src 'none'; style-src 'unsafe-inline'; script-src 'nonce-"+scriptNonce+"'; connect-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'"});
     res.end(html);return true;
   }
+  if(await performanceRoute(req,res,url,authorized))return true;
   if(await releaseRoute(req,res,url,authorized))return true;
   if(await fabricControl(req,res,url,authorized))return true;
   if(url.pathname==='/owner.html'&&req.method==='GET'){

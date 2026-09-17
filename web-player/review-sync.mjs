@@ -16,6 +16,7 @@ export function safeReceipt(r){
   if(!/^GHARTV-CYAN-\d+(?:-[A-Z0-9-]+)?-\d{8}T\d{6}Z-\d+$/.test(r.run_id||''))throw new Error('RUN_ID_INVALID');
   if(!/^[a-f0-9]{40}$/.test(r.review_source||''))throw new Error('SOURCE_INVALID');
   if(!/^\d[0-9A-Za-z.-]{1,70}$/.test(r.version||'')||!Number.isSafeInteger(r.version_code))throw new Error('VERSION_INVALID');
+  const pressure=v=>['NORMAL','WARNING','CRITICAL','NOT_REPORTED'].includes(v)?v:'NOT_MEASURED';
   const digest=v=>/^[a-f0-9]{64}$/.test(v||'')?v:null;
   return {schema:'ghartv.safe-owner-receipt.v1',repository:REPO,lane:'ghartv',run_id:r.run_id,
     review_source:r.review_source,version:r.version,version_code:r.version_code,
@@ -27,7 +28,7 @@ export function safeReceipt(r){
     bridge:r.memory_bridge?.includes('TIMEOUT')?'PENDING_TIMEOUT':r.memory_bridge?.includes('EXIT_0_EXIT_0')?'COMMANDS_EXITED_ZERO_REPLICA_UNVERIFIED':'NOT_CONFIRMED',
     collector_config_present:r.collector_config==='PRESENT',collector_auth_verified:['SUCCESS','VERIFIED_BY_SUPPORT_READ'].includes(r.collector_auth),
     signed_asset_publication:r.review_release==='SIGNED_REVIEW_ASSET_VERIFIED'?'VERIFIED':'NOT_VERIFIED',
-    physical_tv:'NOT_VERIFIED',owner_decision:r.owner_decision==='REJECTED_PLAYBACK_BLOCKED'?'REJECTED_PLAYBACK_BLOCKED':'REVIEW_PENDING',cleanup_count:Number.isSafeInteger(r.cleanup_count)&&r.cleanup_count>=0?r.cleanup_count:0,cleanup_bytes:Number.isSafeInteger(r.cleanup_bytes)&&r.cleanup_bytes>=0?r.cleanup_bytes:0};
+    host_memory_pressure_before:pressure(r.host_memory_pressure_before),host_memory_pressure_after:pressure(r.host_memory_pressure_after),performance_report_saved:r.performance_after==='MEASURED_LOCALLY',physical_tv:'NOT_VERIFIED',owner_decision:r.owner_decision==='REJECTED_PLAYBACK_BLOCKED'?'REJECTED_PLAYBACK_BLOCKED':'REVIEW_PENDING',cleanup_count:Number.isSafeInteger(r.cleanup_count)&&r.cleanup_count>=0?r.cleanup_count:0,cleanup_bytes:Number.isSafeInteger(r.cleanup_bytes)&&r.cleanup_bytes>=0?r.cleanup_bytes:0};
 }
 export async function latestReview(){
   let r;

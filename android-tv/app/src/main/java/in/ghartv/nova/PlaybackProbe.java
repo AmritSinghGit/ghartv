@@ -22,7 +22,7 @@ public final class PlaybackProbe implements AnalyticsListener {
         Telemetry.event(context,"first_video_frame",Telemetry.data("tune_to_frame_ms",Math.max(0,now-tuneStart),"player_to_frame_ms",Math.max(0,now-attached)));
         Telemetry.enqueueUpload(context,false);
     }
-    @Override public void onDroppedVideoFrames(EventTime time,int count,long elapsed){dropped+=Math.max(0,count);}
+    @Override public void onDroppedVideoFrames(EventTime time,int count,long elapsed){dropped+=Math.max(0,count);LocalPerformance.record(context,"dropped_video_frames",Math.max(0,count));}
     @Override public void onBandwidthEstimate(EventTime time,int ms,long bytes,long estimate){if(estimate>0)bandwidth=estimate;}
     private void sample(){
         try {

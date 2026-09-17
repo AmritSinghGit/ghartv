@@ -38,7 +38,7 @@ import java.util.concurrent.Executors;
 @UnstableApi
 public final class HeroPreviewController {
     private static final long AUTO_START_DELAY_MS = 1_200L;
-    private static final long MAX_PREVIEW_MS = 20_000L;
+    private static final long MAX_PREVIEW_MS = 12_000L;
 
     private final Activity activity;
     private final ChannelRepository repository;
@@ -50,6 +50,17 @@ public final class HeroPreviewController {
     private final ExecutorService executor = Executors.newSingleThreadExecutor();
 
     private ExoPlayer player;
+    private boolean focused=false;
+    private boolean previewReady=false;
+    private Runnable startupDeadline;
+    private java.util.concurrent.Future<?> pendingRequest;
+    private final JioApiClient previewApi;
+    public void focused(boolean value) {
+        if(focused==value)return;focused=value;
+        if(!value)stop(false);else scheduleAutoStart();
+    }
+    public void previewNow() { stop(false);focused=true;start(); }
+
     private Channel selected;
     private int generation;
     private Runnable pendingStart;
@@ -60,6 +71,7 @@ public final class HeroPreviewController {
                                  ProgressBar loading, TextView status) {
         this.activity = activity;
         this.repository = repository;
+        this.previewApi = new JioApiClient(activity);
         this.playerView = playerView;
         this.poster = poster;
         this.loading = loading;
@@ -86,6 +98,7 @@ public final class HeroPreviewController {
     }
 
     private void scheduleAutoStart() {
+        if(!focused || !PlaybackComfort.autoPreview(activity)){updateIdleCopy();return;}
         Channel channel = selected;
         if (channel == null) {
             updateIdleCopy();
@@ -114,6 +127,7 @@ public final class HeroPreviewController {
         if (channel == null || safe(channel.id).isEmpty()) return;
         final int currentGeneration = ++generation;
         releasePlayer();
+        previewReady=false;
         loading.setVisibility(View.VISIBLE);
         status.setTextColor(Color.WHITE);
         status.setText("Starting muted live preview…");
@@ -124,9 +138,12 @@ public final class HeroPreviewController {
                 "access_state", channel.accessState
         ));
 
-        executor.execute(() -> {
+        if(startupDeadline!=null)main.removeCallbacks(startupDeadline);
+        startupDeadline=()->{if(currentGeneration==generation)fail("Preview took too long • Watch live to try full screen",TvUi.MUTED);};
+        main.postDelayed(startupDeadline,4500L);
+        pendingRequest=executor.submit(() -> {
             try {
-                PlaybackInfo info = repository.api().fetchPlayback(channel);
+                PlaybackInfo info = previewApi.fetchPlayback(channel);
                 main.post(() -> {
                     if (currentGeneration != generation || activity.isFinishing()) return;
                     loading.setVisibility(View.GONE);
@@ -174,10 +191,16 @@ public final class HeroPreviewController {
         player = new ExoPlayer.Builder(activity)
                 .setMediaSourceFactory(new DefaultMediaSourceFactory(dataSourceFactory))
                 .build();
+        player.setTrackSelectionParameters(player.getTrackSelectionParameters().buildUpon()
+                .setMaxVideoSize(640,360).setForceLowestBitrate(true).setTrackTypeDisabled(C.TRACK_TYPE_AUDIO,true).build());
         player.setVolume(0f);
         playerView.setResizeMode(AspectRatioFrameLayout.RESIZE_MODE_FIT);
         playerView.setPlayer(player);
         player.addListener(new Player.Listener() {
+            @Override public void onRenderedFirstFrame() {
+                if(currentGeneration!=generation)return;
+                if(startupDeadline!=null)main.removeCallbacks(startupDeadline);
+            }
             @Override public void onPlaybackStateChanged(int state) {
                 if (currentGeneration != generation) return;
                 if (state == Player.STATE_READY) {
@@ -193,7 +216,7 @@ public final class HeroPreviewController {
                             "language", channel.language,
                             "category", channel.category
                     ));
-                    scheduleStop();
+                    if(!previewReady){previewReady=true;scheduleStop();}
                 } else if (state == Player.STATE_BUFFERING) {
                     loading.setVisibility(View.VISIBLE);
                 } else if (state == Player.STATE_ENDED) {
@@ -301,6 +324,10 @@ public final class HeroPreviewController {
     }
 
     private void releasePlayer() {
+        if(startupDeadline!=null)main.removeCallbacks(startupDeadline);
+        previewApi.cancelPlayback();
+        if(pendingRequest!=null){pendingRequest.cancel(true);pendingRequest=null;}
+
         if (player == null) return;
         playerView.setPlayer(null);
         player.release();
@@ -309,7 +336,7 @@ public final class HeroPreviewController {
 
     private void updateIdleCopy() {
         if (selected == null) failCopy("Highlight a channel to preview it", TvUi.MUTED);
-        else failCopy("Muted preview  •  OK opens full screen", Color.WHITE);
+        else failCopy(PlaybackComfort.autoPreview(activity)?"Preview on focus • OK opens live":"Preview off • select Preview 12s or Watch live", TvUi.MUTED);
     }
 
     private Map<String, String> jsonMap(JSONObject json) {

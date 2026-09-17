@@ -106,14 +106,7 @@ public final class TvUi {
                     focused ? Color.rgb(225, 255, 249) : Color.argb(42, 255, 255, 255),
                     focused ? 2.3f : 1f,
                     v.getContext()));
-            v.animate()
-                    .scaleX(focused ? 1.02f : 1f)
-                    .scaleY(focused ? 1.02f : 1f)
-                    .translationZ(focused ? dp(v.getContext(), 3) : 0)
-                    .alpha(focused ? 1f : .96f)
-                    .setInterpolator(new AccelerateDecelerateInterpolator())
-                    .setDuration(90)
-                    .start();
+            v.animate().cancel();v.setScaleX(1f);v.setScaleY(1f);v.setTranslationZ(0);v.setAlpha(1f);
         });
     }
 

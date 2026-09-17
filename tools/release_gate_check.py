@@ -5,7 +5,7 @@ from unittest.mock import patch
 spec=importlib.util.spec_from_file_location('release',Path(__file__).with_name('release_control.py'));m=importlib.util.module_from_spec(spec);spec.loader.exec_module(m)
 SRC='a'*40; H='b'*64
 R={'run_id':'GHARTV-CYAN-10-20260916T000000Z-10','review_source':SRC,'signed_apk_sha256':H,'unsigned_apk_sha256':'c'*64}
-BODY={'run_id':R['run_id'],'source':SRC,'sha256':H,'reviewed':{'tv':True,'web':True,'owner':True},'confirmation':'PUBLISH EXACT CODE 23','scope':'ANDROID_UPDATE_AND_DOWNLOAD_FEED_ONLY'}
+BODY={'run_id':R['run_id'],'source':SRC,'sha256':H,'reviewed':{'tv':True,'web':True,'owner':True},'confirmation':'PUBLISH EXACT CODE 24','scope':'ANDROID_UPDATE_AND_DOWNLOAD_FEED_ONLY'}
 BLUE={'versionCode':17,'versionName':'0.5.4-rc8','sourceCommit':'d'*40,'sha256':'e'*64,'apkUrl':'https://github.com/AmritSinghGit/ghartv/releases/download/v0.5.4-rc8/old.apk'}
 class Guards(unittest.TestCase):
  def test_all_approval_fields_required(self):
@@ -25,7 +25,7 @@ class Guards(unittest.TestCase):
    with self.assertRaises(m.Hold):m.publish(SRC,{})
    check.assert_not_called();gh.assert_not_called()
  def run_flow(self,drift=False,newer=False,conflict=False):
-  calls=[];feed=dict(BLUE);feed['versionCode']=24 if newer else 17;blob='f'*40;reads=0;uploaded=False
+  calls=[];feed=dict(BLUE);feed['versionCode']=25 if newer else 17;blob='f'*40;reads=0;uploaded=False
   def github(path,method='GET',body=None):
    nonlocal feed,blob,reads,uploaded
    calls.append((method,path,body))
@@ -52,7 +52,7 @@ class Guards(unittest.TestCase):
      self.assertFalse(any(x[0]=='PUT' for x in calls))
     else:
      with patch.object(m,'snapshot',return_value={'ok':True}):result=m.publish(SRC,BODY)
-     self.assertEqual(result['publication']['state'],'PUBLIC_UPDATE_VERIFIED');self.assertEqual(feed['sha256'],H);self.assertEqual(feed['sourceCommit'],SRC);self.assertEqual(feed['versionCode'],23)
+     self.assertEqual(result['publication']['state'],'PUBLIC_UPDATE_VERIFIED');self.assertEqual(feed['sha256'],H);self.assertEqual(feed['sourceCommit'],SRC);self.assertEqual(feed['versionCode'],24)
  def test_exact_publish_and_readback(self):self.run_flow()
  def test_advanced_public_preserved(self):self.run_flow(newer=True)
  def test_racing_feed_preserved(self):self.run_flow(drift=True)

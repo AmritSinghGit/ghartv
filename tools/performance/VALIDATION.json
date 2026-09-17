@@ -1,0 +1,17 @@
+{
+  "schema": "ghartv.smooth-performance-validation.v1",
+  "workflow_run": "35260333672",
+  "version": "0.6.0-rc8-smooth-performance",
+  "version_code": 24,
+  "actual_android_release_compile": "PASS",
+  "typed_signature_positive_and_negative": "PASS_DISPOSABLE_FIXTURES",
+  "browser": "PASS_CONTROLLED_HTTP_CHROMIUM_NOT_LIVE_PROVIDER",
+  "publication_guards": "PASS_SIMULATED_GITHUB_NOT_REAL_ROLLOUT",
+  "mac_pressure_capture": "PARSER_PRIVATE_SAVE_AND_NONMAC_REJECTION_TESTED_NOT_OWNER_MAC",
+  "owner_mac_execution": false,
+  "actual_playback_verified": false,
+  "measured_speedup": null,
+  "public_release_changed": false,
+  "native_flixmomo_playback": "NOT_IMPLEMENTED",
+  "ai_super_resolution": "NOT_IMPLEMENTED"
+}
