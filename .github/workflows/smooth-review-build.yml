@@ -50,8 +50,13 @@ jobs:
           s=p.read_text();needle='  if(await releaseRoute(req,res,url,authorized))return true;';assert s.count(needle)==1
           s="import {performanceRoute} from './performance-desk.mjs';\n"+s.replace(needle,'  if(await performanceRoute(req,res,url,authorized))return true;\n'+needle)
           assert "import {providerRoute}" in s;p.write_text(s);names.append(str(p))
+          p=Path('android-tv/app/src/main/java/in/ghartv/nova/PlaybackComfort.java');s=p.read_text()
+          old='private final Runnable check=()->{';assert s.count(old)==1
+          s=s.replace(old,'private final Runnable check=this::prompt;\n    private void prompt(){')
+          old='h.postDelayed(expire,30000L);\n    };';assert s.count(old)==1
+          p.write_text(s.replace(old,'h.postDelayed(expire,30000L);\n    }'))
           Path('/tmp/smooth-targets.json').write_text(json.dumps(names))
-          print('EXACT_PERFORMANCE_SOURCE=34_FILES; PROVIDER_SOURCE_PRESERVED; NO_PUBLIC_FEED_CHANGE')
+          print('EXACT_PERFORMANCE_SOURCE=34_FILES; PROVIDER_SOURCE_PRESERVED; CALLBACK_INITIALIZATION_FIXED; NO_PUBLIC_FEED_CHANGE')
           PY
       - name: Focused source, observation, receipt and exact-publication checks
         run: |
