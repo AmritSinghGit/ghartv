@@ -1,0 +1,15 @@
+{
+  "schema": "ghartv.signed-recovery-reserve.v1",
+  "source": "1a7e56e61b2fb9af6e54b2c9c0b1fb5c62886c69",
+  "application_base": "de3106e3e97a9147b06347a3d66c4e5923cdbbcc",
+  "version_code": 25,
+  "version_name": "0.5.4-recovery25",
+  "sha256": "8637091a8921675974a8e9a55035750cbaa96ca61907f8d36871be4f61e94fd3",
+  "apkUrl": "https://github.com/AmritSinghGit/ghartv/releases/download/v0.5.4-recovery25/GharTV-recovery25.apk",
+  "artifactTag": "v0.5.4-recovery25",
+  "certificate_sha256": "40a9d8bf6b1c557b3d6fd02acef075368dd13e28691f207a297202d0d5ec233c",
+  "signed_payload_verified": true,
+  "public_feed_advertised": false,
+  "data_compatibility_test": "NOT_VERIFIED",
+  "next_version_code_minimum": 26
+}
