@@ -1,0 +1,24 @@
+{
+  "schema": "ghartv.smooth-performance-validation.v1",
+  "source": "59c130abc1283e66607315db916973553164064d",
+  "workflow_run": 35260333672,
+  "job": 105334160704,
+  "result": "SUCCESS",
+  "actual_android_compile": "PASS_CODE24",
+  "typed_signature_cases": "PASS_DISPOSABLE_FIXTURES",
+  "browser": "PASS_REAL_HTTP_CHROMIUM_WITH_CONTROLLED_PROVIDER_AND_COLLECTOR_DATA",
+  "browser_coverage": [
+    "96_card_paging",
+    "Punjabi_category_search_scope",
+    "keyboard_next_previous_fullscreen",
+    "manual_reports_partial_failure",
+    "local_performance_button_and_lock",
+    "comfort_save_warning_rest_guide_disabled",
+    "explicit_publication_confirmation_cancel"
+  ],
+  "host_measurements": "NOT_RUN_ON_OWNER_MAC",
+  "live_provider_playback": false,
+  "measured_speedup": null,
+  "public_feed_write": false,
+  "private_data_published": false
+}
