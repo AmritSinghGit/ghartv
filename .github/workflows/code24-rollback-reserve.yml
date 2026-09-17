@@ -1,0 +1,82 @@
+name: GharTV code24 rollback reserve
+on:
+  push:
+    paths: ['.github/workflows/code24-rollback-reserve.yml']
+permissions:
+  contents: write
+jobs:
+  reserve:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    env:
+      GH_TOKEN: ${{ github.token }}
+      PYTHONDONTWRITEBYTECODE: '1'
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: de3106e3e97a9147b06347a3d66c4e5923cdbbcc
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: android-actions/setup-android@v3
+        with:
+          packages: platform-tools
+          log-accepted-android-sdk-licenses: false
+      - name: Change only version identifiers in prior production source
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          from pathlib import Path
+          import subprocess
+          p=Path('android-tv/app/build.gradle.kts')
+          assert subprocess.check_output(['git','hash-object',str(p)],text=True).strip()=='5957ffb3bc5520172b180cc62f2ce1413eb95a8c'
+          s=p.read_text();assert s.count('versionCode = 17')==1;assert s.count('versionName = "0.5.4-rc8-pre-birthday-recovery"')==1
+          p.write_text(s.replace('versionCode = 17','versionCode = 25').replace('versionName = "0.5.4-rc8-pre-birthday-recovery"','versionName = "0.5.4-recovery25"'))
+          changed=subprocess.check_output(['git','diff','--name-only'],text=True).splitlines();assert changed==['android-tv/app/build.gradle.kts']
+          PY
+          git diff --check
+      - name: Build rollback payload in cloud, not on owner Mac
+        run: |
+          set -euo pipefail
+          sdkmanager 'platforms;android-36' 'build-tools;36.0.0'
+          cd android-tv
+          bash gradlew --no-daemon --max-workers=2 :app:assembleRelease
+          "$ANDROID_HOME/build-tools/36.0.0/aapt" dump badging app/build/outputs/apk/release/app-release-unsigned.apk > /tmp/recovery25-badging.txt
+          python - <<'PY'
+          from pathlib import Path
+          s=Path('/tmp/recovery25-badging.txt').read_text().splitlines()[0]
+          assert "name='in.ghartv.nova'" in s and "versionCode='25'" in s and "versionName='0.5.4-recovery25'" in s
+          print(s)
+          PY
+      - name: Preserve recovery lineage in a tag only, no development branch replacement
+        run: |
+          set -euo pipefail
+          test -z "$(git ls-remote --tags origin refs/tags/v0.5.4-recovery25)"
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add android-tv/app/build.gradle.kts
+          git commit -m 'recovery: prior public code17 behavior with version25 for code24 rollback'
+          git tag v0.5.4-recovery25
+          git push origin refs/tags/v0.5.4-recovery25
+          echo "RECOVERY_SOURCE_SHA=$(git rev-parse HEAD)"
+      - name: Publish unsigned reserve only; never advertise recovery automatically
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/ghartv-recovery25
+          cp android-tv/app/build/outputs/apk/release/app-release-unsigned.apk /tmp/ghartv-recovery25/GharTV-recovery25-unsigned.apk
+          python - <<'PY'
+          import hashlib,json,subprocess,os
+          from pathlib import Path
+          p=Path('/tmp/ghartv-recovery25/GharTV-recovery25-unsigned.apk')
+          r={'schema':'ghartv.rollback-reserve.v1','source':subprocess.check_output(['git','rev-parse','HEAD'],text=True).strip(),'application_base':'de3106e3e97a9147b06347a3d66c4e5923cdbbcc','base_version_code':17,'version_code':25,'version_name':'0.5.4-recovery25','package':'in.ghartv.nova','unsigned_apk_sha256':hashlib.sha256(p.read_bytes()).hexdigest(),'unsigned_asset':p.name,'tag':'v0.5.4-recovery25','diff_scope':'versionCode and versionName only in android-tv/app/build.gradle.kts','cloud_compile':'SUCCESS','workflow_run':os.environ['GITHUB_RUN_ID'],'owner_key_used':False,'signed_asset':'NOT_PREPARED','public_feed_changed':False,'installed_device_data_compatibility':'NOT_VERIFIED','activation':'MANUAL_EMERGENCY_COMMAND_ONLY_AFTER_ERROR_REPORT','next_development_version_code_minimum':26}
+          Path('/tmp/ghartv-recovery25/ROLLBACK_RESERVE.json').write_text(json.dumps(r,indent=2)+'\n')
+          Path('/tmp/ghartv-recovery25/README.md').write_text('# Emergency recovery reserve\n\nPrior production code17/source de3106e3e97a9147b06347a3d66c4e5923cdbbcc, with only versionCode25 and versionName changed. Android refuses ordinary downgrades; code25 permits an in-place recovery offer to devices on24. This unsigned APK is not installable. The original owner key must sign it locally. Not advertised in update/latest.json. No live device or persisted-data recovery has been tested. Future app releases must use code26 or greater after recovery25 reservation. No authentication/DRM/account or data resets.\n')
+          print(json.dumps(r))
+          PY
+          gh release create v0.5.4-recovery25 /tmp/ghartv-recovery25/GharTV-recovery25-unsigned.apk /tmp/ghartv-recovery25/ROLLBACK_RESERVE.json --repo AmritSinghGit/ghartv --verify-tag --prerelease --latest=false --title 'Emergency recovery25 reserve — previous production behavior, NOT ADVERTISED' --notes-file /tmp/ghartv-recovery25/README.md
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ghartv-recovery25-reserve
+          path: /tmp/ghartv-recovery25/
+          retention-days: 7
