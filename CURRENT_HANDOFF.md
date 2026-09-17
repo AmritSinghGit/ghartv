@@ -1,36 +1,35 @@
-# Current owner decision: RC7 PLAYBACK BLOCKED
+# GharTV current continuation — 17 September 2026
 
-See RC7_REVIEW_FAILURE.md. Successful installation is not successful playback. New web source repairs are not installed on the owner Mac. Public promotion remains on hold.
+## Canonical identity and actual owner outcome
 
-# GharTV RC7 — one GREEN review / exact approved promotion
+Same independent project/lane `ghartv`, repository AmritSinghGit/ghartv, existing branch `codex/ghartv-remove-auto-preview` / PR1, package `in.ghartv.nova`. One existing AVD `GharTV_Nova_Manual_google_tv_API36` at emulator-5580 and one web/owner runtime on8790. Development checkout is read-only. BLUE is the household update feed; GREEN is the local review, not another controller or duplicate runtime.
 
-Same independent lane ghartv, repository AmritSinghGit/ghartv, implementation branch codex/ghartv-remove-auto-preview / PR1, package in.ghartv.nova. Public release remains RC8/code17. This is0.6.0-rc7-network-diagnostics/code23, built on RC6 plus the hash-verified Punjabi web repair, not a new checkout or public deployment.
+Latest actual owner run **GHARTV-CYAN-11-RECOVERY-20260916T175228Z-31437**, retrieved from the existing managed PR receipt and the owner's pasted handoff. APK remains **0.6.0-rc7-network-diagnostics/code23**, application source **211c2624f5a553b041c1fc8d2194625f8d6b435a**, signed SHA256 **6962628dc8a6c670a7341cbbdd3c94a06a5a580e3f4ca71681420e09e80dc9dc**. APK bytes unchanged and verified; foreground UNCONFIRMED. Network result **INSUFFICIENT_DNS_EVIDENCE_NO_RESTART**, not a healthy-network result. Web transport source **21d274237a8756644fa160bca115964498502f45** applied and health/file hashes verified. Recovery1 source **8b555bbb65a2346616d348f4d082f7d3fc48aeac** did execute; previous documentation saying otherwise is superseded.
 
-## Received evidence
-The September16 network/Fabric owner run left APK RC6/code22 unchanged: source publication did not start because the two source-read workflow commits advanced the expected branch head. The canonical branch is reconciled before this new cloud build. The working web overlay is integrated in source. Screenshot evidence establishes that an explicit manual summary request returned data, not that the app error reached the collector. Detailed private collector records were not directly accessible in this environment; no model claim of having read those records is made.
+Cleanup actually removed **8 items / 86460224 bytes** in that owner run, after evidence preservation. Collector authenticated support read succeeded. Obsidian write/readback and GitHub safe receipt readback succeeded; bridge sync still timed out. No physical-TV verification or public-feed change. Owner reports intermittent channels and cannot reopen the emulator from owner console. **REJECTED_PLAYBACK_BLOCKED** remains the decision. Installation/health are not playback acceptance.
 
-## Repair
-- Compiled APK, not a pending source patch. Existing key/typed-signature/payload gates retained.
-- Explicit app connection check separates system validation, per-service DNS, HTTPS and clock offset. No provider session/stream/auth requests. Network failures offer Connection check, Retry, Guide instead of suggesting another channel will fix a service-wide DNS failure. Reference visibility explicitly explains opt-out/queued versus accepted states.
-- Owner launcher measures app network before repair. Only if at least2 domains fail DNS inside the named emulator while the Mac resolves them, it may cold-boot that SAME AVD with already-configured, directly verified Mac DNS servers. No host DNS change, public-DNS substitution, TLS bypass, data clear or physical-TV action. Rechecks network and foreground. HTTPS reachability is NOT proof of playback/account entitlement.
-- Telemetry sends pending errors first, removes only exact acknowledged records, retains incomplete/unacknowledged batches and drains bounded backlog. Automatic errors no longer replace an in-progress worker. Consent still gates upload; a displayed error reference is not proof of upload.
-- Manual Refresh reports loads summary and a latest1000-event sample independently. Failed parts are identified; no automatic polling. Explicit full sample remains capped at5000. HTTP0 displays as Not reported; failure channel/fingerprint and event references are visible. Empty, stale, error, partial and not-requested states remain distinct. Version-separated support groups prevent attributing every old error to the current candidate.
-- Local diagnostic search checks latest5000 received events in30 days. An absent match is not proof of absence, especially with offline queues/opt-out/retention/export limits. No matching backend deploy is required.
-- Support capture explicitly reads existing collector summary/export through saved credentials on the Mac. Raw records stay private; a projected support report excludes identities, arbitrary strings/attributes, tokens, paths, channel viewing history. The launcher performs one requested diagnostic capture; it is not a new polling service or public receipt upload.
-- Punjabi/category/search intersection and keyboard/fullscreen rules retained. Family names/date controls and first-Next focus retained. No AI-upscaling claim.
+## Definitive Open TV defect and published correction
 
-## Limits and publication
-Owner-signed APK/actual emulator recovery, live collector capture and stream playback await owner execution. Cloud tests use synthetic reports/disposable signing keys. The package does not create a public tunnel, modify Local Fabric, deploy to cousin or change production update/latest.json. Prior internet test was revoked; Fabric version0.8.6 inventory integration remains a separate unresolved issue. Do not call code23 production or call a successful DNS check channel playback.
+The old release_control `open-tv` invoked a function requiring an already-ready/foregrounded review and only discovered already-running emulators. The owner HTML disabled the button for ACTION_REQUIRED. This circular readiness gate explains why troubleshooting was blocked. It is a code-proven defect, not speculation about signing, provider access or DNS.
 
-## Continuity
-Obsidian is written/read back in the existing note. Existing allowlisted GitHub technical receipt retains code/source/signed digest; no raw diagnostic data is mirrored. The private SUPPORT_SIGNALS.json/NETWORK_CHECK.json can be explicitly shared with the chat by the owner. No extra controller/tenant/runtime.
+New source **8490590ad8bd5185fc4b5c866b307f769cfa9f23**, release **v0.6.0-rc7-open1**, **GHARTV_TV_OPEN.zip** (56565 bytes), SHA256 **c35e67fac590c1d155f154b83df966829f5add0564adbd8b044ac0f6e0a553a6**. Full downloaded artifact and11 internal file checksums verified. No APK rebuild/version bump. This patches existing opening controls only and retains publication hold.
 
-## Owner release workflow, September16
+Open independently checks saved source and installed APK identity. Reuses the exact existing AVD when running; if absent, starts only the already-configured named AVD after process/port checks, waits for boot, opens the app and verifies resumed activity. No key, Java-signing, web-health or provider-network requirement merely to open. Offline/ambiguous instances are preserved, not duplicated or force-killed. Mac-window activation is reported independently from Android foreground.
 
-User explicitly reported no new execution of the source patch. Do not infer an installed RC7. BLUE is the currently advertised household update; GREEN is one local three-surface review on the same AVD/port8790; development is source only. No second Mac environment. The complete compiled review bundle replaces manual APK import and source patching.
+Installer creates persistent Desktop `GharTV TV.command`, a `GharTV TV.app` shortcut when absent, and managed open/log commands. It patches/restarts only the known web runtime with backup and hash/process ownership checks. No cleanup or local source changes. The command opens the existing TV and collects scoped private logs, even attempting collection after an opening failure.
 
-New owner release desk verifies the exact signed local APK, installed emulator bytes, original X.509 certificate and web identity before an approval can publish. Review & feedback contains three explicit reviewed confirmations and a final confirmation displaying the exact hash. Only that reviewed APK is uploaded; no rebuild. The public update file is changed with a current-file-SHA precondition; conflicting newer feeds/assets stop. User has NOT yet approved code23, so no production write or public notification is claimed. No private data, keys or logs accompany publication.
+## Evidence boundaries
 
-This action covers Android distribution and download/update feed only. Browser streaming-server deployment and cousin hosting are separately held; no main-source merge is assumed from binary promotion. Old household apps prompt on their next successful check and Android requires installation confirmation. No forced update, live push guarantee or automatic downgrade.
+Previous uploads contain run10 support/probe data, not run11 independent network results. This conversation does not have a direct Mac filesystem/SSH connection. Library search did not retrieve fresh run11 logs. Do not claim they were remotely read.
 
-The release desk is inside existing owner.html, using its existing nonce and Origin protection. It is not a new service/controller. Launch and publication share the existing local run lock; the launcher releases it before clipboard prompts so owner controls remain usable after preparation.
+Local capture gathers current GharTV-PID logcat only, bounded existing web log, fixed-service host/emulator DNS observations, three network-setting values and previous network/cleanup results. No settings changed or provider credential requests. Private log ZIP remains local and must be explicitly shared in chat for detailed analysis; it is never put on public GitHub. The installer may post only an aggregate technical execution notice. It is not an automatic private log transport and does not replace the installed APK's receipt.
+
+Actual focused validation **35187334040/job105092110834 SUCCESS**: rejected-state opening, duplicate/offline preservation, actual foreground requirement, dispatch independent of release identity, DNS-vs-ICMP semantics, owner button while rejected/locked, retained release hold and controlled localhost transport tests. No actual Mac/QEMU execution or live provider playback in these tests. New opener execution still pending the owner run.
+
+## Preserved product and publication rules
+
+Keep selected-category/channel order, first Next focus, Simrat/family management, Punjabi-language/category/search intersection, keyboard/fullscreen and manual-only owner reports. Keep original keys, saved provider sessions, AVD/app data, current binary and historical run evidence. Do not create new source worktrees, emulators, services, tenants or signing identities. No reset/stash/clean/prune/force push or broad Downloads cleanup. Do not restart or change DNS on a physical TV.
+
+Public feed freshly read remains **RC8/code17/source de3106e3e97a9147b06347a3d66c4e5923cdbbcc**. No release promotion, forced/silent update, cousin deployment, Local Fabric tunnel or PR merge authorized by this troubleshooting. Owner publish remains held until a later genuinely accepted candidate. No AI super-resolution or universal entitlement claim.
+
+Next: run the small download-and-run opener once, then use the persistent GharTV TV shortcut. Analyze newly captured logs after receipt or private upload; don't ask for the previously supplied screenshots/handoff again. Maintain existing Operon owner39 and analytics61/tenant ghartv, no parallel implementation.
