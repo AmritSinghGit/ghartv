@@ -1,0 +1,33 @@
+{
+  "schema": "ghartv.owner-release-authorization.v1",
+  "decision": "APPROVED_WITH_LOCAL_REVIEW_WAIVED",
+  "owner_instruction_date_ist": "2026-09-18",
+  "scope": "EXACT_ANDROID_CODE24_APK_AND_PUBLIC_UPDATE_FEED",
+  "repository": "AmritSinghGit/ghartv",
+  "lane": "ghartv",
+  "source": "59c130abc1283e66607315db916973553164064d",
+  "version_code": 24,
+  "version_name": "0.6.0-rc8-smooth-performance",
+  "release_tag": "v0.6.0-rc8",
+  "owner_run": "GHARTV-CYAN-13-20260917T190419Z-85890",
+  "signed_apk_sha256": "b4f682c7b118c580b7f66e50555f23b58d4549ae194dfe55db57a836cc4b5467",
+  "unsigned_apk_sha256": "a7734ef445ff64d568ea94082228ce908e20446231b06f22f884621b88904092",
+  "signing_certificate_sha256": "40a9d8bf6b1c557b3d6fd02acef075368dd13e28691f207a297202d0d5ec233c",
+  "review_completed": false,
+  "physical_tv_test": "NOT_VERIFIED",
+  "reason": "Owner explicitly requested production publication despite inability to review locally and requested rollback readiness.",
+  "supersedes": "The three-surface review checkbox requirement for this exact code24 publication only; does not fabricate completed review.",
+  "must_preserve": ["original signing identity", "exact installed code24 binary without rebuild", "current public17 artifact and manifest", "data and saved logins", "no force push or source checkout changes"],
+  "rollback_strategy": {
+    "stop_new_updates": "Restore previous public manifest conditionally; this does not downgrade televisions already on24.",
+    "already_updated_devices": "Offer original public17 application behavior rebuilt only with version identifiers25 under original signing identity.",
+    "recovery_reserve_version_code": 25,
+    "next_normal_version_code_minimum": 26,
+    "automatic_activation": false,
+    "data_compatibility_test": "NOT_VERIFIED",
+    "requires_report_before_activation": true
+  },
+  "publication_status_at_authorization": "WAITING_FOR_EXISTING_LOCAL_SIGNED_APK_UPLOAD",
+  "no_claim_of_instant_notification_or_silent_install": true,
+  "no_cloud_web_or_cousin_deployment_in_scope": true
+}
