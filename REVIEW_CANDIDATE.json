@@ -9,8 +9,8 @@
   "companion_sha256": "5bf6a81097eb74d7b960e3fff67d1399369a29ea5e7fa175e37f9568f26e5a25",
   "production_unchanged": true,
   "owner_signed_apk_sha256": "6962628dc8a6c670a7341cbbdd3c94a06a5a580e3f4ca71681420e09e80dc9dc",
-  "owner_mac_run": "GHARTV-CYAN-10-20260916T163409Z-20455",
-  "owner_execution_result": "INSTALLED_BYTES_VERIFIED_FOREGROUND_BUT_PLAYBACK_FAILED",
+  "owner_mac_run": "GHARTV-CYAN-11-RECOVERY-20260916T175228Z-31437",
+  "owner_execution_result": "APK_UNCHANGED_BYTES_VERIFIED_FOREGROUND_UNCONFIRMED_NETWORK_UNRESOLVED",
   "ai_super_resolution": "NOT_IMPLEMENTED",
   "application_source_sha": "211c2624f5a553b041c1fc8d2194625f8d6b435a",
   "release_tag": "v0.6.0-rc7",
@@ -25,13 +25,23 @@
     "source": "8b555bbb65a2346616d348f4d082f7d3fc48aeac",
     "file": "GHARTV_RC7_RECOVERY.zip",
     "sha256": "9eefef4a876a8e8702375039aac9cf3b85240c13a8d8e2f972295ac71b348e19",
-    "workflow_run": 35128535378,
-    "workflow_result": "SUCCESS",
+    "owner_execution": "RUN11_WEB_REPAIRED_NETWORK_INCONCLUSIVE_NO_RESTART",
     "apk_replaced": false,
     "web_source": "21d274237a8756644fa160bca115964498502f45",
+    "cleanup_count": 8,
+    "cleanup_bytes": 86460224,
+    "private_support_data_published": false
+  },
+  "opener": {
+    "release": "v0.6.0-rc7-open1",
+    "source": "8490590ad8bd5185fc4b5c866b307f769cfa9f23",
+    "file": "GHARTV_TV_OPEN.zip",
+    "sha256": "c35e67fac590c1d155f154b83df966829f5add0564adbd8b044ac0f6e0a553a6",
+    "workflow_run": 35187334040,
+    "workflow_result": "FOCUSED_CHECKS_SUCCESS",
     "owner_execution": "NOT_PERFORMED",
-    "cleanup": "HASH_VERIFIED_OLD_KITS_AND_REDUNDANT_EVIDENCE_ONLY_AFTER_ARCHIVE",
-    "private_support_data_published": false,
-    "next_action": "Run the small recovery tool, not the old APK installer; verify actual playback before release approval."
+    "apk_replaced": false,
+    "cleanup": "NONE",
+    "next_action": "Install persistent opener once; open exact existing TV independently of rejected readiness and capture fresh private local logs. Not a new APK or playback acceptance."
   }
 }
