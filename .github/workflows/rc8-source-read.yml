@@ -1,0 +1,18 @@
+name: GharTV RC8 exact source
+on:
+  push:
+    paths: ['.github/workflows/rc8-source-read.yml']
+permissions:
+  contents: read
+jobs:
+  source:
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - uses: actions/checkout@v5
+      - run: git archive --format=zip HEAD -o /tmp/ghartv-rc8-source.zip
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ghartv-rc8-source
+          path: /tmp/ghartv-rc8-source.zip
+          retention-days: 2
