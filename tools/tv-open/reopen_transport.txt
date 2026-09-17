@@ -1,0 +1,127 @@
+def _listen_owners(port):
+    """Inspect listeners, not outbound sockets or TCP TIME_WAIT records."""
+    import shutil
+    executable = '/usr/sbin/lsof' if Path('/usr/sbin/lsof').is_file() else shutil.which('lsof')
+    if not executable: raise Hold('LSOF_NOT_AVAILABLE_PORT_OWNER_UNCHECKED')
+    p = call([executable, '-nP', '-a', '-iTCP:'+str(port), '-sTCP:LISTEN', '-Fpcu'], 4)
+    if p.returncode not in (0, 1) or (p.returncode == 1 and p.stderr.strip()):
+        raise Hold('PORT_OWNER_CHECK_FAILED_NO_PROCESS_STOPPED')
+    rows=[]; row=None
+    for line in p.stdout.splitlines():
+        if line.startswith('p') and line[1:].isdigit():
+            if row: rows.append(row)
+            row={'pid':int(line[1:]), 'port':port}
+        elif row is not None and line.startswith('u') and line[1:].isdigit():row['uid']=int(line[1:])
+        elif row is not None and line.startswith('c'):
+            row['executable']=re.sub(r'[^A-Za-z0-9_.-]', '_', line[1:])[:64]
+    if row: rows.append(row)
+    if p.returncode == 0 and not rows:raise Hold('PORT_OWNER_RESPONSE_UNRECOGNIZED')
+    return rows
+
+def _reusable_pair():
+    """SO_REUSEADDR tolerates retired TCP sockets. Never enable SO_REUSEPORT."""
+    import errno
+    checks=[]
+    for port in (5580,5581):
+        for family,address in ((socket.AF_INET,'127.0.0.1'),(socket.AF_INET6,'::1')):
+            if family==socket.AF_INET6 and not socket.has_ipv6:continue
+            try:
+                with socket.socket(family,socket.SOCK_STREAM) as probe:
+                    probe.setsockopt(socket.SOL_SOCKET,socket.SO_REUSEADDR,1)
+                    if family==socket.AF_INET6:probe.setsockopt(socket.IPPROTO_IPV6,socket.IPV6_V6ONLY,1)
+                    probe.bind((address,port))
+                checks.append({'port':port,'family':4 if family==socket.AF_INET else 6,'state':'REUSABLE'})
+            except OSError as e:
+                if family==socket.AF_INET6 and e.errno in (errno.EAFNOSUPPORT,errno.EADDRNOTAVAIL,errno.ENOPROTOOPT):continue
+                checks.append({'port':port,'family':4 if family==socket.AF_INET else 6,
+                               'state':'IN_USE' if e.errno==errno.EADDRINUSE else 'BIND_FAILED','errno':e.errno})
+    return checks
+
+def _port_conflict(owners,procs):
+    own={pid for pid,command in procs}
+    for row in owners:
+        if row['pid'] not in own or row.get('uid') != os.getuid():
+            return ('PORT_'+str(row['port'])+'_LISTENER_'+row.get('executable','UNKNOWN')+
+                    '_PID_'+str(row['pid'])+'_PRESERVED')
+    return None
+
+def attach_or_start(root,run):
+    """Reconcile close/reopen races before starting this one configured AVD."""
+    adb=root/'platform-tools/adb'; child=None; started=False
+    observation={'revision':REVISION,'ports':[5580,5581], 'processes_killed':0,
+                 'adb_server_restarted':False,'alternate_port_used':False,
+                 'reusable_address_probe':True,'observations':[]}
+    def record(stage,**values):
+        observation['stage']=stage
+        observation['observations']=(observation['observations']+[{'stage':stage,**values}])[-8:]
+        write(run/'PORT_CHECK.json',observation)
+    # Do not immediately mistake a closing/booting transport for a second device.
+    settle_until=time.monotonic()+30
+    while True:
+        if time.monotonic()>=settle_until:
+            record('WAIT_EXPIRED_NO_DUPLICATE')
+            raise Hold('EMULATOR_STILL_CLOSING_OR_UNRESPONSIVE_NO_DUPLICATE_STARTED')
+        p=call([adb,'devices'],5)
+        if p.returncode:raise Hold('ADB_UNAVAILABLE')
+        connected=devices(p.stdout)
+        for serial,status in connected.items():
+            if status=='device' and serial!=SERIAL:
+                names=call([adb,'-s',serial,'emu','avd','name'],4).stdout.splitlines()
+                if names and names[0].strip()==AVD:
+                    record('SAME_AVD_ON_OTHER_PORT_PRESERVED')
+                    raise Hold('NAMED_AVD_RUNNING_ON_OTHER_PORT_PRESERVED')
+        if connected.get(SERIAL)=='device':
+            try:
+                verify_target(adb)
+                record('REUSE_EXISTING_TRANSPORT')
+                break
+            except (Hold,subprocess.TimeoutExpired):
+                # During shutdown a formerly online transport can disappear.
+                # A different, responsive AVD is never reused or stopped.
+                name=call([adb,'-s',SERIAL,'emu','avd','name'],4)
+                first=name.stdout.splitlines()
+                if name.returncode==0 and first and first[0].strip() not in ('',AVD):
+                    record('DIFFERENT_AVD_PRESERVED');raise Hold('CANONICAL_PORT_HAS_DIFFERENT_AVD_PRESERVED')
+        procs=avd_processes()
+        owners=_listen_owners(5580)+_listen_owners(5581)
+        conflict=_port_conflict(owners,procs)
+        if conflict:
+            record('OTHER_LISTENER_PRESERVED',listeners=owners)
+            raise Hold(conflict)
+        checks=_reusable_pair() if not owners and not procs and SERIAL not in connected else []
+        clear=bool(checks) and all(x['state']=='REUSABLE' for x in checks)
+        if clear:
+            record('PORTS_REUSABLE_NO_EXISTING_INSTANCE',bindings=checks)
+            listed=call([root/'emulator/emulator','-list-avds'],10)
+            if listed.returncode or AVD not in listed.stdout.splitlines():
+                raise Hold('EXISTING_NAMED_AVD_NOT_FOUND')
+            # Final read immediately before spawn. The emulator's own bind/AVD
+            # locks remain authoritative if another launcher races us.
+            if avd_processes() or _listen_owners(5580) or _listen_owners(5581):
+                record('STATE_CHANGED_RECHECK');continue
+            if SERIAL in devices(call([adb,'devices'],5).stdout):
+                record('TRANSPORT_APPEARED_RECHECK');continue
+            log=safe(run/'emulator-start.private.log')
+            with log.open('xb') as out:
+                os.chmod(log,0o600)
+                child=subprocess.Popen([str(root/'emulator/emulator'),'-avd',AVD,'-port','5580',
+                    '-no-snapshot-load','-no-snapshot-save'],stdin=subprocess.DEVNULL,
+                    stdout=out,stderr=out,cwd=root/'emulator',start_new_session=True)
+            started=True;record('STARTED_EXISTING_AVD');break
+        record('WAITING_FOR_EXISTING_TRANSPORT_OR_SHUTDOWN',transport=connected.get(SERIAL,'ABSENT'),
+               matching_processes=len(procs),listeners=owners,bindings=checks)
+        if time.monotonic()>=settle_until:
+            raise Hold('EMULATOR_STILL_CLOSING_OR_UNRESPONSIVE_NO_DUPLICATE_STARTED')
+        time.sleep(1)
+    deadline=time.monotonic()+150
+    while time.monotonic()<deadline:
+        if child and child.poll() is not None:
+            record('EMULATOR_PROCESS_EXITED');raise Hold('EMULATOR_PROCESS_EXITED_SEE_PRIVATE_LOG')
+        try:
+            if call([adb,'-s',SERIAL,'shell','getprop','sys.boot_completed'],4).stdout.strip()=='1':
+                verify_target(adb);record('EXISTING_AVD_BOOT_VERIFIED');return adb,started
+        except subprocess.TimeoutExpired:pass
+        time.sleep(2)
+    record('BOOT_TIMEOUT_PROCESS_PRESERVED')
+    raise Hold('EMULATOR_BOOT_TIMEOUT_PROCESS_PRESERVED')
+
