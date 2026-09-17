@@ -1,0 +1,29 @@
+# Exact code24 production publication — owner waived local review
+
+Owner instruction received 18 September 2026 IST: publish the current RC8/code24 despite inability to review locally, and prepare to recover if users report errors. The decision is APPROVED_WITH_LOCAL_REVIEW_WAIVED, not a completed TV/web/owner review. Authorization: update/release-code24-authorization.json. App source59c130abc1283e66607315db916973553164064d; signed APK b4f682c7b118c580b7f66e50555f23b58d4549ae194dfe55db57a836cc4b5467; installed evidence run13. No future candidate or unrelated deployment is approved by this waiver.
+
+## Publication is not yet executed
+
+At preparation, the signed code24 APK is only in the owner Mac's managed current directory; GitHub release v0.6.0-rc8 contains the unsigned build and companion. The conversation cannot access that Mac file remotely. Public update/latest.json still advertises code17. Therefore one local upload/sign/publish action is necessary. No new emulator run, app rebuild, source push or review is required.
+
+Pinned command: tools/release24/GHARTV_PUBLISH_CODE24.command at commit e272077b55e29c700c2523a31ec63723d0ad93b0. SHA256 f5e4462938adf4464df4b8a2eeb38ce4f380a594effe3a959e58c11849d08b15; Git blob587087a4b11dd9458e161c0dfb029bdde738c771. Remote blob matches the locally tested wrapper. The self-contained command embeds three bounded source files; payloadSHA25645590c3ee97f29717b1be1b31c881e511f30ee2c5eb48d19d06319e7ab5cccfe. No passwords or keys are embedded.
+
+Run the command with `publish` (default). It verifies the exact existing signed APK and owner authorization, preserves the old public manifest/APK, prepares and verifies the recovery25 signature using only existing private signing configuration, uploads recovery25 as an unadvertised reserve, records update/rollback-code24.json with readback, uploads exact code24 without rebuilding, downloads/verifies the bytes, then conditionally updates update/latest.json using its existing blobSHA. Conflicts or newer releases are preserved. The latest release alias is updated only after the authoritative feed is verified. The review source checkout and local web runtime are untouched. No QEMU/adb, Gradle, key creation, app installation, DNS changes or unrelated process stopping occurs. Java verification/signing processes use a256MB heap limit. Owner secrets remain in local config/process environment, not command-line passwords or public logs.
+
+Success is `result=PUBLIC_UPDATE_VERIFIED`, `public_version_code=24`, `rollback=SIGNED_UPLOADED_AND_READBACK_VERIFIED`. A failed request is read back before assuming it did not write. Starting or downloading this command is not proof of publication. Local release-control/publication.json, Obsidian managed production section and a safe GitHub status/comment report separate outcomes. Optional continuity failures do not erase a verified feed. Existing installation receipt is not rewritten to pretend playback was reviewed.
+
+## Recovery prepared before rollout
+
+Exact original public manifest preserved in update/previous-public-before-code24.json. Original public17 APK/source remain unchanged.
+
+Android ordinary installs reject lower version codes. Restoring the old17 feed pauses new24 offers but cannot downgrade TVs already on24. To provide an in-place recovery path, cloud workflow35266401192/job105354563272 SUCCESS compiled original production source de3106e3e97a9147b06347a3d66c4e5923cdbbcc with only the versionCode/name changed to25 / 0.5.4-recovery25. Recovery source1a7e56e61b2fb9af6e54b2c9c0b1fb5c62886c69, tagv0.5.4-recovery25, unsignedSHA25605169e77f8d036a42696a34cc7758523e3b330326c49c92bf90e083cbb53264d. The downloaded reserve artifact was verified. No original signing key was used by CI; local original-key signing/upload occurs before24 is advertised. Future normal releases must use code26 or greater.
+
+Recovery is prepared, not automatically activated. After successful local publication, the managed directory `~/Library/Application Support/GharTV/owner-review/release-control/approved-code24/` contains `PAUSE_NEW_UPDATES.command` and `RECOVER_PREVIOUS_VERSION.command`. The former restores17's offer without modifying already-updated apps; the latter advertises the signed25 recovery. Both refuse an unrelated/newer public release. GitHub also has all signed reserve identities needed for a subsequent explicitly authorized remote recovery; no Mac key is required after its signed asset has uploaded.
+
+Existing app data is not deleted, but reverse compatibility with data written by24 has NOT been tested. No physical-TV rollback or live streaming has been verified. A TV must successfully fetch the update feed and the user must accept installation. This is not an instant push, silent installation, guaranteed recovery of an app that cannot launch, or indefinite background monitoring.
+
+## Validation actually completed
+
+20 focused publisher tests passed: explicit waiver versus fabricated review; changed local run/bytes refusal; Git tag identity independent of target_commitish; annotated/changed tags; repository/download guards; concurrent feed refusal; readback after timed-out writes; conflicting signed asset preservation; newer26 refusal; pause versus version25 recovery; symlink preservation and non-Mac refusal. Tests use controlled API/command responses and temporary local files, not live publication or owner-key signing. Bash syntax, Python3.9 syntax and embedded payload round-trip checks passed. Original rollback25 APK really compiled in cloud. Code24 was already compiled and installed in run13. Public feed, signed upload, new Obsidian write and household notification remain unexecuted until the owner runs the publisher.
+
+No broad cleanup, source merge, private telemetry publication, new lane/runtime, cousin-server hosting or web streaming rollout. This is the existing GharTV Android distribution lane only.
