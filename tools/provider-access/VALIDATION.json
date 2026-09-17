@@ -1,0 +1,23 @@
+{
+  "schema": "ghartv.provider-access-source-validation.v1",
+  "base_sha": "7c492372506420c3105ac3a9e5ec3f59833e110e",
+  "revision": "provider-access-1.0.0",
+  "focused_cases_passed": 52,
+  "real_local_http_routes": "PASS",
+  "rendered_owner_ui": "PASS_TRUSTED_HTML_WITH_FETCH_FIXTURE",
+  "browser_environment_limit": "Managed Chromium denied localhost navigation; UI tested from actual server HTML using explicit fetch fixture.",
+  "no_automatic_provider_or_report_requests": true,
+  "mobile_horizontal_overflow": false,
+  "browser_page_javascript_errors": [],
+  "live_registered_watch_page": "NOT_VERIFIED_ENVIRONMENT_DNS_TIMEOUT",
+  "provider_root_web_lookup": "HTML_RETURNED_IN_WEB_TOOL",
+  "server_browser_probe": "ROOT_EXECUTION_REJECTED_AS_EXPECTED",
+  "live_server_browser_compatibility": "NOT_VERIFIED",
+  "live_provider_playback": "NOT_VERIFIED",
+  "native_flixmomo_movie_playback": "NOT_IMPLEMENTED",
+  "tor_routing": "NOT_IMPLEMENTED",
+  "android_apk_built_or_replaced": false,
+  "owner_mac_execution": false,
+  "public_release_changed": false,
+  "new_service_or_tenant": false
+}

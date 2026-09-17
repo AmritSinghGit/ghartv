@@ -1,0 +1,10 @@
+{
+  "name": "ghartv-optional-provider-check-driver",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Optional only; no browser is installed or started by normal GharTV channel playback.",
+  "dependencies": {
+    "playwright-core": "1.62.0"
+  }
+}
