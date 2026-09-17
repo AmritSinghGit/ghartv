@@ -1,0 +1,101 @@
+import base64, datetime as dt, fcntl, hashlib, importlib.util, json, os, re, shutil, subprocess, sys, tempfile, zlib
+from pathlib import Path
+PAYLOAD = '__PAYLOAD__'
+PAYLOAD_SHA256 = '__PAYLOAD_HASH__'
+OLD_HELPER_SHA256 = '26fa8454f70c82412bdd9b95ec90f527346299c73b4ab04219292fc4546d02aa'
+APP_SOURCE = '59c130abc1283e66607315db916973553164064d'
+APP_SHA256 = 'b4f682c7b118c580b7f66e50555f23b58d4549ae194dfe55db57a836cc4b5467'
+HOME=Path.home(); STATE=HOME/'Library/Application Support/GharTV/owner-review'
+RUNTIME=STATE/'runtime-current'; CURRENT=STATE/'current'
+RUN_ID='GHARTV-REOPEN-'+dt.datetime.now(dt.timezone.utc).strftime('%Y%m%dT%H%M%SZ')+'-'+str(os.getpid())
+RUN=STATE/'runs'/RUN_ID
+outcome={'schema':'ghartv.reopen-repair.v1','run_id':RUN_ID,'revision':'tv-open-1.1.0-port-reopen',
+         'source':APP_SOURCE,'apk_changed':False,'production_changed':False,'web_server_restarted':False,
+         'processes_killed':0,'adb_server_restarted':False,'installed_fix':False,'tv_open':'NOT_ATTEMPTED',
+         'actual_mac_execution':sys.platform=='darwin','playback_verified':False}
+def checked(p,limit=None):
+    p=Path(p).absolute()
+    for q in (p,*p.parents):
+        if q.is_symlink():raise RuntimeError('SYMLINK_PRESERVED')
+    if p.exists():
+        st=p.stat()
+        if st.st_uid!=os.getuid():raise RuntimeError('DIFFERENT_FILE_OWNER_PRESERVED')
+        if limit is not None and (not p.is_file() or st.st_size>limit):raise RuntimeError('UNEXPECTED_LOCAL_FILE_PRESERVED')
+    return p
+
+def save(p,content,mode=0o600):
+    p=checked(p); checked(p.parent).mkdir(parents=True,exist_ok=True,mode=0o700)
+    b=content if isinstance(content,bytes) else content.encode() if isinstance(content,str) else (json.dumps(content,indent=2)+'\n').encode()
+    fd,t=tempfile.mkstemp(prefix='.'+p.name+'.',dir=p.parent)
+    try:
+        with os.fdopen(fd,'wb') as f:os.fchmod(f.fileno(),mode);f.write(b);f.flush();os.fsync(f.fileno())
+        os.replace(t,p)
+    finally:
+        if os.path.exists(t):os.unlink(t)
+
+def read(p):return json.loads(checked(p,256000).read_text())
+def digest(b):return hashlib.sha256(b).hexdigest()
+def main():
+    if sys.platform!='darwin':raise RuntimeError('MAC_ONLY_NO_ACTION')
+    checked(RUN).mkdir(parents=True,exist_ok=False,mode=0o700)
+    compressed=base64.b64decode(PAYLOAD,validate=True)
+    if digest(compressed)!=PAYLOAD_SHA256:raise RuntimeError('EMBEDDED_SOURCE_HASH_MISMATCH')
+    data=json.loads(zlib.decompress(compressed))
+    helper=data['tools/tv_local.py'].encode(); compile(helper,'tv_local.py','exec')
+    target=RUNTIME/'tools/tv_local.py'
+    with checked(STATE/'owner-run.lock').open('a') as lock:
+        try:fcntl.flock(lock,fcntl.LOCK_EX|fcntl.LOCK_NB)
+        except BlockingIOError:raise RuntimeError('ANOTHER_OWNER_ACTION_RUNNING_TRY_AFTER_IT_FINISHES') from None
+        receipt=read(CURRENT/'receipt.json');marker=read(RUNTIME/'.ghartv-managed.json')
+        if receipt.get('review_source')!=APP_SOURCE or marker.get('source')!=APP_SOURCE or receipt.get('version_code')!=24 or receipt.get('signed_apk_sha256')!=APP_SHA256:
+            raise RuntimeError('DIFFERENT_CANDIDATE_PRESERVED')
+        old=checked(target,100000).read_bytes()
+        if digest(old) not in (OLD_HELPER_SHA256,digest(helper)):
+            raise RuntimeError('UNKNOWN_OPENER_SOURCE_PRESERVED')
+        launch=HOME/'.local/share/ghartv-launcher/current/GHARTV_OPEN_TV.command'
+        desktop=HOME/'Desktop/GharTV TV.command'
+        for p in (launch,desktop):
+            if p.exists() and 'GHARTV_PERSISTENT_TV_OPEN_V1' not in checked(p,16384).read_text():
+                raise RuntimeError('UNRECOGNIZED_SHORTCUT_PRESERVED')
+        save(RUN/'tv_local.before.py',old)
+        if checked(RUN/'tv_local.before.py').read_bytes()!=old:raise RuntimeError('BACKUP_READBACK_FAILED')
+        save(target,helper)
+        if checked(target).read_bytes()!=helper:raise RuntimeError('PATCH_READBACK_FAILED')
+        # Existing app bundle and owner button call this helper. No server restart.
+        shortcut='#!/bin/bash\n# GHARTV_PERSISTENT_TV_OPEN_V1\nset -euo pipefail\numask 077\nexport PYTHONDONTWRITEBYTECODE=1\nexport PATH="/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:$PATH"\nexec python3 "$HOME/Library/Application Support/GharTV/owner-review/runtime-current/tools/tv_local.py" open\n'
+        save(launch,shortcut,0o700)
+        if desktop.parent.is_dir():save(desktop,shortcut,0o700)
+        outcome.update(installed_fix=True,helper_sha256=digest(helper),apk_sha256=APP_SHA256,
+                       owner_button='USES_PATCHED_HELPER_WITHOUT_SERVER_RESTART',shortcuts='EXISTING_PATHS_UPDATED')
+        save(CURRENT/'reopen-repair.json',outcome)
+    print('\033[36mGharTV · reopen repair · same TV, same published APK\033[0m',flush=True)
+    print('Opener updated. Checking ports 5580/5581 and opening the existing TV…',flush=True)
+    spec=importlib.util.spec_from_file_location('ghartv_reopen_helper',target)
+    m=importlib.util.module_from_spec(spec);spec.loader.exec_module(m)
+    result=m.main_action('open',APP_SOURCE)
+    outcome['tv']=result;outcome['tv_open']='FOREGROUND_VERIFIED' if result.get('foreground') and result.get('ok') else 'ACTION_REQUIRED'
+    outcome['result']='OPENED_EXISTING_TV' if outcome['tv_open']=='FOREGROUND_VERIFIED' else 'FIX_INSTALLED_OPEN_REQUIRES_ATTENTION'
+    return 0 if result.get('ok') else 1
+
+status=1
+try:status=main()
+except Exception as e:
+    outcome['error']=str(e) if isinstance(e,RuntimeError) else type(e).__name__
+    outcome['result']='REOPEN_FIX_ACTION_REQUIRED'
+finally:
+    if sys.platform=='darwin':
+        text='GHARTV_REOPEN_HANDOFF\n'+json.dumps(outcome,indent=2)+'\n'
+        try:
+            save(RUN/'REOPEN_RESULT.json',outcome);save(RUN/'handoff.txt',text)
+            save(CURRENT/'reopen-handoff.txt',text);save(CURRENT/'reopen-repair.json',outcome)
+            note=HOME/'Documents/Amrit Executive Memory/90 System/Operon Portfolio/Handoffs/Terminal Runs/ghartv'
+            if checked(note).is_dir():
+                note_text='# GharTV reopen correction\n\n```text\n'+text+'```\nThe published Android code24 APK and its public feed are unchanged. No application data was cleared.\n'
+                save(note/(RUN_ID+'.md'),note_text)
+                outcome['obsidian']='RUN_NOTE_WRITTEN_AND_READBACK_VERIFIED' if (note/(RUN_ID+'.md')).read_text()==note_text else 'NOT_VERIFIED'
+            text='GHARTV_REOPEN_HANDOFF\n'+json.dumps(outcome,indent=2)+'\n'
+            save(RUN/'REOPEN_RESULT.json',outcome);save(RUN/'handoff.txt',text)
+            save(CURRENT/'reopen-handoff.txt',text);save(CURRENT/'reopen-repair.json',outcome)
+        except Exception as e:outcome['record_status']='SAVE_INCOMPLETE_'+type(e).__name__
+    print('GHARTV_REOPEN_HANDOFF\n'+json.dumps(outcome,indent=2),flush=True)
+sys.exit(status)
