@@ -1,0 +1,130 @@
+name: GharTV RC8 smooth performance review
+on:
+  push:
+    paths: ['.github/workflows/smooth-review-build.yml']
+permissions:
+  contents: write
+jobs:
+  review:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      BRANCH: codex/ghartv-remove-auto-preview
+      GH_TOKEN: ${{ github.token }}
+      PYTHONDONTWRITEBYTECODE: '1'
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: actions/setup-node@v5
+        with:
+          node-version: '22'
+      - uses: android-actions/setup-android@v3
+        with:
+          packages: platform-tools
+          log-accepted-android-sdk-licenses: false
+      - name: Apply exact baseline-checked performance changes, preserving provider integration
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import json,base64,lzma,hashlib,subprocess
+          raw=base64.b64decode(''.join(Path('.smooth-prep/part'+str(i)).read_text() for i in range(3)),validate=True)
+          assert hashlib.sha256(raw).hexdigest()=='93bbf55349556ca169bf609e55999905f5c3103a5274d20a02b7ffc427475d5f'
+          data=json.loads(lzma.decompress(raw));assert len(data['targets'])==33
+          names=list(data['targets']);assert set(names)==set(data['baseline'])==set(data['edits'])
+          for name,expected in data['baseline'].items():
+            p=Path(name);assert not p.is_absolute() and '..' not in p.parts
+            assert name.startswith(('android-tv/','web-player/','tools/','docs/')) or name in ['CURRENT_HANDOFF.md','GHARTV_LANE_PROGRESS.md','OWNER_REVIEW_REQUIREMENTS.json','REVIEW_060_RC8.md','VALIDATE_SOURCE.command']
+            if expected is None:assert not p.exists(),name
+            else:assert hashlib.sha256(p.read_bytes()).hexdigest()==expected,name
+          for name,edits in data['edits'].items():
+            p=Path(name);lines=p.read_text().splitlines(keepends=True) if p.exists() else []
+            for first,last,text in reversed(edits):
+              assert 0<=first<=last<=len(lines);lines[first:last]=[text]
+            p.parent.mkdir(parents=True,exist_ok=True);p.write_text(''.join(lines))
+            assert hashlib.sha256(p.read_bytes()).hexdigest()==data['targets'][name],name
+          p=Path('web-player/owner-gateway.mjs')
+          assert subprocess.check_output(['git','hash-object',str(p)],text=True).strip()=='673217e9659289a04248afaaa21b668c70cfaa2a'
+          s=p.read_text();needle='  if(await releaseRoute(req,res,url,authorized))return true;';assert s.count(needle)==1
+          s="import {performanceRoute} from './performance-desk.mjs';\n"+s.replace(needle,'  if(await performanceRoute(req,res,url,authorized))return true;\n'+needle)
+          assert "import {providerRoute}" in s;p.write_text(s);names.append(str(p))
+          Path('/tmp/smooth-targets.json').write_text(json.dumps(names))
+          print('EXACT_PERFORMANCE_SOURCE=34_FILES; PROVIDER_SOURCE_PRESERVED; NO_PUBLIC_FEED_CHANGE')
+          PY
+      - name: Focused source, observation, receipt and exact-publication checks
+        run: |
+          set -euo pipefail
+          bash VALIDATE_SOURCE.command
+          python tools/performance/check.py
+          python tools/release_gate_check.py
+          python tools/tv-open/test_tv_open.py
+          node --check web-player/public/app.js
+          node --check web-player/performance-desk.mjs
+          node --check web-player/owner-gateway.mjs
+          node tools/rc7_transport_check.mjs
+          node tools/rc6_receipt_check.mjs
+          node tools/support-report-check.mjs
+          mkdir -p /tmp/ghartv-jvm-check
+          javac -d /tmp/ghartv-jvm-check android-tv/app/src/main/java/in/ghartv/nova/{FamilyMemberRules,GuideTimeline,UpdatePolicy,NetworkFailure}.java tools/{FamilyRulesSmoke,GuideRulesSmoke,UpdatePolicySmoke,NetworkRulesSmoke}.java
+          for rule in FamilyRulesSmoke GuideRulesSmoke UpdatePolicySmoke NetworkRulesSmoke; do java -cp /tmp/ghartv-jvm-check "$rule"; done
+      - name: Compile actual Android code24
+        run: |
+          set -euo pipefail
+          sdkmanager 'platforms;android-36' 'build-tools;36.0.0'
+          cd android-tv
+          bash gradlew --no-daemon --max-workers=2 :app:assembleRelease
+          "$ANDROID_HOME/build-tools/36.0.0/aapt" dump badging app/build/outputs/apk/release/app-release-unsigned.apk > /tmp/ghartv-rc8-badging.txt
+          python - <<'PY'
+          from pathlib import Path
+          s=Path('/tmp/ghartv-rc8-badging.txt').read_text().splitlines()[0]
+          assert "name='in.ghartv.nova'" in s and "versionCode='24'" in s and "versionName='0.6.0-rc8-smooth-performance'" in s
+          print(s)
+          PY
+      - name: Original signing reference and typed verifier cases, no owner key
+        run: |
+          set -euo pipefail
+          curl --proto '=https' --proto-redir '=https' -fLsS --max-time 90 https://github.com/AmritSinghGit/ghartv/releases/download/v0.5.4-rc8/GharTV-Jio-Live-v0.5.4-rc8-pre-birthday-recovery.apk -o /tmp/ghartv-public-reference.apk
+          echo '8cff8f85403da5924865fddc687dbff11089d7c498f9863e483a7d8123c1ce13  /tmp/ghartv-public-reference.apk' | sha256sum -c -
+          python tools/rc5_native_verify.py
+      - name: Real browser controlled review, no household account or live stream
+        run: |
+          set -euo pipefail
+          npm --prefix web-player ci --ignore-scripts --no-audit --no-fund
+          npm --prefix /tmp/ghartv-browser install --ignore-scripts --no-audit --no-fund playwright@1.55.1
+          /tmp/ghartv-browser/node_modules/.bin/playwright install --with-deps chromium
+          node tools/rc8_browser_check.mjs
+      - name: Publish checked source on the existing branch only
+        run: |
+          set -euo pipefail
+          test "$(git ls-remote origin refs/heads/$BRANCH | cut -f1)" = "$GITHUB_SHA"
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          python - <<'PY'
+          from pathlib import Path
+          import json,subprocess,os
+          p=Path('tools/performance/VALIDATION.json');p.write_text(json.dumps({'schema':'ghartv.smooth-performance-validation.v1','workflow_run':os.environ['GITHUB_RUN_ID'],'version':'0.6.0-rc8-smooth-performance','version_code':24,'actual_android_release_compile':'PASS','typed_signature_positive_and_negative':'PASS_DISPOSABLE_FIXTURES','browser':'PASS_CONTROLLED_HTTP_CHROMIUM_NOT_LIVE_PROVIDER','publication_guards':'PASS_SIMULATED_GITHUB_NOT_REAL_ROLLOUT','mac_pressure_capture':'PARSER_PRIVATE_SAVE_AND_NONMAC_REJECTION_TESTED_NOT_OWNER_MAC','owner_mac_execution':False,'actual_playback_verified':False,'measured_speedup':None,'public_release_changed':False,'native_flixmomo_playback':'NOT_IMPLEMENTED','ai_super_resolution':'NOT_IMPLEMENTED'},indent=2)+'\n')
+          names=json.loads(Path('/tmp/smooth-targets.json').read_text());names.append(str(p));subprocess.run(['git','add','--',*names],check=True)
+          PY
+          git rm -r .smooth-prep .github/workflows/smooth-review-build.yml
+          test -z "$(git diff --cached --name-only -- update/latest.json)"
+          git commit -m 'feat: coherent RC8 smooth performance review with focus-bounded preview, comfort and private Mac observations'
+          git push origin HEAD:refs/heads/$BRANCH
+          echo "APPLICATION_SOURCE_SHA=$(git rev-parse HEAD)"
+      - name: Package a full cloud-compiled review, not a Mac source build
+        run: |
+          set -euo pipefail
+          python tools/package_owner_review.py
+          gh release create v0.6.0-rc8 /tmp/ghartv-owner-candidate/* --repo AmritSinghGit/ghartv --target "$(git rev-parse HEAD)" --prerelease --title 'GharTV RC8 — smooth performance, comfort and measured local review' --notes-file REVIEW_060_RC8.md
+          echo 'COMPILED_REVIEW_PUBLISHED; OWNER_INSTALLATION_PENDING; BLUE_FEED_UNCHANGED'
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: ghartv-rc8-smooth-delivery
+          path: |
+            /tmp/ghartv-owner-candidate/GHARTV_RC8_REVIEW.zip
+            /tmp/ghartv-owner-candidate/DELIVERY.json
+            /tmp/ghartv-check-evidence/*.png
+          retention-days: 7
+          if-no-files-found: warn
