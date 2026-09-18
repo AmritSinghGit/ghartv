@@ -50,6 +50,7 @@ public final class MainActivity extends Activity implements ChannelNavigator.Lis
     private final Map<String, List<Program>> epgCache = new HashMap<>();
     private final Runnable visibleEpgTask = this::loadVisibleEpg;
     private boolean guideActive;
+    private int focusEpoch, focusRequestGeneration;
     private final Map<String, Long> epgCacheTime = new HashMap<>();
 
     private ChannelRepository repository;
@@ -138,12 +139,13 @@ public final class MainActivity extends Activity implements ChannelNavigator.Lis
         guideActive=true;
         if (!JioSession.load(this).isPresent()) routeToLogin();
         else if(initialResume)initialResume=false;else loadFromDisk(false);
+        mainHandler.post(this::syncPreviewFocus);
     }
 
     @Override protected void onPause() {
         guideActive=false;
         mainHandler.removeCallbacks(visibleEpgTask);
-        if (heroPreviewController != null) heroPreviewController.stop(false);
+        if (heroPreviewController != null) heroPreviewController.focused(false);
         super.onPause();
     }
 
@@ -356,9 +358,6 @@ public final class MainActivity extends Activity implements ChannelNavigator.Lis
         LinearLayout.LayoutParams favouriteParams = new LinearLayout.LayoutParams(TvUi.dp(this, 126), TvUi.dp(this, 46));
         favouriteParams.leftMargin = TvUi.dp(this, 8);
         actions.addView(favouriteButton, favouriteParams);
-        Button previewButton=TvUi.button(this,"Preview 12s",false);
-        previewButton.setOnClickListener(v->{if(heroPreviewController!=null)heroPreviewController.previewNow();});
-        hero.addView(previewButton,new LinearLayout.LayoutParams(-1,TvUi.dp(this,30)));
         hero.addView(actions, new LinearLayout.LayoutParams(-1, TvUi.dp(this, 46)));
 
         TextView hints = TvUi.label(this, "NUMBER to tune  •  CH ± to switch  •  GUIDE to come back", 10, TvUi.MUTED, false);
@@ -414,9 +413,7 @@ public final class MainActivity extends Activity implements ChannelNavigator.Lis
         channelGrid.setAdapter(channelAdapter);
         channelGrid.setItemAnimator(null);
         getWindow().getDecorView().getViewTreeObserver().addOnGlobalFocusChangeListener((oldFocus,newFocus)->{
-            boolean inGrid=false;android.view.ViewParent parent=newFocus==null?null:newFocus.getParent();
-            while(parent!=null){if(parent==channelGrid){inGrid=true;break;}parent=parent.getParent();}
-            if(heroPreviewController!=null)heroPreviewController.focused(guideActive&&inGrid);
+            focusEpoch++;syncPreviewFocus();
         });
         channelGrid.addOnScrollListener(new RecyclerView.OnScrollListener(){
             @Override public void onScrollStateChanged(RecyclerView v,int state){if(state==RecyclerView.SCROLL_STATE_IDLE)scheduleVisibleEpg();}
@@ -488,8 +485,9 @@ public final class MainActivity extends Activity implements ChannelNavigator.Lis
                 mainHandler.post(() -> {
                     catalogueBusy = false;
                     guideLoading.setVisibility(View.GONE);
+                    boolean firstGuide=allChannels.isEmpty();
                     allChannels = refreshed;
-                    renderGuide(true);
+                    renderGuide(firstGuide);
                     updateCatalogueStatus(null);
                     Telemetry.event(this, "catalogue_refresh", Telemetry.data(
                             "result", "success",
@@ -538,19 +536,43 @@ public final class MainActivity extends Activity implements ChannelNavigator.Lis
             Telemetry.markLaunchHealthy(this);
         }
 
-        Channel preferred = repository.byNumber(visibleChannels, repository.lastChannel());
+        Channel preferred=null;
+        if(selectedChannel!=null)for(Channel candidate:visibleChannels){
+            if(java.util.Objects.equals(selectedChannel.id,candidate.id)){preferred=candidate;break;}
+        }
+        if(preferred==null)preferred = repository.byNumber(visibleChannels, repository.lastChannel());
         if (preferred == null) preferred = visibleChannels.get(0);
         select(preferred);
         scheduleVisibleEpg();
         if (requestFocus) {
-            final int position = Math.max(0, visibleChannels.indexOf(preferred));
-            channelGrid.post(() -> {
-                channelGrid.scrollToPosition(position);
-                RecyclerView.ViewHolder holder = channelGrid.findViewHolderForAdapterPosition(position);
-                if (holder != null) holder.itemView.requestFocus();
-                else channelGrid.requestFocus();
-            });
-        }
+            final int position=Math.max(0,visibleChannels.indexOf(preferred));
+            int request=++focusRequestGeneration,epoch=focusEpoch;
+            channelGrid.scrollToPosition(position);
+            focusChannelAfterLayout(position,request,epoch,0);
+        } else channelGrid.post(this::syncPreviewFocus);
+    }
+
+    private void focusChannelAfterLayout(int position,int request,int epoch,int tries){
+        channelGrid.postOnAnimation(()->{
+            if(!guideActive||isFinishing()||request!=focusRequestGeneration||epoch!=focusEpoch)return;
+            RecyclerView.ViewHolder holder=channelGrid.findViewHolderForAdapterPosition(position);
+            if(holder!=null){holder.itemView.requestFocus();syncPreviewFocus();}
+            else if(tries<8)focusChannelAfterLayout(position,request,epoch,tries+1);
+        });
+    }
+    private void syncPreviewFocus(){
+        if(heroPreviewController==null||channelGrid==null)return;
+        View focus=getCurrentFocus();
+        RecyclerView.ViewHolder holder=focus==null?null:channelGrid.findContainingViewHolder(focus);
+        Channel c=holder==null?null:channelAdapter.itemAt(holder.getBindingAdapterPosition());
+        boolean eligible=guideActive&&getWindow().getDecorView().hasWindowFocus()&&c!=null;
+        if(eligible&&(selectedChannel==null||selectedChannel.number!=c.number||!java.util.Objects.equals(selectedChannel.id,c.id)))select(c);
+        heroPreviewController.focused(eligible);
+    }
+    @Override public void onWindowFocusChanged(boolean focused){
+        super.onWindowFocusChanged(focused);
+        if(!focused&&heroPreviewController!=null)heroPreviewController.focused(false);
+        else if(focused&&channelGrid!=null)channelGrid.post(this::syncPreviewFocus);
     }
 
     private void select(Channel channel) {

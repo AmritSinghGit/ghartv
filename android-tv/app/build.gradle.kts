@@ -21,8 +21,9 @@ android {
         applicationId = "in.ghartv.nova"
         minSdk = 26
         targetSdk = 35
-        versionCode = 24
-        versionName = "0.6.0-rc8-smooth-performance"
+        versionCode = 26
+        versionName = "0.6.0-rc9-tv-first"
+        testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
     buildFeatures {
@@ -66,6 +67,8 @@ android {
 }
 
 dependencies {
+    androidTestImplementation("androidx.test:runner:1.6.2")
+    androidTestImplementation("androidx.test.ext:junit:1.2.1")
     implementation("androidx.core:core:1.15.0")
     implementation("androidx.recyclerview:recyclerview:1.4.0")
     implementation("androidx.work:work-runtime:2.11.2")

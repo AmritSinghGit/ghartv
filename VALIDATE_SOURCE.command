@@ -14,7 +14,7 @@ missing=[name for name in required if not (java/name).is_file()]
 if missing: raise SystemExit('Missing required source: '+', '.join(missing))
 for xml in (app/'src/main').rglob('*.xml'): ET.parse(xml)
 gradle=(app/'build.gradle.kts').read_text()
-assert 'versionCode = 24' in gradle and 'versionName = "0.6.0-rc8-smooth-performance"' in gradle, gradle
+assert 'versionCode = 26' in gradle and 'versionName = "0.6.0-rc9-tv-first"' in gradle, gradle
 manifest=(app/'src/main/AndroidManifest.xml').read_text()
 assert 'android.software.leanback' in manifest and 'android.hardware.touchscreen' in manifest
 assert 'android:required="false"' in manifest
@@ -50,6 +50,7 @@ update=json.loads((root/'update/latest.json').read_text())
 # sees main's separately approved RC8 feed. Reject everything except those two
 # exact immutable identities, and never infer that this RC1 candidate is live.
 approved_feeds = {
+    (24, '0.6.0-rc8-smooth-performance', 'b4f682c7b118c580b7f66e50555f23b58d4549ae194dfe55db57a836cc4b5467', '59c130abc1283e66607315db916973553164064d'),
     (14, '0.5.4-rc5-family-photo',
      '6f60d18a78e4b1692d6591d04bcef6e1cfda4252dba976d160a12cef03930199',
      'b46b2cd607c309d364d531b5fd9da618cd007f6c'),
@@ -82,5 +83,5 @@ for path in java.glob('*.java'):
             if depth<0: raise SystemExit(f'Brace underflow: {path}')
         i+=1
     if depth or quote or block: raise SystemExit(f'Lexical balance failed: {path}')
-print(f'GHARTV_SOURCE_VALIDATION=PASS · {len(list(java.glob("*.java")))} Java files · 0.6.0 RC8 smooth performance review')
+print(f'GHARTV_SOURCE_VALIDATION=PASS · {len(list(java.glob("*.java")))} Java files · 0.6.0 RC9 TV-first preview restoration')
 PY

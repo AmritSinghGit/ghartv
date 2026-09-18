@@ -18,3 +18,5 @@
 - Keep checks focused. Actual cloud compile/browser/mock transport evidence is not owner-Mac/native-TV UX, live provider authorization or a measured speedup. No long test-suite gates.
 
 - RC7 must be delivered as a cloud-compiled full bundle, not a Mac source patch gated by stale review head. Preserve Punjabi overlay and manual-only reporting. Network probes are explicit and fixed-host; only conditionally cold-boot the named existing emulator with verified current system DNS. Never label DNS/HTTPS reachability as provider playback. Support exports remain private; reference lookup is latest5000/30days, not proof of absence. Public safe receipt must not include support data.
+
+- TV-first continuation MUST read TV_EXPERIENCE_CONTRACT.json before changing preview or focus. Automatic muted bounded focus preview is the restored default; code24 manual Preview 12s/off-default was rejected. Do not replace accepted interactions with extra owner actions to mask slowness. Run tools/tv-first/check_contract.py plus PreviewGate smoke and Android controller tests after relevant changes.

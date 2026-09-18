@@ -16,15 +16,15 @@ class Checks(unittest.TestCase):
    target=root/'keep';target.write_text('preserve');q=root/'link';q.symlink_to(target)
    with self.assertRaises(RuntimeError):m.save(q,{'bad':True})
    self.assertEqual(target.read_text(),'preserve')
- def test_source_network_outside_lock_and_preview_off(self):
+ def test_source_network_outside_lock_and_preview_restored(self):
   java=root/'android-tv/app/src/main/java/in/ghartv/nova'
   s=(java/'ChannelRepository.java').read_text();start=s.index('public List<Channel> refreshJio');part=s[start:];self.assertLess(part.index('api.fetchChannels()'),part.index('synchronized (this)'))
-  self.assertIn('getBoolean("auto_preview",false)',(java/'PlaybackComfort.java').read_text())
-  h=(java/'HeroPreviewController.java').read_text();self.assertIn('!focused || !PlaybackComfort.autoPreview',h);self.assertIn('main.postDelayed(startupDeadline,4500L)',h)
+  self.assertIn('PreviewGate.defaultEnabled',(java/'PlaybackComfort.java').read_text())
+  h=(java/'HeroPreviewController.java').read_text();self.assertIn('gate.arm()',h);self.assertIn('PreviewGate.FIRST_FRAME_BUDGET_MS',h)
   self.assertIn('TrackedPlayback',(java/'JioApiClient.java').read_text());self.assertIn('playbackCalls.remove(call)',(java/'JioApiClient.java').read_text())
  def test_release_transitions_and_complete_bundle(self):
   s=(root/'tools/package_owner_review.py').read_text();self.assertIn("'tools/tv_local.py'",s);self.assertIn("'tools/performance/host_check.py'",s)
   starter=(root/'tools/run_owner_bundle.command.in').read_text();self.assertIn('99fedd034de8816e4c153f65f25eefbbe6a90150f33d2d3d3216e74deda351bb',starter)
   launcher=(root/'tools/owner_review.command.in').read_text();self.assertIn('PRIOR_REVIEW_PRESERVED_UNTIL_OWNER_ACCEPTANCE',launcher);self.assertIn("performance_snapshot('before');review()",launcher)
-  self.assertIn('GHARTV_RC8_REVIEW.zip',s)
+  self.assertIn('GHARTV_RC9_REVIEW.zip',s)
 if __name__=='__main__':unittest.main()

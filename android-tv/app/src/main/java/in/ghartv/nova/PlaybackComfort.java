@@ -15,7 +15,7 @@ import android.widget.*;
 /** Local-only comfort preferences. Only physical input resets inactivity. No cloud polling. */
 public final class PlaybackComfort {
     private static SharedPreferences prefs(Context c){return c.getSharedPreferences("ghartv_comfort_v1",Context.MODE_PRIVATE);}
-    public static boolean autoPreview(Context c){return prefs(c).getBoolean("auto_preview",false);}
+    public static boolean autoPreview(Context c){SharedPreferences p=prefs(c);return PreviewGate.defaultEnabled(p.contains("auto_preview")?p.getBoolean("auto_preview",true):null);}
     public static boolean light(Context c){
         String p=prefs(c).getString("quality","Auto");
         ActivityManager m=(ActivityManager)c.getSystemService(Context.ACTIVITY_SERVICE);
@@ -24,7 +24,7 @@ public final class PlaybackComfort {
     public static void settings(Activity a){
         SharedPreferences p=prefs(a);LinearLayout box=new LinearLayout(a);box.setOrientation(LinearLayout.VERTICAL);
         int pad=TvUi.dp(a,22);box.setPadding(pad,pad,pad,pad);
-        Switch preview=new Switch(a);preview.setText("Muted preview on focused channel (off is lightest)");preview.setChecked(autoPreview(a));box.addView(preview);
+        Switch preview=new Switch(a);preview.setText("Automatic muted previews");final boolean originalPreview=autoPreview(a);preview.setChecked(originalPreview);box.addView(preview);
         Switch idle=new Switch(a);idle.setText("Ask: Still watching?");idle.setChecked(p.getBoolean("idle_enabled",true));box.addView(idle);
         TextView label=new TextView(a);label.setText("Minutes without input (1–240)");box.addView(label);
         EditText minutes=new EditText(a);minutes.setInputType(InputType.TYPE_CLASS_NUMBER);minutes.setText(String.valueOf(p.getInt("idle_minutes",60)));box.addView(minutes);
@@ -37,7 +37,9 @@ public final class PlaybackComfort {
         d.setOnShowListener(v->d.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener(w->{
             int n;try{n=Integer.parseInt(minutes.getText().toString());}catch(Exception e){minutes.setError("Enter 1–240");return;}
             if(n<1||n>240){minutes.setError("Enter 1–240");return;}
-            p.edit().putBoolean("auto_preview",preview.isChecked()).putBoolean("idle_enabled",idle.isChecked()).putInt("idle_minutes",n).putBoolean("return_guide",guide.isChecked()).putString("quality",choices[profile.getSelectedItemPosition()]).apply();d.dismiss();
+            SharedPreferences.Editor edit=p.edit();
+            if(preview.isChecked()!=originalPreview)edit.putBoolean("auto_preview",preview.isChecked());
+            edit.putBoolean("idle_enabled",idle.isChecked()).putInt("idle_minutes",n).putBoolean("return_guide",guide.isChecked()).putString("quality",choices[profile.getSelectedItemPosition()]).apply();d.dismiss();
         }));d.show();
     }
     private final Activity a;private final Runnable stop,play,guide;private final Handler h=new Handler(Looper.getMainLooper());

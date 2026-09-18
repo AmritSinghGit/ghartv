@@ -55,7 +55,7 @@
     "state": "PREPARED_FOR_CLOUD_COMPILE_AND_OWNER_REVIEW",
     "previous_installed": "RC7 code23 / run12",
     "required": [
-      "focus-owned bounded previews default off",
+      "Historical code24 default-off/manual preview was REJECTED by owner on September18; superseded by TV_EXPERIENCE_CONTRACT.json",
       "network outside shared guide lock",
       "cancellable channel responses",
       "local memory and frame observations without automatic process kills",
@@ -68,5 +68,14 @@
       "cousin-server deployment",
       "universal link access"
     ]
+  },
+  "tv_first_followup": {
+    "source_baseline": "59c130abc1283e66607315db916973553164064d",
+    "installed_code": 24,
+    "next_review_code": 26,
+    "contract": "TV_EXPERIENCE_CONTRACT.json",
+    "priority": "TV_APPLICATION_FIRST",
+    "publication": "NOT_AUTHORIZED_FOR_NEW_CODE",
+    "private_latest_selection": "Owner confirmed canonical5580/code24; no provider playback proof"
   }
 }
