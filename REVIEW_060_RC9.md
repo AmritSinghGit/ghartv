@@ -1,5 +1,3 @@
-<!-- GHARTV-MANAGED-LANE-NOTE:v1 -->
-
 # GharTV RC9 / code26 — TV-first preview restoration
 
 ## The regression and correction
@@ -22,64 +20,3 @@ FlixMomo native catalogue-to-stream playback and Brave/Tor streaming are not com
 
 ## Review delivery
 Use the full cloud-compiled GHARTV_RC9_REVIEW.zip and its single download-and-run command. Existing signing identity and in-place5580 APK upgrade only. Development checkout, other emulators, accounts and production feed remain unchanged. Existing web/owner8790 companion is reused, with one active managed service. No broad cleanup or memory/CPU speedup claim. Review-ready means opened/byte-verified; actual playback acceptance remains the owner's decision.
-
-## Pinned experience contract
-
-```json
-{
-  "schema": "ghartv.tv-experience-contract.v1",
-  "lane": "ghartv",
-  "decision_basis": "Owner's September 18 screenshots and Nova-selection handoff; explicit rejection of code24 manual-preview UX",
-  "canonical_avd": "GharTV_Nova_Manual_google_tv_API36",
-  "canonical_serial": "emulator-5580",
-  "package": "in.ghartv.nova",
-  "rules": [
-    {
-      "id": "TV-PREVIEW-01",
-      "rule": "Automatic muted bounded preview is the default when an eligible channel card keeps focus. No manual Preview 12s button in the guide."
-    },
-    {
-      "id": "TV-PREVIEW-02",
-      "rule": "Focus on Find/header/chips, any modal/window loss, pause or playback stops preview/network/decoder work. Late results cannot repaint the hero."
-    },
-    {
-      "id": "TV-PREVIEW-03",
-      "rule": "650ms dwell,4500ms startup budget,12000ms after actual rendered first frame. No loop or retry until a fresh focus/selection."
-    },
-    {
-      "id": "TV-PREVIEW-04",
-      "rule": "A saved explicit previews-Off preference is honoured. Saving other comfort settings does not create an Off choice."
-    },
-    {
-      "id": "TV-FOCUS-01",
-      "rule": "Background catalogue updates preserve selected/focused channel. Initial/category focus waits for the card layout, and aborts if the user moves elsewhere."
-    },
-    {
-      "id": "TV-NAV-01",
-      "rule": "Retain first-panel Next focus, selected category/language/search next/previous, keyboard shortcuts and family/Simrat management."
-    },
-    {
-      "id": "TV-REST-01",
-      "rule": "Keep existing configurable Still Watching and resume/return-to-guide. Do not collect viewing history to implement inactivity."
-    },
-    {
-      "id": "DELIVERY-01",
-      "rule": "Only existing Nova5580/package/hash is a review. Emulator5554 One Guide is not a Nova baseline. Never infer playback success from foreground or CI."
-    },
-    {
-      "id": "PUBLIC-01",
-      "rule": "Code24 remains published with review waived. New code26 is review only. Code25 is the prepared previous-production recovery, not automatically selected."
-    }
-  ],
-  "pending_not_claimed": [
-    "native FlixMomo playback",
-    "Brave/Tor movie relay",
-    "AI super-resolution",
-    "new Mac performance benchmark"
-  ]
-}
-```
-
-
-## Verified RC9 delivery
-Application `c20e3ef5dc8ff5dbee52c338930a5c4ac30157e8`, build35321599367/job105525107583 SUCCESS including7 actual Android controller tests with generated local media,29 production-state checks and controlled browser regression checks. Full bundle `8f85126879629717569eee799a3f5e8c11d3e8b69f19d76a5a9dde4f58eec914`. New Mac execution, live provider playback and new local Obsidian write remain pending. Publiccode24 and reserved25 unchanged. Latest actual owner selection is Nova5580/code24, not the rejected5554 One Guide screen.

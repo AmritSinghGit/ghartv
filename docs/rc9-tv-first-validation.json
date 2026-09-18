@@ -1,0 +1,30 @@
+{
+  "schema": "ghartv.tv-first-validation.v1",
+  "workflow_run": "35321599367",
+  "version": "0.6.0-rc9-tv-first",
+  "version_code": 26,
+  "actual_android_release_compile": "PASS",
+  "production_preview_state_machine_checks": 29,
+  "actual_android_controller_tests": 7,
+  "android_test_media": "GENERATED_LOCAL_DEBUG_FIXTURE_WITH_AUDIO_NO_PROVIDER_CREDENTIALS",
+  "android_coverage": [
+    "automatic_first_frame",
+    "audio_disabled_and_muted",
+    "12_second_stop_no_loop",
+    "last_focused_channel_only",
+    "Find_focus_cancels_before_fetch",
+    "startup_timeout_no_late_picture",
+    "explicit_saved_off",
+    "resume_same_card",
+    "stable_id_despite_renumbering"
+  ],
+  "browser": "PASS_REAL_HTTP_CHROMIUM_CONTROLLED_DATA",
+  "signature_cases": "PASS_DISPOSABLE_FIXTURES",
+  "owner_mac_execution": false,
+  "live_provider_playback": false,
+  "production_changed": false,
+  "rollback25_activated": false,
+  "native_flixmomo_playback": "NOT_IMPLEMENTED",
+  "tor_routing": "NOT_IMPLEMENTED",
+  "new_ui_layout": "NO_REDIRECT_TO_ONE_GUIDE"
+}

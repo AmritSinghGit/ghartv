@@ -1,0 +1,52 @@
+{
+  "schema": "ghartv.tv-experience-contract.v1",
+  "lane": "ghartv",
+  "decision_basis": "Owner's September 18 screenshots and Nova-selection handoff; explicit rejection of code24 manual-preview UX",
+  "canonical_avd": "GharTV_Nova_Manual_google_tv_API36",
+  "canonical_serial": "emulator-5580",
+  "package": "in.ghartv.nova",
+  "rules": [
+    {
+      "id": "TV-PREVIEW-01",
+      "rule": "Automatic muted bounded preview is the default when an eligible channel card keeps focus. No manual Preview 12s button in the guide."
+    },
+    {
+      "id": "TV-PREVIEW-02",
+      "rule": "Focus on Find/header/chips, any modal/window loss, pause or playback stops preview/network/decoder work. Late results cannot repaint the hero."
+    },
+    {
+      "id": "TV-PREVIEW-03",
+      "rule": "650ms dwell,4500ms startup budget,12000ms after actual rendered first frame. No loop or retry until a fresh focus/selection."
+    },
+    {
+      "id": "TV-PREVIEW-04",
+      "rule": "A saved explicit previews-Off preference is honoured. Saving other comfort settings does not create an Off choice."
+    },
+    {
+      "id": "TV-FOCUS-01",
+      "rule": "Background catalogue updates preserve selected/focused channel. Initial/category focus waits for the card layout, and aborts if the user moves elsewhere."
+    },
+    {
+      "id": "TV-NAV-01",
+      "rule": "Retain first-panel Next focus, selected category/language/search next/previous, keyboard shortcuts and family/Simrat management."
+    },
+    {
+      "id": "TV-REST-01",
+      "rule": "Keep existing configurable Still Watching and resume/return-to-guide. Do not collect viewing history to implement inactivity."
+    },
+    {
+      "id": "DELIVERY-01",
+      "rule": "Only existing Nova5580/package/hash is a review. Emulator5554 One Guide is not a Nova baseline. Never infer playback success from foreground or CI."
+    },
+    {
+      "id": "PUBLIC-01",
+      "rule": "Code24 remains published with review waived. New code26 is review only. Code25 is the prepared previous-production recovery, not automatically selected."
+    }
+  ],
+  "pending_not_claimed": [
+    "native FlixMomo playback",
+    "Brave/Tor movie relay",
+    "AI super-resolution",
+    "new Mac performance benchmark"
+  ]
+}
