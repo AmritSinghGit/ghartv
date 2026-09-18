@@ -48,6 +48,7 @@ jobs:
           Path('/tmp/tv-first-targets.json').write_text(json.dumps(list(data['targets'])))
           print('TV_FIRST_SOURCE_25_FILES_VERIFIED; PUBLIC_FEED_NOT_TOUCHED')
           PY
+          python .tv-first-stage/finalize.py
       - name: Contract, lifecycle, transport and publication safety checks
         run: |
           set -euo pipefail
@@ -113,8 +114,8 @@ jobs:
           python - <<'PY'
           from pathlib import Path
           s=Path('/tmp/tv-preview-instrumentation.txt').read_text()
-          assert 'OK (6 tests)' in s and 'FAILURES' not in s and 'INSTRUMENTATION_FAILED' not in s,s
-          print('ACTUAL_ANDROID_PREVIEW_CONTROLLER=6_PASS_LOCAL_VIDEO_NOT_PROVIDER_PLAYBACK')
+          assert 'OK (7 tests)' in s and 'FAILURES' not in s and 'INSTRUMENTATION_FAILED' not in s,s
+          print('ACTUAL_ANDROID_PREVIEW_CONTROLLER=7_PASS_LOCAL_VIDEO_NOT_PROVIDER_PLAYBACK')
           PY
       - name: Verify signatures with disposable fixtures and original public certificate reference
         run: |
@@ -132,7 +133,7 @@ jobs:
           from pathlib import Path
           import json,os,subprocess
           p=Path('tools/tv-first/VALIDATION.json')
-          p.write_text(json.dumps({'schema':'ghartv.tv-first-validation.v1','workflow_run':os.environ['GITHUB_RUN_ID'],'version':'0.6.0-rc9-tv-first','version_code':26,'actual_android_release_compile':'PASS','production_preview_state_machine_checks':29,'actual_android_controller_tests':6,'android_test_media':'GENERATED_LOCAL_DEBUG_FIXTURE_WITH_AUDIO_NO_PROVIDER_CREDENTIALS','android_coverage':['automatic_first_frame','audio_disabled_and_muted','12_second_stop_no_loop','last_focused_channel_only','Find_focus_cancels_before_fetch','startup_timeout_no_late_picture','explicit_saved_off','resume_same_card'],'browser':'PASS_REAL_HTTP_CHROMIUM_CONTROLLED_DATA','signature_cases':'PASS_DISPOSABLE_FIXTURES','owner_mac_execution':False,'live_provider_playback':False,'production_changed':False,'rollback25_activated':False,'native_flixmomo_playback':'NOT_IMPLEMENTED','tor_routing':'NOT_IMPLEMENTED','new_ui_layout':'NO_REDIRECT_TO_ONE_GUIDE'},indent=2)+'\n')
+          p.write_text(json.dumps({'schema':'ghartv.tv-first-validation.v1','workflow_run':os.environ['GITHUB_RUN_ID'],'version':'0.6.0-rc9-tv-first','version_code':26,'actual_android_release_compile':'PASS','production_preview_state_machine_checks':29,'actual_android_controller_tests':7,'android_test_media':'GENERATED_LOCAL_DEBUG_FIXTURE_WITH_AUDIO_NO_PROVIDER_CREDENTIALS','android_coverage':['automatic_first_frame','audio_disabled_and_muted','12_second_stop_no_loop','last_focused_channel_only','Find_focus_cancels_before_fetch','startup_timeout_no_late_picture','explicit_saved_off','resume_same_card','stable_id_despite_renumbering'],'browser':'PASS_REAL_HTTP_CHROMIUM_CONTROLLED_DATA','signature_cases':'PASS_DISPOSABLE_FIXTURES','owner_mac_execution':False,'live_provider_playback':False,'production_changed':False,'rollback25_activated':False,'native_flixmomo_playback':'NOT_IMPLEMENTED','tor_routing':'NOT_IMPLEMENTED','new_ui_layout':'NO_REDIRECT_TO_ONE_GUIDE'},indent=2)+'\n')
           names=json.loads(Path('/tmp/tv-first-targets.json').read_text())+[str(p)]
           subprocess.run(['git','add','--',*names],check=True)
           PY
