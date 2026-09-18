@@ -90,33 +90,7 @@ jobs:
           PY
       - name: Real Android controller first-frame mute focus and expiry tests
         timeout-minutes: 5
-        run: |
-          set -euo pipefail
-          sudo chmod 666 /dev/kvm
-          echo no | avdmanager create avd -n NovaPreviewCI -k 'system-images;android-30;google_apis;x86_64' --force
-          "$ANDROID_HOME/emulator/emulator" -avd NovaPreviewCI -port 5556 -no-window -no-audio -no-boot-anim -no-snapshot -gpu swiftshader_indirect -accel on > /tmp/tv-preview-emulator.log 2>&1 &
-          trap 'adb -s emulator-5556 emu kill >/dev/null 2>&1 || true' EXIT
-          python - <<'PY'
-          import subprocess,time
-          end=time.monotonic()+150
-          while time.monotonic()<end:
-            try:
-              p=subprocess.run(['adb','-s','emulator-5556','shell','getprop','sys.boot_completed'],capture_output=True,text=True,timeout=4)
-              if p.stdout.strip()=='1':break
-            except subprocess.TimeoutExpired:pass
-            time.sleep(2)
-          else:raise RuntimeError('CI_EMULATOR_BOOT_TIMEOUT')
-          PY
-          adb -s emulator-5556 shell input keyevent 82
-          adb -s emulator-5556 install -r -g android-tv/app/build/outputs/apk/debug/app-debug.apk
-          adb -s emulator-5556 install -r -g android-tv/app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk
-          timeout 150 adb -s emulator-5556 shell am instrument -w -r in.ghartv.nova.test/androidx.test.runner.AndroidJUnitRunner | tee /tmp/tv-preview-instrumentation.txt
-          python - <<'PY'
-          from pathlib import Path
-          s=Path('/tmp/tv-preview-instrumentation.txt').read_text()
-          assert 'OK (7 tests)' in s and 'FAILURES' not in s and 'INSTRUMENTATION_FAILED' not in s,s
-          print('ACTUAL_ANDROID_PREVIEW_CONTROLLER=7_PASS_LOCAL_VIDEO_NOT_PROVIDER_PLAYBACK')
-          PY
+        run: bash .tv-first-stage/run_android.sh
       - name: Verify signatures with disposable fixtures and original public certificate reference
         run: |
           set -euo pipefail
