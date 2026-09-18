@@ -1,0 +1,31 @@
+name: Nova TV experience contract
+on:
+  push:
+    branches: ['codex/ghartv-remove-auto-preview']
+    paths: ['android-tv/**','TV_EXPERIENCE_CONTRACT.json','OWNER_REVIEW_REQUIREMENTS.json','tools/tv-first/**','tools/owner_review.command.in','tools/package_owner_review.py','.github/workflows/tv-experience-contract.yml']
+  pull_request:
+    paths: ['android-tv/**','TV_EXPERIENCE_CONTRACT.json','OWNER_REVIEW_REQUIREMENTS.json','tools/tv-first/**','tools/owner_review.command.in','tools/package_owner_review.py','.github/workflows/tv-experience-contract.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  contract:
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    env:
+      PYTHONDONTWRITEBYTECODE: '1'
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+      - name: Check current TV experience and delivery identities
+        run: python tools/tv-first/check_contract.py
+      - name: Exercise the production preview ownership state machine
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/nova-preview-contract"
+          javac -d "$RUNNER_TEMP/nova-preview-contract" android-tv/app/src/main/java/in/ghartv/nova/PreviewGate.java tools/tv-first/PreviewGateSmoke.java
+          java -cp "$RUNNER_TEMP/nova-preview-contract" PreviewGateSmoke
+          echo 'FAST_CONTRACT_GATE_ONLY_NOT_AN_ANDROID_OR_PROVIDER_PLAYBACK_TEST'
