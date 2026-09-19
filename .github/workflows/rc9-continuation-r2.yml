@@ -1,0 +1,50 @@
+name: GharTV RC9 continuation R2
+on:
+  push:
+    paths: ['.github/workflows/rc9-continuation-r2.yml']
+permissions:
+  contents: write
+jobs:
+  package:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      GH_TOKEN: ${{ github.token }}
+      PYTHONDONTWRITEBYTECODE: '1'
+    steps:
+      - uses: actions/checkout@v5
+      - name: Verify published source bindings
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import subprocess
+          expected={'resource_transition.py':'b1766761edb3b31659525e1feb4864719b5df304','build_rc9_r2.py':'f11d1ed2d54e2d742c240efe41b579668138f36e','check_transition.py':'7818685e248696ea32f1f4908096d7104b22d422','GHARTV_SUCCESSOR_HANDOFF.md':'2fc50213f0d7bab0b1b910f484237c49cd2b0daf','OPERON_RESOURCE_DIRECTIVE.md':'772306bc8a9130c88038d713efb053f0c2c7a3de','GITHUB_AUDIT.md':'4e887c9b1cff105300a8c09b268df895514b5187'}
+          for n,h in expected.items():assert subprocess.check_output(['git','hash-object','tools/transition-20260919/'+n],text=True).strip()==h,n
+          PY
+      - name: Focused mutation-preservation and delivery checks
+        run: python tools/transition-20260919/check_transition.py -v
+      - name: Retrieve unchanged original review and repackage delivery only
+        run: |
+          set -euo pipefail
+          curl --proto '=https' --proto-redir '=https' -fLsS --connect-timeout 15 --max-time 120 --retry 1 https://github.com/AmritSinghGit/ghartv/releases/download/v0.6.0-rc9/GHARTV_RC9_REVIEW.zip -o /tmp/rc9.zip
+          python tools/transition-20260919/build_rc9_r2.py /tmp/rc9.zip /tmp/rc9-r2 tools/transition-20260919
+          python - <<'PY'
+          from pathlib import Path
+          import zipfile,subprocess,json,os
+          p=Path('/tmp/rc9-r2/GHARTV_RC9_CONTINUATION_R2.zip')
+          with zipfile.ZipFile(p) as z:
+            for i,n in enumerate(z.namelist()):
+              if n.endswith('.command'):
+                f=Path('/tmp/check-'+str(i)+'.command');f.write_bytes(z.read(n));subprocess.run(['bash','-n',str(f)],check=True)
+          v=json.loads(Path('/tmp/rc9-r2/DELIVERY.json').read_text());v.update(control_source=os.environ['GITHUB_SHA'],workflow_run=os.environ['GITHUB_RUN_ID'],focused_tests=20,checks='PASS_CONTROLLED_DOCKER_AND_BOOT_FIXTURES_TEMPORARY_FILES_NO_OWNER_MAC',original_android_tests='HISTORICAL_UNCHANGED_APK_SEVEN_INSTRUMENTATION_TESTS_NOT_RERUN',local_execution=False)
+          Path('/tmp/rc9-r2/DELIVERY.json').write_text(json.dumps(v,indent=2)+'\n')
+          print(json.dumps(v))
+          PY
+      - name: Publish review transport only; never update public feed or latest alias
+        run: |
+          gh release create v0.6.0-rc9-continuation-r2 /tmp/rc9-r2/GHARTV_RC9_CONTINUATION_R2.zip /tmp/rc9-r2/DELIVERY.json --repo AmritSinghGit/ghartv --target "$GITHUB_SHA" --prerelease --latest=false --title 'GharTV RC9 continuation R2 — resource-first handoff, unchanged Android code26' --notes 'Same compiled RC9/code26 APK and companion. Corrected delivery preserves verified signed bytes before emulator boot, retains precise Hold reasons, extends observation only for the same already-started VM, and checks host-pressure admission. Includes canonical successor handoff, ten-lane GitHub checkpoint audit and one-shot private Docker/Git audit with explicitly confirmed reversible suspension of two old IdentiFlow frontend/backend pairs only. No databases/volumes/images/branches deleted, no new controller, no automatic APK install or public rollout. Twenty focused controlled tests passed; actual Mac execution and live playback remain pending. Start with RUN_HANDOFF_AND_RESOURCE_REVIEW.command; use RUN_GHARTV_REVIEW.command only afterward when resources allow.'
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ghartv-rc9-continuation-r2
+          path: /tmp/rc9-r2/*
+          retention-days: 7
