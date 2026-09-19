@@ -1,0 +1,81 @@
+name: GharTV RC10.1 startup repair R2
+on:
+  push:
+    branches: [codex/ghartv-remove-auto-preview]
+    paths: ['.github/workflows/rc101-startup-r2.yml']
+permissions:
+  contents: write
+concurrency:
+  group: ghartv-rc101-startup-r2
+  cancel-in-progress: false
+jobs:
+  apple-startup:
+    runs-on: macos-15
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Execute all path-protection tests on actual Apple aliases
+        run: python tools/rc101-r2/test_bootstrap.py
+      - name: Package the same compiled application with the repaired bootstrap
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/ghartv-r2"
+          curl --proto '=https' --proto-redir '=https' -fLsS --connect-timeout 20 --max-time 180 --retry 2 https://github.com/AmritSinghGit/ghartv/releases/download/v0.6.0-rc10.1/GHARTV_RC10_1_REVIEW.zip -o "$RUNNER_TEMP/rc101.zip"
+          python tools/rc101-r2/package.py "$RUNNER_TEMP/rc101.zip" "$RUNNER_TEMP/ghartv-r2"
+      - name: Launch exact web review twice through the real var alias
+        run: python tools/rc101-r2/mac_web_smoke.py "$RUNNER_TEMP/ghartv-r2/GHARTV_RC10_1_R2_REVIEW.zip" "$RUNNER_TEMP/ghartv-r2"
+      - name: Generate one download-and-review command from the actual bundle checksum
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import os,json,subprocess,hashlib
+          out=Path(os.environ['RUNNER_TEMP'])/'ghartv-r2'
+          record=json.loads((out/'DELIVERY_R2.json').read_text())
+          text='''#!/bin/bash
+          set -euo pipefail
+          umask 077
+          if [ "$(uname -s)" != Darwin ]; then echo 'This GharTV review runs on macOS.'; exit 2; fi
+          d="$(mktemp -d "${TMPDIR:-/tmp}/ghartv-r2.XXXXXX")"
+          phase=DOWNLOAD
+          finish(){
+            result=$?
+            cd /; rm -rf -- "$d"
+            if [ "$result" -ne 0 ] && [ "$phase" != REVIEW ]; then
+              printf '\nGHARTV_DOWNLOAD_HANDOFF\nSTATUS=ACTION_REQUIRED\nPHASE=%s\nEXIT_CODE=%s\nAPK_INSTALLED=false\nPRODUCTION_CHANGED=false\n' "$phase" "$result"
+              printf '\nPress Enter to finish: '; read -r unused </dev/tty || true
+            fi
+          }
+          trap finish EXIT
+          printf '\nGharTV Nova RC10.1 · review startup repair R2\n'
+          curl --proto '=https' --proto-redir '=https' -fL --show-error --connect-timeout 20 --max-time 180 --retry 2 'https://github.com/AmritSinghGit/ghartv/releases/download/v0.6.0-rc10.1-startup-r2/GHARTV_RC10_1_R2_REVIEW.zip' -o "$d/review.zip"
+          phase=CHECKSUM
+          printf '%s  %s\n' '@HASH@' "$d/review.zip" | shasum -a 256 -c -
+          phase=EXTRACT
+          unzip -q "$d/review.zip" -d "$d"
+          phase=REVIEW
+          /bin/bash "$d/GHARTV_RC10_1_R2_REVIEW/RUN_GHARTV_REVIEW.command" "$@"
+          '''.replace('@HASH@',record['bundle_sha256'])
+          script=out/'GHARTV_REVIEW_RC10_1_R2.command';script.write_text(text);script.chmod(0o700)
+          subprocess.run(['bash','-n',str(script)],check=True)
+          record.update(workflow_run=os.environ['GITHUB_RUN_ID'],mac_bootstrap_tests=14,mac_full_web_launches=2,mac_test='MAC_WEB_VALIDATION.json',download_command_sha256=hashlib.sha256(script.read_bytes()).hexdigest())
+          (out/'DELIVERY_R2.json').write_text(json.dumps(record,indent=2)+'\n')
+          (out/'SHA256SUMS').write_text(''.join(hashlib.sha256(p.read_bytes()).hexdigest()+'  '+p.name+'\n' for p in sorted(out.iterdir()) if p.is_file() and p.name!='SHA256SUMS'))
+          PY
+      - name: Publish the exact tested review; no public TV feed change
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          gh release create v0.6.0-rc10.1-startup-r2 "$RUNNER_TEMP/ghartv-r2/GHARTV_RC10_1_R2_REVIEW.zip" "$RUNNER_TEMP/ghartv-r2/GHARTV_REVIEW_RC10_1_R2.command" "$RUNNER_TEMP/ghartv-r2/DELIVERY_R2.json" "$RUNNER_TEMP/ghartv-r2/MAC_WEB_VALIDATION.json" "$RUNNER_TEMP/ghartv-r2/SHA256SUMS" --repo AmritSinghGit/ghartv --target "$GITHUB_SHA" --prerelease --latest=false --title 'GharTV RC10.1 — startup repair R2, tested on Apple Silicon' --notes 'Fixes the startup failure caused by the macOS /var alias. Default command opens the web and performs the Android review rather than prepare-only. APK code28, companion and original-signer core launcher remain byte-identical to RC10.1. Path protection, real Apple aliases and two actual isolated web launches are tested. Original local signing, named Nova emulator, provider playback and household promotion remain distinct. No production feed, key, owner source or database changed.'
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: ghartv-rc101-startup-r2
+          path: ${{ runner.temp }}/ghartv-r2/*
+          retention-days: 7
