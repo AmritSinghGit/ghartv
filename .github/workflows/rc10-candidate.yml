@@ -36,16 +36,16 @@ jobs:
         run: |
           set -euo pipefail
           test "${GITHUB_REF_NAME}" = codex/ghartv-remove-auto-preview
-          if grep -q 'versionCode = 26' android-tv/app/build.gradle.kts; then python tools/rc10/upgrade.py; fi
-          grep -q 'versionCode = 27' android-tv/app/build.gradle.kts
           python tools/rc10/harden.py
+          python tools/rc10/provider_fix.py
+          grep -q 'versionCode = 28' android-tv/app/build.gradle.kts
           python -m py_compile tools/package_owner_review.py
           python tools/tv-first/check_contract.py
           mkdir -p /tmp/preview-test
           javac -d /tmp/preview-test android-tv/app/src/main/java/in/ghartv/nova/PreviewGate.java tools/tv-first/PreviewGateSmoke.java
           java -cp /tmp/preview-test PreviewGateSmoke
           npm ci --ignore-scripts --prefix web-player
-          if test -f web-player/browser-tools/package-lock.json; then npm ci --ignore-scripts --prefix web-player/browser-tools; else npm install --ignore-scripts --prefix web-player/browser-tools; fi
+          npm ci --ignore-scripts --prefix web-player/browser-tools
           node --test web-player/test/*.mjs | tee /tmp/rc10-node-tests.txt
           git diff --check
       - name: Commit native integration before compilation; refuse competing branch changes
@@ -57,9 +57,8 @@ jobs:
           git config user.name 'GharTV candidate builder'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git add -u
-          git add web-player/browser-tools/package-lock.json
           if ! git diff --cached --quiet; then
-            git commit -m 'feat(ghartv): integrate RC10 code27 web-first movies candidate'
+            git commit -m 'fix(ghartv): integrate RC10.1 code28 normal provider verification'
             git push origin HEAD:refs/heads/codex/ghartv-remove-auto-preview
           fi
           sha="$(git rev-parse HEAD)"
@@ -103,24 +102,45 @@ jobs:
           import json,os,subprocess,zipfile,hashlib
           from pathlib import Path
           out=Path('/tmp/ghartv-owner-candidate')
-          v={'schema':'ghartv.rc10-validation.v1','application_source':subprocess.check_output(['git','rev-parse','HEAD'],text=True).strip(),'workflow_run':os.environ['GITHUB_RUN_ID'],'android_release':'COMPILED_UNSIGNED','instrumentation_package':'COMPILED_NOT_EXECUTED','node_tests':19,'tv_contract':'PASS_9_SOURCE_RULES','preview_gate':'PASS_JAVA_SMOKE','web_ui':json.loads((out/'UI_VALIDATION.json').read_text()),'provider_probe':json.loads((out/'LIVE_PROVIDER_CHECK.json').read_text()),'owner_mac_execution':False,'physical_tv_playback':False,'new_signed_apk':False,'production_feed_changed':False,'native_writer_lease':'UNBOUND_REMOTE_SOURCE_ONLY'}
+          v={'schema':'ghartv.rc10-validation.v1','application_source':subprocess.check_output(['git','rev-parse','HEAD'],text=True).strip(),'workflow_run':os.environ['GITHUB_RUN_ID'],'android_release':'COMPILED_UNSIGNED','instrumentation_package':'COMPILED_NOT_EXECUTED','node_tests':20,'tv_contract':'PASS_9_SOURCE_RULES','preview_gate':'PASS_JAVA_SMOKE','web_ui':json.loads((out/'UI_VALIDATION.json').read_text()),'provider_probe':json.loads((out/'LIVE_PROVIDER_CHECK.json').read_text()),'owner_mac_execution':False,'physical_tv_playback':False,'new_signed_apk':False,'production_feed_changed':False,'native_writer_lease':'UNBOUND_REMOTE_SOURCE_ONLY'}
           (out/'VALIDATION.json').write_text(json.dumps(v,indent=2)+'\n')
           delivery=json.loads((out/'DELIVERY.json').read_text());delivery.update(workflow_run=os.environ['GITHUB_RUN_ID'],validation='VALIDATION.json');(out/'DELIVERY.json').write_text(json.dumps(delivery,indent=2)+'\n')
-          with zipfile.ZipFile(out/'GHARTV_RC10_REVIEW.zip') as z:
+          with zipfile.ZipFile(out/'GHARTV_RC10_1_REVIEW.zip') as z:
             assert z.testzip() is None
             for n in ('RUN_GHARTV_WEB.command','PREPARE_GHARTV_UPDATE.command'):
-              p=Path('/tmp')/n;p.write_bytes(z.read('GHARTV_RC10_REVIEW/'+n));subprocess.run(['bash','-n',str(p)],check=True)
-          subprocess.run(['git','archive','--format=zip','HEAD','-o',str(out/'GHARTV_RC10_SOURCE.zip')],check=True)
+              p=Path('/tmp')/n;p.write_bytes(z.read('GHARTV_RC10_1_REVIEW/'+n));subprocess.run(['bash','-n',str(p)],check=True)
+          subprocess.run(['git','archive','--format=zip','HEAD','-o',str(out/'GHARTV_RC10_1_SOURCE.zip')],check=True)
           (out/'SHA256SUMS').write_text(''.join(hashlib.sha256(p.read_bytes()).hexdigest()+'  '+p.name+'\n' for p in sorted(out.iterdir()) if p.is_file() and p.name!='SHA256SUMS'))
           PY
       - name: Publish review only; never change latest feed or production approval
         run: |
           set -euo pipefail
-          gh release create v0.6.0-rc10 /tmp/ghartv-owner-candidate/GHARTV_RC10_REVIEW.zip /tmp/ghartv-owner-candidate/GHARTV_RC10_SOURCE.zip /tmp/ghartv-owner-candidate/GharTV-review-unsigned.apk /tmp/ghartv-owner-candidate/GharTV-review-companion.zip /tmp/ghartv-owner-candidate/review-manifest.json /tmp/ghartv-owner-candidate/GHARTV_SYNC_CURRENT_AND_REPORT.command /tmp/ghartv-owner-candidate/DELIVERY.json /tmp/ghartv-owner-candidate/VALIDATION.json /tmp/ghartv-owner-candidate/SHA256SUMS --repo AmritSinghGit/ghartv --target '${{ steps.source.outputs.sha }}' --prerelease --latest=false --title 'GharTV Nova RC10 — web first, independent FlixMomo, optional Tor browser route' --notes-file REVIEW_060_RC10.md
+          gh release create v0.6.0-rc10.1 /tmp/ghartv-owner-candidate/GHARTV_RC10_1_REVIEW.zip /tmp/ghartv-owner-candidate/GHARTV_RC10_1_SOURCE.zip /tmp/ghartv-owner-candidate/GharTV-review-unsigned.apk /tmp/ghartv-owner-candidate/GharTV-review-companion.zip /tmp/ghartv-owner-candidate/review-manifest.json /tmp/ghartv-owner-candidate/GHARTV_SYNC_CURRENT_AND_REPORT.command /tmp/ghartv-owner-candidate/DELIVERY.json /tmp/ghartv-owner-candidate/VALIDATION.json /tmp/ghartv-owner-candidate/SHA256SUMS --repo AmritSinghGit/ghartv --target '${{ steps.source.outputs.sha }}' --prerelease --latest=false --title 'GharTV Nova RC10.1 — web first, independent films and provider verification' --notes-file REVIEW_060_RC10.md
+      - name: Point the already-published website to this exact review; preserve production feed
+        run: |
+          python - <<'PY'
+          import base64,json,os,urllib.request
+          from pathlib import Path
+          endpoint='https://api.github.com/repos/AmritSinghGit/ghartv/contents/docs/index.html'
+          def api(method,url,data=None):
+            req=urllib.request.Request(url,method=method,headers={'Authorization':'Bearer '+os.environ['GH_TOKEN'],'Accept':'application/vnd.github+json','Content-Type':'application/json'},data=json.dumps(data).encode() if data else None)
+            with urllib.request.urlopen(req,timeout=20) as r:return json.load(r)
+          record={'production_feed_changed':False,'expected_prior_blob':'e1e596f9e20b72ebb3567bc1843cec3f48f3dee9'}
+          try:
+            old=api('GET',endpoint+'?ref=main')
+            assert old['sha']==record['expected_prior_blob'],'PUBLIC_PAGE_ADVANCED_PRESERVED'
+            text=base64.b64decode(old['content']).decode()
+            text=text.replace('v0.6.0-rc10/','v0.6.0-rc10.1/').replace('v0.6.0-rc10"','v0.6.0-rc10.1"').replace('GHARTV_RC10_REVIEW','GHARTV_RC10_1_REVIEW').replace('RC10 · web + independent films · code27','RC10.1 · web + independent films · code28')
+            text=text.replace('Live FlixMomo search remains unverified after a cloud timeout; Tor and physical-TV acceptance are still pending.','Normal provider verification is supported, with a manual Browse FlixMomo option. Live playback, Tor and physical-TV acceptance are still pending.')
+            saved=api('PUT',endpoint,{'message':'docs(ghartv): link the verified RC10.1 review; household feed unchanged','branch':'main','sha':old['sha'],'content':base64.b64encode(text.encode()).decode()})
+            record.update(status='SOURCE_PUBLISHED_PAGES_DEPLOYMENT_SEPARATE',commit=saved['commit']['sha'])
+          except Exception as e:record.update(status='PUBLIC_SITE_UPDATE_HELD',reason=type(e).__name__)
+          Path('/tmp/ghartv-owner-candidate/PUBLISHED_SITE.json').write_text(json.dumps(record,indent=2)+'\n');print(json.dumps(record))
+          PY
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: ghartv-rc10-review
+          name: ghartv-rc10-1-review
           path: |
             /tmp/ghartv-owner-candidate/*
             /tmp/ghartv-ui/*
