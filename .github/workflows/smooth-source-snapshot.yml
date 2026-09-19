@@ -7,12 +7,13 @@ permissions:
 jobs:
   snapshot:
     runs-on: ubuntu-latest
-    timeout-minutes: 2
+    timeout-minutes: 3
     steps:
       - uses: actions/checkout@v5
+      # RC10 successor: archive this exact existing implementation, never main or One Guide.
       - run: git archive --format=zip HEAD -o /tmp/ghartv-smooth-source.zip
       - uses: actions/upload-artifact@v4
         with:
           name: ghartv-smooth-source
           path: /tmp/ghartv-smooth-source.zip
-          retention-days: 2
+          retention-days: 3
