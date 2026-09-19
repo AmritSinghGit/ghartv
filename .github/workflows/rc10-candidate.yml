@@ -29,18 +29,23 @@ jobs:
           distribution: temurin
           java-version: '17'
       - uses: android-actions/setup-android@v3
+        with:
+          packages: platform-tools
+          log-accepted-android-sdk-licenses: false
       - name: Integrate only the existing implementation and validate native sources
         run: |
           set -euo pipefail
           test "${GITHUB_REF_NAME}" = codex/ghartv-remove-auto-preview
-          python tools/rc10/upgrade.py
+          if grep -q 'versionCode = 26' android-tv/app/build.gradle.kts; then python tools/rc10/upgrade.py; fi
+          grep -q 'versionCode = 27' android-tv/app/build.gradle.kts
+          python tools/rc10/harden.py
           python -m py_compile tools/package_owner_review.py
           python tools/tv-first/check_contract.py
           mkdir -p /tmp/preview-test
           javac -d /tmp/preview-test android-tv/app/src/main/java/in/ghartv/nova/PreviewGate.java tools/tv-first/PreviewGateSmoke.java
-          java -cp /tmp/preview-test in.ghartv.nova.PreviewGateSmoke
+          java -cp /tmp/preview-test PreviewGateSmoke
           npm ci --ignore-scripts --prefix web-player
-          npm ci --ignore-scripts --prefix web-player/browser-tools
+          if test -f web-player/browser-tools/package-lock.json; then npm ci --ignore-scripts --prefix web-player/browser-tools; else npm install --ignore-scripts --prefix web-player/browser-tools; fi
           node --test web-player/test/*.mjs | tee /tmp/rc10-node-tests.txt
           git diff --check
       - name: Commit native integration before compilation; refuse competing branch changes
@@ -52,15 +57,17 @@ jobs:
           git config user.name 'GharTV candidate builder'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git add -u
-          git commit -m 'feat(ghartv): integrate RC10 code27 web-first movies candidate'
-          git push origin HEAD:refs/heads/codex/ghartv-remove-auto-preview
+          git add web-player/browser-tools/package-lock.json
+          if ! git diff --cached --quiet; then
+            git commit -m 'feat(ghartv): integrate RC10 code27 web-first movies candidate'
+            git push origin HEAD:refs/heads/codex/ghartv-remove-auto-preview
+          fi
           sha="$(git rev-parse HEAD)"
           echo "sha=$sha" >> "$GITHUB_OUTPUT"
           echo "GHARTV_WEB_SHA=$sha" >> "$GITHUB_ENV"
       - name: Compile Android release and instrumentation package
         run: |
           set -euo pipefail
-          yes | sdkmanager --licenses >/dev/null || true
           sdkmanager 'platforms;android-36' 'build-tools;36.0.0'
           cd android-tv
           chmod +x gradlew
@@ -93,10 +100,10 @@ jobs:
           cp /tmp/ghartv-ui/*.json /tmp/ghartv-owner-candidate/
           cp /tmp/rc10-node-tests.txt /tmp/ghartv-owner-candidate/
           python - <<'PY'
-          import json,os,subprocess,zipfile
+          import json,os,subprocess,zipfile,hashlib
           from pathlib import Path
           out=Path('/tmp/ghartv-owner-candidate')
-          v={'schema':'ghartv.rc10-validation.v1','application_source':subprocess.check_output(['git','rev-parse','HEAD'],text=True).strip(),'workflow_run':os.environ['GITHUB_RUN_ID'],'android_release':'COMPILED_UNSIGNED','instrumentation_package':'COMPILED_NOT_EXECUTED','node_tests':18,'tv_contract':'PASS_9_SOURCE_RULES','preview_gate':'PASS_JAVA_SMOKE','web_ui':json.loads((out/'UI_VALIDATION.json').read_text()),'provider_probe':json.loads((out/'LIVE_PROVIDER_CHECK.json').read_text()),'owner_mac_execution':False,'physical_tv_playback':False,'new_signed_apk':False,'production_feed_changed':False,'native_writer_lease':'UNBOUND_REMOTE_SOURCE_ONLY'}
+          v={'schema':'ghartv.rc10-validation.v1','application_source':subprocess.check_output(['git','rev-parse','HEAD'],text=True).strip(),'workflow_run':os.environ['GITHUB_RUN_ID'],'android_release':'COMPILED_UNSIGNED','instrumentation_package':'COMPILED_NOT_EXECUTED','node_tests':19,'tv_contract':'PASS_9_SOURCE_RULES','preview_gate':'PASS_JAVA_SMOKE','web_ui':json.loads((out/'UI_VALIDATION.json').read_text()),'provider_probe':json.loads((out/'LIVE_PROVIDER_CHECK.json').read_text()),'owner_mac_execution':False,'physical_tv_playback':False,'new_signed_apk':False,'production_feed_changed':False,'native_writer_lease':'UNBOUND_REMOTE_SOURCE_ONLY'}
           (out/'VALIDATION.json').write_text(json.dumps(v,indent=2)+'\n')
           delivery=json.loads((out/'DELIVERY.json').read_text());delivery.update(workflow_run=os.environ['GITHUB_RUN_ID'],validation='VALIDATION.json');(out/'DELIVERY.json').write_text(json.dumps(delivery,indent=2)+'\n')
           with zipfile.ZipFile(out/'GHARTV_RC10_REVIEW.zip') as z:
@@ -104,6 +111,7 @@ jobs:
             for n in ('RUN_GHARTV_WEB.command','PREPARE_GHARTV_UPDATE.command'):
               p=Path('/tmp')/n;p.write_bytes(z.read('GHARTV_RC10_REVIEW/'+n));subprocess.run(['bash','-n',str(p)],check=True)
           subprocess.run(['git','archive','--format=zip','HEAD','-o',str(out/'GHARTV_RC10_SOURCE.zip')],check=True)
+          (out/'SHA256SUMS').write_text(''.join(hashlib.sha256(p.read_bytes()).hexdigest()+'  '+p.name+'\n' for p in sorted(out.iterdir()) if p.is_file() and p.name!='SHA256SUMS'))
           PY
       - name: Publish review only; never change latest feed or production approval
         run: |
