@@ -2,7 +2,7 @@
 # RC9 exact review and approval workflow. Restore existing configured signing; never generate a key or prompt for passwords.
 set -u
 umask 077
-printf '\033[38;5;51m\nGharTV · CYAN REVIEW 14 · 0.6.0 RC9 · automatic focus-owned preview restored + TV-first regression checks · artifact review · development checkout preserved\033[0m\n'
+printf '\033[38;5;51m\nGharTV · CYAN REVIEW 14 R2 · 0.6.0 RC9 · automatic focus-owned preview restored + TV-first regression checks · artifact review · development checkout preserved\033[0m\n'
 if ! command -v python3 >/dev/null 2>&1; then echo 'Python 3 is required; no TV or source changed.'; exit 1; fi
 CLOSE_MARKER="${TMPDIR:-/tmp}/ghartv-review-close-$$"
 export GHARTV_CLOSE_MARKER="$CLOSE_MARKER"
@@ -21,7 +21,7 @@ PROJECT=Path(os.environ.get('GHARTV_PROJECT',str(HOME/'Downloads/GharTV_Nova_v0.
 RUNTIME=STATE/'runtime-current';COLLECTOR='https://ghartv-telemetry.ghartv-47d9a0.workers.dev'; manifest={}
 EMBEDDED_MANIFEST='{\n  "schema": "ghartv.review-manifest.v2",\n  "source_sha": "c20e3ef5dc8ff5dbee52c338930a5c4ac30157e8",\n  "branch": "codex/ghartv-remove-auto-preview",\n  "pr": 1,\n  "version_name": "0.6.0-rc9-tv-first",\n  "version_code": 26,\n  "unsigned_sha256": "c095270d1da6fcf10382f8739fab03175a739d34636255f9748760096876b7a0",\n  "companion_sha256": "7de040fd57c1308b24fd822c0b31c4c797768064c3d36aad2fdc744b349db2c9",\n  "production_unchanged": true,\n  "owner_signed_apk_sha256": null,\n  "owner_mac_run": "NOT_EXECUTED",\n  "ai_super_resolution": "NOT_IMPLEMENTED"\n}\n'
 IST=dt.timezone(dt.timedelta(hours=5,minutes=30))
-RUN_ID='GHARTV-CYAN-14-'+dt.datetime.now(dt.timezone.utc).strftime('%Y%m%dT%H%M%SZ')+'-'+str(os.getpid()); RUN=STATE/'runs'/RUN_ID
+RUN_ID='GHARTV-CYAN-14R2-'+dt.datetime.now(dt.timezone.utc).strftime('%Y%m%dT%H%M%SZ')+'-'+str(os.getpid()); RUN=STATE/'runs'/RUN_ID
 parser=argparse.ArgumentParser();parser.add_argument('--memory-only',action='store_true');parser.add_argument('--signed-apk',type=Path);parser.add_argument('--noninteractive',action='store_true');parser.add_argument('--skip-backend-deploy',action='store_true');parser.add_argument('--bundled-review',action='store_true');args=parser.parse_args(sys.argv[2:])
 r=dict(review_slot='GREEN_LOCAL_REVIEW',public_slot='BLUE_HOUSEHOLD_RELEASE',development='SOURCE_ONLY_CHECKOUT_READ_ONLY',time_ist=dt.datetime.now(IST).isoformat(),time_utc=dt.datetime.now(dt.timezone.utc).isoformat(),checkout='READ_ONLY_NOT_INSPECTED',backend='NOT_CHECKED',web_player='NOT_STARTED',run_id=RUN_ID,lane_id='ghartv',repository=REPO,operon_session=os.environ.get('OPERON_SESSION_ID','UNBOUND'),
  production_source=PROD,review_source=SOURCE,version=VERSION,version_code=26,unsigned_apk_sha256=UNSIGNED,signed_apk_sha256='NOT_VERIFIED',
@@ -384,6 +384,66 @@ def configured_sign(signer,align,unsigned,candidate,environment):
  finally:
   private_env.clear();values.clear()
 
+
+def resource_preflight():
+ r['phase']='RESOURCE_PREFLIGHT'
+ if sys.platform!='darwin':raise Stop('MAC_ONLY_NO_ACTION')
+ measured=call(['/usr/sbin/sysctl','-n','kern.memorystatus_vm_pressure_level'],5,False).stdout.strip()
+ r['host_pressure_at_launch']={'1':'NORMAL','2':'WARNING','4':'CRITICAL'}.get(measured,'NOT_REPORTED')
+ # Do not start another heavyweight VM under pressure. Reusing an already booted
+ # exact Nova is allowed; this is not a declaration of good rendering performance.
+ if measured!='1':
+  adb=HOME/'Library/Android/sdk/platform-tools/adb'
+  boot=call([adb,'-s','emulator-5580','shell','getprop','sys.boot_completed'],4,False).stdout.strip() if adb.is_file() else ''
+  name=call([adb,'-s','emulator-5580','emu','avd','name'],4,False).stdout.splitlines() if boot=='1' else []
+  if not (boot=='1' and name and name[0].strip()==AVD):
+   raise Stop('HOST_PRESSURE_'+r['host_pressure_at_launch']+'_NO_NEW_EMULATOR: inspect the saved resource report and stop only identified idle workloads first')
+  r['resource_admission']='REUSE_ALREADY_BOOTED_NOVA_ONLY'
+ else:r['resource_admission']='HOST_PRESSURE_NORMAL'
+
+def preserve_verified_signed(candidate,digest_value):
+ cache=STATE/'verified-review-apks'/SOURCE;mkdir(cache)
+ dest=cache/(digest_value+'.apk');safe(dest)
+ if dest.exists():
+  if digest(dest)!=digest_value:raise Stop('PREPARED_SIGNED_CACHE_CONFLICT_PRESERVED')
+ else:
+  temp=cache/('.candidate-'+str(os.getpid()))
+  with open(temp,'xb') as out,open(candidate,'rb') as inp:shutil.copyfileobj(inp,out);out.flush();os.fsync(out.fileno())
+  temp.chmod(0o600)
+  if digest(temp)!=digest_value:raise Stop('PREPARED_SIGNED_CACHE_READBACK_FAILED')
+  os.replace(temp,dest)
+ write(CURRENT/'prepared-review-artifact.json',json.dumps({'source':SOURCE,'sha256':digest_value,'version_code':26,'installed':False,'certificate_verified':True},indent=2)+'\n')
+ r['prepared_signed_apk']='PERSISTED_AND_HASH_VERIFIED_BEFORE_EMULATOR_SELECTION'
+ r['prepared_signed_apk_path']=str(dest)
+ # Preserve technical identity now, even if boot later times out.
+ persist()
+
+def attach_with_boot_evidence(transport,sdk):
+ started=False
+ try:return transport.attach_or_start(sdk,RUN)
+ except transport.Hold as e:
+  reason=str(e)
+  if reason!='EMULATOR_BOOT_TIMEOUT_PROCESS_PRESERVED':raise Stop('EMULATOR_SELECTION_'+reason) from None
+ # Original helper already waited 150 s. Continue observing the SAME VM for
+ # another bounded 150 s: do not restart, change renderer, kill or create an AVD.
+ adb=sdk/'platform-tools/adb';deadline=time.monotonic()+150;tick=0
+ r['boot_wait']='EXISTING_VM_ADDITIONAL_150_SECONDS_NO_RESTART'
+ while time.monotonic()<deadline:
+  if tick%5==0:print('Waiting for the existing Nova VM to finish booting; no second emulator is being started…',flush=True)
+  tick+=1
+  try:
+   name=call([adb,'-s','emulator-5580','emu','avd','name'],4,False).stdout.splitlines()
+   if name and name[0].strip() not in ('',AVD):raise Stop('CANONICAL_AVD_CHANGED_DURING_BOOT_PRESERVED')
+   if name and name[0].strip()==AVD and call([adb,'-s','emulator-5580','shell','getprop','sys.boot_completed'],4,False).stdout.strip()=='1':
+    r['boot_wait']='EXISTING_VM_BOOT_VERIFIED_DURING_EXTENDED_WAIT'
+    return adb,any(x.get('stage')=='STARTED_EXISTING_AVD' for x in json.loads((RUN/'PORT_CHECK.json').read_text()).get('observations',[]))
+  except subprocess.TimeoutExpired:pass
+  time.sleep(2)
+ try:
+  port=json.loads((RUN/'PORT_CHECK.json').read_text());port['r2_boot_stage']='BOOT_TIMEOUT_AFTER_EXTENDED_OBSERVATION_PROCESS_PRESERVED';write(RUN/'PORT_CHECK.json',json.dumps(port,indent=2)+'\n')
+ except (OSError,ValueError):pass
+ raise Stop('EMULATOR_BOOT_TIMEOUT_AFTER_EXTENDED_OBSERVATION_PROCESS_PRESERVED')
+
 def review():
  print('\n2 / 5 · Verify exact cloud APK and reuse the existing local signing configuration.',flush=True)
  sdk=Path(os.environ.get('ANDROID_SDK_ROOT',str(HOME/'Library/Android/sdk')));tools=sorted(sdk.glob('build-tools/*/apksigner'),key=lambda p:tuple(map(int,re.findall(r'\d+',p.parent.name))))
@@ -421,6 +481,14 @@ def review():
     safe(args.signed_apk.expanduser());shutil.copyfile(args.signed_apk.expanduser(),c);r['signing_mode']='OWNER_SUPPLIED_SIGNED_APK'
    else:
     prior=CURRENT/ASSET;meta=CURRENT/'review-artifact.json';reuse=False
+    prepared=CURRENT/'prepared-review-artifact.json'
+    if prepared.is_file() and not prepared.is_symlink():
+     try:
+      pm=json.loads(prepared.read_text());ph=pm.get('sha256','')
+      if pm.get('source')==SOURCE and re.fullmatch('[a-f0-9]{64}',ph):
+       candidate_cache=STATE/'verified-review-apks'/SOURCE/(ph+'.apk');safe(candidate_cache)
+       if candidate_cache.is_file() and digest(candidate_cache)==ph:prior=candidate_cache;meta=prepared
+     except (ValueError,OSError):pass
     if prior.is_file() and meta.is_file() and not prior.is_symlink() and not meta.is_symlink():
      try:
       m=json.loads(meta.read_text());reuse=m.get('source')==SOURCE and m.get('sha256')==digest(prior)
@@ -438,6 +506,7 @@ def review():
    if not all(v in badging for v in ["name='in.ghartv.nova'","versionCode='26'","versionName='0.6.0-rc9-tv-first'"]):raise Stop('Wrong package or Android version')
    # Development checkout is intentionally untouched; verified artifact bytes are authoritative.
    h=digest(c);r['signed_apk_sha256']=h
+   preserve_verified_signed(c,h)
    r['review_release']='SIGNED_LOCAL_VERIFIED_GITHUB_PUBLICATION_PENDING';r['phase']='EMULATOR_SELECTION'
    print('4 / 5 · Update and open the same named emulator; no physical-TV change.',flush=True)
    target=CURRENT/ASSET;safe(target)
@@ -446,7 +515,7 @@ def review():
    spec=importlib.util.spec_from_file_location('ghartv_review_transport',RUNTIME/'tools/tv_local.py')
    transport=importlib.util.module_from_spec(spec);spec.loader.exec_module(transport)
    if (transport.AVD,transport.SERIAL,transport.PACKAGE)!=(AVD,'emulator-5580',PACKAGE):raise Stop('CANONICAL_TRANSPORT_TARGET_MISMATCH')
-   adb,started=transport.attach_or_start(sdk,RUN)
+   adb,started=attach_with_boot_evidence(transport,sdk)
    serial=transport.SERIAL;r['emulator_serial']=serial;r['started_existing_avd']=started
    codes=re.findall(r'versionCode=(\d+)',call([adb,'-s',serial,'shell','dumpsys','package',PACKAGE]).stdout)
    if codes and int(codes[0])>26:raise Stop('Newer version installed; no downgrade')
@@ -656,6 +725,9 @@ try:
  for p in (STATE,CURRENT,RUN):mkdir(p)
  lockpath=STATE/'owner-run.lock';safe(lockpath);lock=open(lockpath,'w');fcntl.flock(lock,fcntl.LOCK_EX|fcntl.LOCK_NB);lock_acquired=True
  r['network_recovery']=NETWORK_RECOVERY
+ r['delivery_revision']='RC9-CONTINUATION-R2'
+ r['control_launcher_sha256']=digest(SELF)
+ resource_preflight()
  recovery_note();persist()
  r['phase']='CONTINUITY';print('1 / 5 · Reconcile current handoff and update existing Obsidian note.',flush=True)
  note_text=reconcile()
@@ -664,9 +736,10 @@ try:
  persist()
  r['phase']='CHECKOUT_OBSERVATION_ONLY';sync_checkout()
  observe_production()
- r['status']='MEMORY_UPDATED' if r['obsidian']=='WRITTEN_AND_READBACK_VERIFIED' else 'CONTINUITY_REQUIRES_ATTENTION';cleanup()
+ r['status']='MEMORY_UPDATED' if r['obsidian']=='WRITTEN_AND_READBACK_VERIFIED' else 'CONTINUITY_REQUIRES_ATTENTION'
  if not args.memory_only:
   performance_snapshot('before');review()
+  if r['status']=='REVIEW_READY':cleanup()
 except Exception as e:
  r['status']='ACTION_REQUIRED';r['blocker']=str(e) if isinstance(e,Stop) else type(e).__name__
 finally:
