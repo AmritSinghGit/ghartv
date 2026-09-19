@@ -1,0 +1,48 @@
+name: GharTV RC10 public provider check
+on:
+  push:
+    branches: [codex/ghartv-remove-auto-preview]
+    paths: ['.github/workflows/rc10-provider-check.yml']
+permissions:
+  contents: read
+jobs:
+  diagnose:
+    runs-on: ubuntu-latest
+    timeout-minutes: 4
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: npm ci --ignore-scripts --prefix web-player/browser-tools
+      - name: Observe public search only with the candidate network restrictions unchanged
+        run: |
+          mkdir -p /tmp/ghartv-provider-evidence /tmp/ghartv-isolated-profile
+          python - <<'PY'
+          from pathlib import Path
+          p=Path('web-player/film-browser-worker.mjs');s=p.read_text()
+          s="import {writeFile} from 'node:fs/promises';\n"+s
+          s=s.replace('const page=await context.newPage();', "const page=await context.newPage();let diagnosticStage='BROWSER_READY';const failed=[];page.on('requestfailed',r=>{try{const u=new URL(r.url());if(failed.length<30)failed.push({host:u.hostname,path:u.pathname.slice(0,150),error:r.failure()?.errorText});}catch{}});")
+          for anchor,stage in [("await page.goto(PROVIDER+'/',",'LOAD_HOME'),("await field.waitFor(",'WAIT_FOR_SEARCH_INPUT'),("await field.fill(query)",'FILL_SEARCH_INPUT'),("await field.press('Enter')",'SUBMIT_SEARCH'),("const rows=await page.locator(",'COLLECT_RESULTS')]:
+            assert anchor in s;s=s.replace(anchor,"diagnosticStage='"+stage+"';"+anchor)
+          old='}finally{await close();}'
+          assert s.count(old)==1
+          s=s.replace(old,"""}catch(error){
+            const diagnostic={stage:diagnosticStage,message:String(error.message).slice(0,500),url:new URL(page.url()).pathname,failed};
+            diagnostic.title=await page.title().catch(()=>null);
+            diagnostic.text=await page.locator('body').innerText({timeout:1500}).then(t=>t.slice(0,6000)).catch(()=>null);
+            diagnostic.inputs=await page.locator('input').evaluateAll(xs=>xs.map(x=>({type:x.type,placeholder:x.placeholder,visible:!!(x.offsetWidth||x.offsetHeight)}))).catch(()=>[]);
+            await writeFile('/tmp/ghartv-provider-evidence/DIAGNOSIS.json',JSON.stringify(diagnostic,null,2));
+            await page.screenshot({path:'/tmp/ghartv-provider-evidence/provider.png',timeout:2500}).catch(()=>{});
+            throw error;
+          }finally{await close();}""")
+          Path('web-player/.ghartv-provider-diagnostic.mjs').write_text(s)
+          PY
+          printf '%s' '{"action":"search","query":"Dune","route":"direct"}' | timeout 80s env -i PATH="$PATH" HOME=/tmp/ghartv-isolated-profile LANG=en_US.UTF-8 GHARTV_FILM_EXECUTABLE=/usr/bin/google-chrome node web-player/.ghartv-provider-diagnostic.mjs > /tmp/ghartv-provider-evidence/RESULT.json || true
+          cat /tmp/ghartv-provider-evidence/RESULT.json
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: ghartv-rc10-provider-diagnosis
+          path: /tmp/ghartv-provider-evidence/*
+          retention-days: 3
