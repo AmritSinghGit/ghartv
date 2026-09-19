@@ -39,7 +39,7 @@ change('android-tv/app/build.gradle.kts',lambda s:s.replace('versionCode = 27','
 change('tools/owner_review.command.in',lambda s:re.sub(r'\b27\b','28',s).replace('code27','code28').replace("TAG='v0.6.0-rc10'","TAG='v0.6.0-rc10.1'"))
 change('tools/package_owner_review.py',lambda s:re.sub(r'\b27\b','28',s).replace('GHARTV_RC10_REVIEW','GHARTV_RC10_1_REVIEW'))
 change('tools/tv-first/check_contract.py',lambda s:re.sub(r'\b27\b','28',s).replace('CODE27','CODE28'))
-change('tools/run_owner_bundle.command.in',lambda s:s.replace("known={'","known={'fdb079207be8a533d5865f5aa8d283729b1b7d633afd6d947f376b9a06207578',",1) if 'fdb079207be8a533d5865f5aa8d283729b1b7d633afd6d947f376b9a06207578' not in s else s)
+change('tools/run_owner_bundle.command.in',lambda s:s.replace("known={'","known={'fdb079207be8a533d5865f5aa8d283729b1b7d633afd6d947f376b9a06207578','",1) if 'fdb079207be8a533d5865f5aa8d283729b1b7d633afd6d947f376b9a06207578' not in s else s)
 p=R/'web-player/test/films.test.mjs';s=p.read_text()
 if 'manual provider browse' not in s:
  s+='''\ntest('manual provider browse uses only the registered home and explicit route',async()=>{\n const r=await call('/owner-api/films/browse',{method:'POST',body:{route:'direct'}});\n assert.equal(JSON.parse(r.body).error,'INSTALL_BRAVE_OR_CHROMIUM_FIRST');\n assert.match(filmHTML('a'.repeat(64)),/Complete any verification yourself/);\n});\n''';p.write_text(s)

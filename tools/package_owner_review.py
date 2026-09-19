@@ -11,6 +11,7 @@ files=[]
 for root in ('docs','web-player','telemetry/worker'):
  for p in Path(root).rglob('*'):
   if not p.is_file() or p.is_symlink():continue
+  if p.suffix.lower() in ('.ttf','.otf','.woff','.woff2'):continue
   if any(x in p.parts for x in ('.git','.wrangler','test','node_modules')):
    if str(p) not in ('web-player/node_modules/hls.js/dist/hls.min.js','web-player/node_modules/hls.js/LICENSE') and p.parts[:4] != ('web-player','browser-tools','node_modules','playwright-core'):continue
   if p.name in ('wrangler.toml','.dev.vars','.env','collector.env') or p.suffix in ('.jks','.key','.pem'):continue
