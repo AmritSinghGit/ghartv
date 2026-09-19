@@ -1,7 +1,8 @@
 #!/bin/bash
-set -eu
+# GharTV RC10.1 startup repair R2. Same APK, same companion, no public rollout.
+set -u
 umask 077
-if [ "$(uname -s)" != Darwin ]; then echo MAC_ONLY_NO_ACTION; exit 2; fi
+if [ "$(uname -s)" != Darwin ]; then printf 'This review launcher runs on macOS. No changes made.\n'; exit 2; fi
 HERE="$(cd "$(dirname "$0")" && pwd)"
 PY=""
 for candidate in /opt/homebrew/bin/python3 /usr/local/bin/python3 /usr/bin/python3; do
@@ -9,37 +10,106 @@ for candidate in /opt/homebrew/bin/python3 /usr/local/bin/python3 /usr/bin/pytho
 done
 if [ -z "$PY" ] && command -v python3 >/dev/null 2>&1 && python3 -c 'import sys;raise SystemExit(0 if sys.version_info >= (3,9) else 1)' >/dev/null 2>&1; then PY="$(command -v python3)"; fi
 if [ -z "$PY" ]; then printf 'Python 3.9 or newer is required. No app, source or signing key changed.\n'; exit 1; fi
-"$PY" - "$HERE" <<'SEED'
+printf '\033[38;5;51m\nGharTV Nova RC10.1 · startup repair R2\033[0m\n'
+"$PY" - "$HERE" "$@" <<'SEED'
 from pathlib import Path
-import hashlib,os,shutil,sys,tempfile
-root=Path(sys.argv[1]);home=Path.home()
+import datetime as dt,fcntl,hashlib,io,json,os,stat,subprocess,sys,tempfile
 expected=@ARTIFACT_HASHES_REPR@
 command_hash='@COMMAND_SHA@'
-cache=home/'Library/Application Support/GharTV/owner-review/artifact-cache'
+home=Path.home()
+state=home/'Library/Application Support/GharTV/owner-review'
+cache=state/'artifact-cache'
 managed=home/'.local/share/ghartv-launcher/current'
+run_id='GHARTV-BOOTSTRAP-R2-'+dt.datetime.now(dt.timezone.utc).strftime('%Y%m%dT%H%M%SZ')+'-'+str(os.getpid())
+record={'run_id':run_id,'delivery_revision':'RC10.1-STARTUP-R2','application_source':'9457654eafe86a08c402c6829c6cae3312c3e196','version_code':28,'status':'STARTING','phase':'INPUT_PATH','apk_installed':False,'production_changed':False,'files_deleted':0,'containers_stopped':0}
+class Hold(RuntimeError):pass
 def safe(p):
- if any(x.is_symlink() for x in (p,*p.parents)):raise SystemExit('Symlinked output preserved; no overwrite')
+ for x in (p,*p.parents):
+  if x.is_symlink():raise Hold('UNEXPECTED_SYMLINK_PRESERVED: '+str(x))
+def system_path(p):
+ # Only the two verified OS-owned macOS aliases are accepted, never arbitrary
+ # links in the package or managed output tree.
+ if not p.is_absolute() or '..' in p.parts:raise Hold('ABSOLUTE_PACKAGE_PATH_REQUIRED')
+ for alias,destination in (('/var','/private/var'),('/tmp','/private/tmp')):
+  a=Path(alias)
+  if p==a or a in p.parents:
+   if sys.platform=='darwin' and a.is_symlink():
+    if a.lstat().st_uid!=0 or a.resolve(strict=True)!=Path(destination):raise Hold('SYSTEM_ALIAS_IDENTITY_CHANGED: '+alias)
+    p=Path(destination)/p.relative_to(a);record['system_alias_normalized']=alias+' -> '+destination
+   break
+ safe(p)
+ return p
+
 def sha(p):return hashlib.sha256(p.read_bytes()).hexdigest()
-script=root/'GHARTV_SYNC_CURRENT_AND_REPORT.command';safe(script)
-if sha(script)!=command_hash:raise SystemExit('Recovery launcher checksum differs; stopped')
-for name,h in expected.items():
- p=root/'assets'/name;safe(p)
- if not p.is_file() or sha(p)!=h:raise SystemExit('Recovery package file missing or checksum mismatch: '+name)
-for p in (cache,managed):safe(p);p.mkdir(parents=True,exist_ok=True);p.chmod(0o700)
-for name,h in expected.items():
- target=cache/h;safe(target)
- if target.exists():
-  if sha(target)!=h:raise SystemExit('Existing cache bytes differ; preserved without overwrite')
-  continue
- with open(target,'xb') as f:f.write((root/'assets'/name).read_bytes())
- target.chmod(0o600)
-target=managed/'GHARTV_SYNC_CURRENT_AND_REPORT.command';safe(target)
-known={'fdb079207be8a533d5865f5aa8d283729b1b7d633afd6d947f376b9a06207578','a6bfd744ba8740430bb98bda5cc961edfa945820909164a28aaf11e7187cb392','b15cec2a35ad6b3b1fc3f01750bb028f4f1cdb5d53f3db8705adb63b0363a309','d57ebf548b6eccaf5d4e31c9bc13f2060419b04e043c880bd227ee4f893ffdd4','99fedd034de8816e4c153f65f25eefbbe6a90150f33d2d3d3216e74deda351bb','803cabaac2044338f09b49b2413f8dfe9c3786ce91952e32fbb2b41716d557f5','38a92415bda87e4a6035c5a62248b668cf6c81528bd33ba198544a71f9059828','f9d11248be07981968cdc0b0e5808cc05daa8d1faccca66cb80b2178129adab2','22fba74fae70ff7523543669d8362dc7661882efa225397eb28037462aa64456',command_hash}
-if target.exists() and sha(target) not in known:raise SystemExit('Managed launcher has advanced or was edited; preserved without overwrite')
-fd,tmp=tempfile.mkstemp(prefix='.verified-review-',dir=managed)
-with os.fdopen(fd,'wb') as f:f.write(script.read_bytes())
-os.chmod(tmp,0o700);os.replace(tmp,target)
-print('All bundled public artifact checksums verified. No GitHub download is needed to prepare this review.')
+def private_dir(p):
+ safe(p);p.mkdir(parents=True,exist_ok=True)
+ if not p.is_dir() or p.stat().st_uid!=os.getuid():raise Hold('OUTPUT_DIRECTORY_NOT_OWNED: '+str(p))
+ p.chmod(0o700)
+def atomic(p,data,mode=0o600,replace=False):
+ safe(p)
+ fd,name=tempfile.mkstemp(prefix='.ghartv-write-',dir=p.parent);tmp=Path(name)
+ try:
+  with os.fdopen(fd,'wb') as f:f.write(data);f.flush();os.fsync(f.fileno())
+  tmp.chmod(mode)
+  if replace:os.replace(tmp,p)
+  else:
+   try:os.link(tmp,p)
+   except FileExistsError:
+    safe(p)
+    if not p.is_file() or p.read_bytes()!=data:raise Hold('EXISTING_DIFFERENT_FILE_PRESERVED: '+str(p))
+ finally:
+  if tmp.exists():tmp.unlink()
+
+def run():
+ root=system_path(Path(sys.argv[1]))
+ record['phase']='VERIFY_BUNDLED_BYTES'
+ script=root/'GHARTV_SYNC_CURRENT_AND_REPORT.command';safe(script)
+ if not script.is_file() or sha(script)!=command_hash:raise Hold('LAUNCHER_CHECKSUM_MISMATCH')
+ for name,h in expected.items():
+  if Path(name).name!=name:raise Hold('INVALID_ARTIFACT_NAME')
+  p=root/'assets'/name;safe(p)
+  if not p.is_file() or sha(p)!=h:raise Hold('BUNDLE_CHECKSUM_MISMATCH: '+name)
+ record['phase']='VERIFY_OUTPUT_PATHS'
+ for p in (state,cache,managed):private_dir(p)
+ target=managed/'GHARTV_SYNC_CURRENT_AND_REPORT.command';safe(target)
+ known={'7a7bf90fef3ab626d23d51ad72f70439c60b17fd7a64914cd31e05f57e5a98ab','fdb079207be8a533d5865f5aa8d283729b1b7d633afd6d947f376b9a06207578','a6bfd744ba8740430bb98bda5cc961edfa945820909164a28aaf11e7187cb392','b15cec2a35ad6b3b1fc3f01750bb028f4f1cdb5d53f3db8705adb63b0363a309','d57ebf548b6eccaf5d4e31c9bc13f2060419b04e043c880bd227ee4f893ffdd4','99fedd034de8816e4c153f65f25eefbbe6a90150f33d2d3d3216e74deda351bb','803cabaac2044338f09b49b2413f8dfe9c3786ce91952e32fbb2b41716d557f5','38a92415bda87e4a6035c5a62248b668cf6c81528bd33ba198544a71f9059828','f9d11248be07981968cdc0b0e5808cc05daa8d1faccca66cb80b2178129adab2','22fba74fae70ff7523543669d8362dc7661882efa225397eb28037462aa64456',command_hash}
+ lockpath=managed/'.bootstrap.lock';safe(lockpath)
+ fd=os.open(lockpath,os.O_CREAT|os.O_RDWR|os.O_NOFOLLOW,0o600)
+ with os.fdopen(fd,'r+') as lock:
+  try:fcntl.flock(lock,fcntl.LOCK_EX|fcntl.LOCK_NB)
+  except BlockingIOError:raise Hold('ANOTHER_GHARTV_STARTUP_IS_ACTIVE') from None
+  if target.exists() and (not target.is_file() or sha(target) not in known):raise Hold('NEWER_OR_EDITED_LAUNCHER_PRESERVED: '+str(target))
+  record['phase']='SEED_VERIFIED_ARTIFACTS'
+  for name,h in expected.items():
+   output=cache/h;safe(output)
+   atomic(output,(root/'assets'/name).read_bytes())
+  if target.exists() and sha(target)!=command_hash:
+   backup=managed/('preserved-'+sha(target)+'.command');atomic(backup,target.read_bytes(),0o700)
+  atomic(target,script.read_bytes(),0o700,replace=True)
+  if sha(target)!=command_hash:raise Hold('INSTALLED_LAUNCHER_READBACK_FAILED')
+ print('Package paths and all artifact checksums verified. Opening the actual review.',flush=True)
+try:run()
+except Exception as e:
+ record.update(status='ACTION_REQUIRED',blocker=str(e) if isinstance(e,Hold) else type(e).__name__)
+ text='GHARTV_STARTUP_HANDOFF\n'+json.dumps(record,indent=2)+'\n'
+ try:
+  dest=state/'runs'/run_id;private_dir(dest)
+  atomic(dest/'bootstrap.json',(json.dumps(record,indent=2)+'\n').encode())
+  atomic(dest/'handoff.txt',text.encode())
+  print('Private startup receipt: '+str(dest/'handoff.txt'))
+ except Exception:print('Output path remains protected; use the handoff printed below.')
+ print(text,flush=True)
+ if '--noninteractive' not in sys.argv[2:]:
+  try:
+   with io.TextIOWrapper(io.FileIO('/dev/tty','r+'),encoding='utf-8',write_through=True) as tty:
+    tty.write('Press Enter to copy this handoff: ');tty.readline()
+    subprocess.run(['pbcopy'],input=text,text=True,check=False)
+    tty.write('Press Enter to finish: ');tty.readline()
+  except OSError:pass
+ sys.exit(1)
 SEED
+RESULT=$?
+if [ "$RESULT" -ne 0 ]; then exit "$RESULT"; fi
 export PATH="$(dirname "$PY"):$PATH"
+# Default is the TV review, not prepare-only. The same core starts the web first.
 exec /bin/bash "$HOME/.local/share/ghartv-launcher/current/GHARTV_SYNC_CURRENT_AND_REPORT.command" --bundled-review "$@"
