@@ -1,0 +1,120 @@
+name: GharTV RC10 compiled review
+on:
+  push:
+    branches: [codex/ghartv-remove-auto-preview]
+    paths: ['.github/workflows/rc10-candidate.yml']
+permissions:
+  contents: write
+concurrency:
+  group: ghartv-rc10-candidate
+  cancel-in-progress: false
+jobs:
+  candidate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 18
+    env:
+      GH_TOKEN: ${{ github.token }}
+      PYTHONDONTWRITEBYTECODE: '1'
+      GHARTV_DISABLE_KEYCHAIN: '1'
+      GRADLE_OPTS: '-Dorg.gradle.daemon=false -Dorg.gradle.jvmargs=-Xmx2g'
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: android-actions/setup-android@v3
+      - name: Integrate only the existing implementation and validate native sources
+        run: |
+          set -euo pipefail
+          test "${GITHUB_REF_NAME}" = codex/ghartv-remove-auto-preview
+          python tools/rc10/upgrade.py
+          python -m py_compile tools/package_owner_review.py
+          python tools/tv-first/check_contract.py
+          mkdir -p /tmp/preview-test
+          javac -d /tmp/preview-test android-tv/app/src/main/java/in/ghartv/nova/PreviewGate.java tools/tv-first/PreviewGateSmoke.java
+          java -cp /tmp/preview-test in.ghartv.nova.PreviewGateSmoke
+          npm ci --ignore-scripts --prefix web-player
+          npm ci --ignore-scripts --prefix web-player/browser-tools
+          node --test web-player/test/*.mjs | tee /tmp/rc10-node-tests.txt
+          git diff --check
+      - name: Commit native integration before compilation; refuse competing branch changes
+        id: source
+        run: |
+          set -euo pipefail
+          current="$(git ls-remote origin refs/heads/codex/ghartv-remove-auto-preview | cut -f1)"
+          test "$current" = "$GITHUB_SHA"
+          git config user.name 'GharTV candidate builder'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -u
+          git commit -m 'feat(ghartv): integrate RC10 code27 web-first movies candidate'
+          git push origin HEAD:refs/heads/codex/ghartv-remove-auto-preview
+          sha="$(git rev-parse HEAD)"
+          echo "sha=$sha" >> "$GITHUB_OUTPUT"
+          echo "GHARTV_WEB_SHA=$sha" >> "$GITHUB_ENV"
+      - name: Compile Android release and instrumentation package
+        run: |
+          set -euo pipefail
+          yes | sdkmanager --licenses >/dev/null || true
+          sdkmanager 'platforms;android-36' 'build-tools;36.0.0'
+          cd android-tv
+          chmod +x gradlew
+          ./gradlew --no-daemon --max-workers=2 assembleRelease assembleDebugAndroidTest
+      - name: Render and test four local web surfaces
+        env:
+          GHARTV_TEST_BROWSER: /usr/bin/google-chrome
+        run: node tools/rc10/check_ui.mjs
+      - name: Bounded public-provider search probe; failures remain explicit evidence
+        run: |
+          mkdir -p /tmp/ghartv-provider-probe
+          set +e
+          printf '%s' '{"action":"search","query":"Dune","route":"direct"}' | timeout 75s env -i PATH="$PATH" HOME=/tmp/ghartv-provider-probe LANG=en_US.UTF-8 GHARTV_FILM_EXECUTABLE=/usr/bin/google-chrome node web-player/film-browser-worker.mjs > /tmp/ghartv-ui/LIVE_PROVIDER_CHECK.json
+          probe=$?
+          set -e
+          python - "$probe" <<'PY'
+          import json,sys
+          from pathlib import Path
+          p=Path('/tmp/ghartv-ui/LIVE_PROVIDER_CHECK.json')
+          try:data=json.loads(p.read_text())
+          except Exception:data={'ok':False,'status':'PROVIDER_PROBE_NO_VALID_RESPONSE','exit_code':int(sys.argv[1])}
+          data.update(playbackVerified=False,torLiveCheck='NOT_EXECUTED',physicalTV='NOT_EXECUTED')
+          p.write_text(json.dumps(data,indent=2)+'\n');print(json.dumps(data))
+          PY
+      - name: Package verified compiled artifacts and original-signer preparation
+        run: |
+          set -euo pipefail
+          curl --proto '=https' --proto-redir '=https' -fLsS --connect-timeout 15 --max-time 120 --retry 1 https://github.com/AmritSinghGit/ghartv/releases/download/v0.5.4-rc8/GharTV-Jio-Live-v0.5.4-rc8-pre-birthday-recovery.apk -o /tmp/ghartv-public-reference.apk
+          python tools/package_owner_review.py
+          cp /tmp/ghartv-ui/*.json /tmp/ghartv-owner-candidate/
+          cp /tmp/rc10-node-tests.txt /tmp/ghartv-owner-candidate/
+          python - <<'PY'
+          import json,os,subprocess,zipfile
+          from pathlib import Path
+          out=Path('/tmp/ghartv-owner-candidate')
+          v={'schema':'ghartv.rc10-validation.v1','application_source':subprocess.check_output(['git','rev-parse','HEAD'],text=True).strip(),'workflow_run':os.environ['GITHUB_RUN_ID'],'android_release':'COMPILED_UNSIGNED','instrumentation_package':'COMPILED_NOT_EXECUTED','node_tests':18,'tv_contract':'PASS_9_SOURCE_RULES','preview_gate':'PASS_JAVA_SMOKE','web_ui':json.loads((out/'UI_VALIDATION.json').read_text()),'provider_probe':json.loads((out/'LIVE_PROVIDER_CHECK.json').read_text()),'owner_mac_execution':False,'physical_tv_playback':False,'new_signed_apk':False,'production_feed_changed':False,'native_writer_lease':'UNBOUND_REMOTE_SOURCE_ONLY'}
+          (out/'VALIDATION.json').write_text(json.dumps(v,indent=2)+'\n')
+          delivery=json.loads((out/'DELIVERY.json').read_text());delivery.update(workflow_run=os.environ['GITHUB_RUN_ID'],validation='VALIDATION.json');(out/'DELIVERY.json').write_text(json.dumps(delivery,indent=2)+'\n')
+          with zipfile.ZipFile(out/'GHARTV_RC10_REVIEW.zip') as z:
+            assert z.testzip() is None
+            for n in ('RUN_GHARTV_WEB.command','PREPARE_GHARTV_UPDATE.command'):
+              p=Path('/tmp')/n;p.write_bytes(z.read('GHARTV_RC10_REVIEW/'+n));subprocess.run(['bash','-n',str(p)],check=True)
+          subprocess.run(['git','archive','--format=zip','HEAD','-o',str(out/'GHARTV_RC10_SOURCE.zip')],check=True)
+          PY
+      - name: Publish review only; never change latest feed or production approval
+        run: |
+          set -euo pipefail
+          gh release create v0.6.0-rc10 /tmp/ghartv-owner-candidate/GHARTV_RC10_REVIEW.zip /tmp/ghartv-owner-candidate/GHARTV_RC10_SOURCE.zip /tmp/ghartv-owner-candidate/GharTV-review-unsigned.apk /tmp/ghartv-owner-candidate/GharTV-review-companion.zip /tmp/ghartv-owner-candidate/review-manifest.json /tmp/ghartv-owner-candidate/GHARTV_SYNC_CURRENT_AND_REPORT.command /tmp/ghartv-owner-candidate/DELIVERY.json /tmp/ghartv-owner-candidate/VALIDATION.json /tmp/ghartv-owner-candidate/SHA256SUMS --repo AmritSinghGit/ghartv --target '${{ steps.source.outputs.sha }}' --prerelease --latest=false --title 'GharTV Nova RC10 — web first, independent FlixMomo, optional Tor browser route' --notes-file REVIEW_060_RC10.md
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: ghartv-rc10-review
+          path: |
+            /tmp/ghartv-owner-candidate/*
+            /tmp/ghartv-ui/*
+            /tmp/rc10-node-tests.txt
+          retention-days: 7
