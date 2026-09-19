@@ -1,3 +1,4 @@
+import {filmRoute} from './film-search.mjs';
 import {performanceRoute} from './performance-desk.mjs';
 import {providerRoute} from './provider-access.mjs';
 import {releaseRoute} from './release-desk.mjs';
@@ -46,6 +47,7 @@ async function collectorRead(path) {
 function readFailure(e){const c=e?.cause?.code||e?.code||e?.name||'';return /ENOTFOUND|EAI_AGAIN/.test(c)?'COLLECTOR_DNS_FAILED':/Timeout|Abort|TIMEOUT/.test(c)?'COLLECTOR_TIMED_OUT':/CERT|TLS|SSL/.test(c)?'COLLECTOR_TLS_FAILED':'COLLECTOR_CONNECTION_FAILED';}
 export async function ownerRoute(req,res,url){
   if(req.headers['x-operon-preview']){reply(res,404,{error:'owner_routes_private'});return true;}
+  if(await filmRoute(req,res,url,authorized,nonce))return true;
   if(await providerRoute(req,res,url,authorized))return true;
   if(url.pathname==='/provider-access.html'&&req.method==='GET'){
     const scriptNonce=randomBytes(20).toString('hex');
@@ -60,7 +62,7 @@ export async function ownerRoute(req,res,url){
   if(await fabricControl(req,res,url,authorized))return true;
   if(url.pathname==='/owner.html'&&req.method==='GET'){
     let html=await readFile(join(ROOT,'../docs/owner.html'),'utf8');
-    html=html.replace('<nav', '<p><a href="./provider-access.html">Provider compatibility · check a source</a></p><nav');
+    html=html.replace('<nav', '<p><a href="./flixmomo.html">FlixMomo · separate search</a> · <a href="./provider-access.html">Provider compatibility · check a source</a></p><nav');
     const origin=`http://${req.headers.host}`;
     const boot={token:nonce,run_id:'OWNER_LOCAL_READER',review_source:process.env.GHARTV_WEB_SHA||'not_verified',control_sha:process.env.GHARTV_WEB_SHA||'not_verified'};
     html=html.replace("const ENDPOINT='https://ghartv-telemetry.ghartv-47d9a0.workers.dev';",`const ENDPOINT=${JSON.stringify(origin+'/owner-api')};`)

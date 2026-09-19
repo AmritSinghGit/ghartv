@@ -14,8 +14,8 @@ const ROOT = dirname(fileURLToPath(import.meta.url));
 const PUBLIC = join(ROOT, "public");
 const HOST = process.env.GHARTV_WEB_HOST || "127.0.0.1";
 const PORT = Number(process.env.GHARTV_WEB_PORT || 8790);
-const APP_VERSION = "0.6.0-rc7-network-diagnostics";
-const WEB_REPAIR = "RC6-WEB-FABRIC-R1";
+const APP_VERSION = "0.6.0-rc10-web-films";
+const WEB_REPAIR = "RC10-WEB-FIRST-FILMS";
 const SESSION_TTL_MS = 12 * 60 * 60 * 1000;
 const STREAM_TTL_MS = 4 * 60 * 60 * 1000;
 const MAX_BODY = 16 * 1024;
@@ -779,7 +779,8 @@ export function createAppServer() {
   return createServer(async (req, res) => {
     const url = new URL(req.url || "/", `http://${HOST}:${PORT}`);
     if(!['127.0.0.1','localhost','::1'].includes(HOST))return apiError(res,403,'Loopback-only owner service.','invalid_bind');
-    if(!['127.0.0.1:'+PORT,'localhost:'+PORT,'[::1]:'+PORT].includes(req.headers.host||''))return apiError(res,403,'Host rejected.','invalid_host');
+    const boundPort=req.socket.localPort||PORT;
+    if(!['127.0.0.1:'+boundPort,'localhost:'+boundPort,'[::1]:'+boundPort].includes(req.headers.host||''))return apiError(res,403,'Host rejected.','invalid_host');
     const began=Date.now();
     res.once('finish',()=>{if(url.pathname.startsWith('/api/')||url.pathname.startsWith('/owner-api/'))console.info(JSON.stringify({event:'http_request',time_ist:new Intl.DateTimeFormat('en-IN',{timeZone:'Asia/Kolkata',dateStyle:'short',timeStyle:'medium',hour12:false}).format(new Date()),time_utc:new Date().toISOString(),route:/^\/api\/(stream|license)\//.test(url.pathname)?'/api/media/[redacted]':url.pathname,status:res.statusCode,duration_ms:Date.now()-began}));});
     try {

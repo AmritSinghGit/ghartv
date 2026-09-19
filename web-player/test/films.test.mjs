@@ -41,3 +41,12 @@ test('unrecognized routes and arbitrary open URLs are rejected',async()=>{
 test('UI never claims server Tor for embedded direct playback and has no report polling',()=>{
  const html=filmHTML('a'.repeat(64));assert.match(html,/Embedded playback cannot use the server's Tor route/);assert.match(html,/embed.disabled=\$\('route'\).value==='tor'/);assert.doesNotMatch(html,/setInterval|localStorage|collector.env|admin\/summary/);
 });
+
+test('parallel requests reserve browser admission before discovery resolves',async()=>{
+ let release;const discovery=new Promise(resolve=>{release=resolve;});
+ const route=makeFilmRoute({discover:()=>discovery});const a=response(),b=response();
+ const first=route(req('/owner-api/films/search',{method:'POST',body:{query:'dune',route:'direct'}}),a,new URL('/owner-api/films/search',origin),()=>true,'a'.repeat(64));
+ await new Promise(resolve=>setImmediate(resolve));
+ await route(req('/owner-api/films/search',{method:'POST',body:{query:'dune',route:'direct'}}),b,new URL('/owner-api/films/search',origin),()=>true,'a'.repeat(64));
+ assert.equal(b.status,409);release(null);await first;assert.equal(a.status,400);
+});

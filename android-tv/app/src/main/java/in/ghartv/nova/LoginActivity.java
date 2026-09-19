@@ -162,6 +162,11 @@ public final class LoginActivity extends Activity {
         LinearLayout.LayoutParams hintsParams = new LinearLayout.LayoutParams(-1, -2);
         hintsParams.topMargin = TvUi.dp(this, 18);
         story.addView(hints, hintsParams);
+        Button films = TvUi.button(this, "FlixMomo · search without Jio login", false);
+        films.setOnClickListener(view -> startActivity(new Intent(this, FlixMomoActivity.class)));
+        LinearLayout.LayoutParams filmsParams = new LinearLayout.LayoutParams(-1, TvUi.dp(this, 40));
+        filmsParams.topMargin = TvUi.dp(this, 10);
+        story.addView(films, filmsParams);
         return story;
     }
 

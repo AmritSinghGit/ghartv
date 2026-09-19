@@ -21,8 +21,8 @@ android {
         applicationId = "in.ghartv.nova"
         minSdk = 26
         targetSdk = 35
-        versionCode = 26
-        versionName = "0.6.0-rc9-tv-first"
+        versionCode = 27
+        versionName = "0.6.0-rc10-web-films"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 

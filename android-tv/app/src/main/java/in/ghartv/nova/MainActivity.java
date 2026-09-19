@@ -238,6 +238,11 @@ public final class MainActivity extends Activity implements ChannelNavigator.Lis
         Button movies = actionButton("Punjabi +");
         movies.setOnClickListener(view -> startActivity(new Intent(this, MovieHubActivity.class)));
         header.addView(movies, headerButtonParams());
+        Button films = actionButton("FlixMomo");
+        films.setOnClickListener(view -> startActivity(new Intent(this, FlixMomoActivity.class)));
+        LinearLayout.LayoutParams filmParams = new LinearLayout.LayoutParams(TvUi.dp(this, 94), TvUi.dp(this, 40));
+        filmParams.leftMargin = TvUi.dp(this, 6);
+        header.addView(films, filmParams);
 
         accountButton = actionButton("Jio account");
         accountButton.setOnClickListener(view -> showAccountMenu());

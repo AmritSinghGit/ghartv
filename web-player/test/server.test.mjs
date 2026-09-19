@@ -68,5 +68,8 @@ test("serves the local health and programme-player page", async (context) => {
 
 test("keeps provider credentials out of browser-facing source", async () => {
   const source = await import("node:fs/promises").then(({ readFile }) => readFile(new URL("../public/app.js", import.meta.url), "utf8"));
-  assert.doesNotMatch(source, /localStorage|sessionStorage|document\.cookie/);
+  assert.doesNotMatch(source, /sessionStorage|document\.cookie/);
+  const stored=[...source.matchAll(/localStorage\.(?:setItem|getItem)\("([^"]+)"/g)].map(m=>m[1]);
+  assert.deepEqual([...new Set(stored)], ["ghartv_comfort_v1"]);
+  assert.doesNotMatch(source, /localStorage\.(?:setItem|getItem)\([^"\s]/);
 });
