@@ -1,0 +1,44 @@
+name: GharTV public viewer website checks
+on:
+  push:
+    branches: [main]
+    paths: ['.github/workflows/customer-site-check.yml','docs/index.html','docs/assets/viewer-site.js','tools/site/customer-check.mjs']
+permissions:
+  contents: read
+jobs:
+  customer-page:
+    runs-on: ubuntu-latest
+    timeout-minutes: 4
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install only the test driver in the runner temporary directory
+        run: npm install --prefix "$RUNNER_TEMP/ui-driver" --ignore-scripts --package-lock=false playwright-core@1.62.0
+      - name: Check real Chromium desktop and mobile layouts
+        run: |
+          GHARTV_PLAYWRIGHT_ENTRY="$RUNNER_TEMP/ui-driver/node_modules/playwright-core/index.mjs" GHARTV_SITE_OUTPUT="$RUNNER_TEMP/ghartv-public-check" node tools/site/customer-check.mjs
+      - name: Read back the public website without any provider or viewer credentials
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import os,json,urllib.request,time,hashlib
+          target=Path('docs/index.html').read_bytes();out=Path(os.environ['RUNNER_TEMP'])/'ghartv-public-check'
+          result={'source_commit':os.environ['GITHUB_SHA'],'public_url':'https://amritsinghgit.github.io/ghartv/','expected_sha256':hashlib.sha256(target).hexdigest(),'status':'DEPLOYMENT_NOT_YET_MATCHED'}
+          for attempt in range(6):
+            try:
+              request=urllib.request.Request(result['public_url']+'?check='+os.environ['GITHUB_SHA'],headers={'Cache-Control':'no-cache','User-Agent':'GharTV-public-site-validation'})
+              with urllib.request.urlopen(request,timeout=10) as r:body=r.read(100000);status=r.status
+              if body==target:result.update(status='PUBLIC_HTTP_200_EXACT_SOURCE_VERIFIED',http=status);break
+            except Exception:pass
+            time.sleep(5)
+          (out/'PUBLISHED_SITE_HTTP.json').write_text(json.dumps(result,indent=2)+'\n');print(json.dumps(result))
+          assert result['status']=='PUBLIC_HTTP_200_EXACT_SOURCE_VERIFIED'
+          PY
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: ghartv-public-viewer-site
+          path: ${{ runner.temp }}/ghartv-public-check/*
+          retention-days: 7
