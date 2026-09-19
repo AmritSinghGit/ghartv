@@ -1,6 +1,6 @@
 {
   "name": "ghartv-local-web-player",
-  "version": "0.6.0-rc10-web-films",
+  "version": "0.6.0-rc10.1-web-films",
   "private": true,
   "type": "module",
   "scripts": {

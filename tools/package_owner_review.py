@@ -19,7 +19,7 @@ files.extend(Path(x) for x in ('GHARTV_LANE_PROGRESS.md','CURRENT_HANDOFF.md','R
 with zipfile.ZipFile(bundle,'w',compression=zipfile.ZIP_DEFLATED) as z:
  for p in sorted(files):z.write(p,str(p))
 def sha(p):return hashlib.sha256(p.read_bytes()).hexdigest()
-m={'schema':'ghartv.review-manifest.v2','source_sha':source,'branch':'codex/ghartv-remove-auto-preview','pr':1,'version_name':'0.6.0-rc10-web-films','version_code':27,'unsigned_sha256':sha(apk),'companion_sha256':sha(bundle),'production_unchanged':True,'owner_signed_apk_sha256':None,'owner_mac_run':'NOT_EXECUTED','ai_super_resolution':'NOT_IMPLEMENTED'}
+m={'schema':'ghartv.review-manifest.v2','source_sha':source,'branch':'codex/ghartv-remove-auto-preview','pr':1,'version_name':'0.6.0-rc10.1-web-films','version_code':28,'unsigned_sha256':sha(apk),'companion_sha256':sha(bundle),'production_unchanged':True,'owner_signed_apk_sha256':None,'owner_mac_run':'NOT_EXECUTED','ai_super_resolution':'NOT_IMPLEMENTED'}
 manifest=out/'review-manifest.json';manifest.write_text(json.dumps(m,indent=2)+'\n')
 text=Path('tools/owner_review.command.in').read_text().replace('@SOURCE_SHA@',source).replace('@UNSIGNED_SHA@',sha(apk)).replace('@MANIFEST_SHA@',sha(manifest)).replace('@EMBEDDED_MANIFEST_REPR@',repr(manifest.read_text())).replace('@COMPANION_SHA@',sha(bundle))
 assert '@SOURCE_SHA@' not in text and '@UNSIGNED_SHA@' not in text
@@ -44,7 +44,7 @@ subprocess.run(['bash','-n',str(starter)],check=True)
 compile(start.split("<<'SEED'\n",1)[1].split('\nSEED\n',1)[0],str(starter),'exec')
 readme=Path('REVIEW_060_RC10.md').read_text()
 
-package=out/'GHARTV_RC10_REVIEW.zip';prefix='GHARTV_RC10_REVIEW/'
+package=out/'GHARTV_RC10_1_REVIEW.zip';prefix='GHARTV_RC10_1_REVIEW/'
 with zipfile.ZipFile(package,'w',compression=zipfile.ZIP_DEFLATED) as z:
  z.writestr(prefix+'README.md',readme)
  z.write(command,prefix+command.name);z.write(starter,prefix+starter.name)

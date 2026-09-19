@@ -50,3 +50,9 @@ test('parallel requests reserve browser admission before discovery resolves',asy
  await route(req('/owner-api/films/search',{method:'POST',body:{query:'dune',route:'direct'}}),b,new URL('/owner-api/films/search',origin),()=>true,'a'.repeat(64));
  assert.equal(b.status,409);release(null);await first;assert.equal(a.status,400);
 });
+
+test('manual provider browse uses only the registered home and explicit route',async()=>{
+ const r=await call('/owner-api/films/browse',{method:'POST',body:{route:'direct'}});
+ assert.equal(JSON.parse(r.body).error,'INSTALL_BRAVE_OR_CHROMIUM_FIRST');
+ assert.match(filmHTML('a'.repeat(64)),/Complete any verification yourself/);
+});

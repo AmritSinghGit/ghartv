@@ -1,6 +1,6 @@
-# GharTV Nova RC10 — television, web and independent films
+# GharTV Nova RC10.1 — television, web and independent films
 
-Same independent GharTV lane, repository AmritSinghGit/ghartv, existing implementation branch codex/ghartv-remove-auto-preview and PR1. Package in.ghartv.nova. Android 0.6.0-rc10-web-films, versionCode27. Public update feed is not changed by this candidate.
+Same independent GharTV lane, repository AmritSinghGit/ghartv, existing implementation branch codex/ghartv-remove-auto-preview and PR1. Package in.ghartv.nova. Android 0.6.0-rc10.1-web-films, versionCode28. Public update feed is not changed by this candidate.
 
 ## Start the review
 
@@ -34,4 +34,7 @@ Owner analytics reuses the same collector and private server-side credential. Su
 
 Cloud compilation, source-contract checks, local HTTP/UI tests and deterministic security fixtures are separate evidence from live provider and physical-TV acceptance. Read DELIVERY.json and VALIDATION.json for actual outcomes. A loaded page, route check, source build or APK foreground state is not proof a movie plays. Provider availability, framing, account/region/entitlement/DRM rules still apply.
 
-Cousin-server hosting, public streaming deployment, live licensed-provider acceptance and physical-TV update/rollback remain owner-environment checks. Code25 reserve is not a downgrade from code27. Recovery after installing this version must use an appropriately higher version signed by the same key, without clearing data.
+Cousin-server hosting, public streaming deployment, live licensed-provider acceptance and physical-TV update/rollback remain owner-environment checks. Code25 reserve is not a downgrade from code28. Recovery after installing this version must use an appropriately higher version signed by the same key, without clearing data.
+
+## Normal provider verification — RC10.1
+The first RC10 live search encountered the provider's security verification page because the search allow-list blocked its required challenges.cloudflare.com script. RC10.1 permits that exact verification host while retaining HTTPS and network restrictions. It does not solve or bypass a CAPTCHA. A required verification now produces a specific status and an explicit Browse FlixMomo action opens the provider in the selected isolated browser route for the owner to complete checks manually. Read VALIDATION.json for the new probe's actual result; a successful build is not a provider playback pass.

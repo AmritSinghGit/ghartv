@@ -14,11 +14,11 @@ assert 'emulator-5580' in contract['canonical_serial']
 print('TV_EXPERIENCE_CONTRACT=PASS_9_RULES_SOURCE_CHECKED')
 
 launcher=(R/'tools/owner_review.command.in').read_text()
-assert "version_code=27" in launcher and "manifest.get('version_code')!=27" in launcher
-assert "int(codes[0])==27" in launcher and "int(codes[0])<27" in launcher
+assert "version_code=28" in launcher and "manifest.get('version_code')!=28" in launcher
+assert "int(codes[0])==28" in launcher and "int(codes[0])<28" in launcher
 assert 'transport.attach_or_start(sdk,RUN)' in launcher and "sock.bind(('127.0.0.1',port))" not in launcher
 assert 'TV_EXPERIENCE_CONTRACT.json' in (R/'tools/package_owner_review.py').read_text()
-print('REVIEW_CODE27_AND_CORRECTED_OPENER=PASS')
+print('REVIEW_CODE28_AND_CORRECTED_OPENER=PASS')
 
 assert 'GHARTV_CYAN_REVIEW_15_HANDOFF' in launcher and 'GHARTV_CYAN_REVIEW_14_HANDOFF' not in launcher
 assert 'java.util.Objects.equals(selectedChannel.id,candidate.id)' in m

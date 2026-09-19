@@ -28,9 +28,9 @@ export function normalizeResults(rows){
  return out;
 }
 const matches=(h,allowed)=>allowed.some(a=>h===a||h.endsWith('.'+a));
-const searchHosts=['flixmomo.app','themoviedb.org','tmdb.org'];
+const searchHosts=['flixmomo.app','themoviedb.org','tmdb.org','challenges.cloudflare.com'];
 async function run(input){
- if(!['search','open'].includes(input.action)||!['direct','tor'].includes(input.route))throw Error('ACTION_REJECTED');
+ if(!['search','open','browse'].includes(input.action)||!['direct','tor'].includes(input.route))throw Error('ACTION_REJECTED');
  const {chromium}=await import('./browser-tools/node_modules/playwright-core/index.mjs');
  const browser=await chromium.launch(launchOptions({executable:process.env.GHARTV_FILM_EXECUTABLE,route:input.route,proxy:process.env.GHARTV_TOR_PROXY,headless:input.action==='search',env:process.env}));
  let stopping=false;
@@ -61,8 +61,8 @@ async function run(input){
    if(data.IsTor!==true)throw Error('TOR_NOT_VERIFIED_NO_DIRECT_FALLBACK');
    torVerified=true;checkingTor=false;
   }
-  if(input.action==='open'){
-   await page.goto(filmURL(input.url),{waitUntil:'domcontentloaded',timeout:20000});
+  if(input.action!=='search'){
+   await page.goto(input.action==='browse'?PROVIDER+'/':filmURL(input.url),{waitUntil:'domcontentloaded',timeout:20000});
    process.stdout.write(JSON.stringify({ok:true,status:'BROWSER_OPENED_PLAYBACK_UNVERIFIED',route:input.route,torVerified,playbackVerified:false})+'\n');
    const timer=setTimeout(()=>close(),2*60*60*1000);
    await new Promise(resolve=>browser.on('disconnected',resolve));clearTimeout(timer);return;
@@ -74,7 +74,13 @@ async function run(input){
    const link=page.getByRole('link',{name:/^search$/i}).first(),button=page.getByRole('button',{name:/search/i}).first();
    if(await link.isVisible().catch(()=>false))await link.click();else if(await button.isVisible().catch(()=>false))await button.click();
   }
-  await field.waitFor({state:'visible',timeout:8000});
+  try { await field.waitFor({state:'visible',timeout:12000}); }
+  catch(error) {
+   const title=await page.title().catch(()=>'');
+   const text=await page.locator('body').innerText({timeout:1000}).catch(()=>'');
+   if(/just a moment|security verification|verify.*human|checking.*browser|captcha/i.test(title+' '+text))throw Error('PROVIDER_VERIFICATION_REQUIRED_USE_BROWSER');
+   throw Error('PROVIDER_SEARCH_CONTROL_UNAVAILABLE');
+  }
   let responseSeen=false;
   const observed=query.toLowerCase();
   page.on('response',r=>{try{const u=new URL(r.url());if(r.ok()&&['fetch','xhr'].includes(r.request().resourceType())&&[...u.searchParams.values()].some(x=>x.toLowerCase()===observed)&&/search/i.test(u.pathname))responseSeen=true;}catch{}});
