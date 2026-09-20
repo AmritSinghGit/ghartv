@@ -1,0 +1,9 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><title>GharTV generated HLS test media — not a provider channel</title><script src="playback-engine.js"></script><script src="hls.min.js"></script></head><body><h1>Generated test media only</h1><video id="video" width="640" height="360" muted playsinline controls></video><button id="play">Play generated HLS</button><p id="status"></p><script>
+const video=document.getElementById('video');video.muted=true;
+document.getElementById('play').onclick=()=>{
+ window.testEngine=GharTVPlayback.engine(video);
+ const begin=()=>GharTVPlayback.play(video,()=>{document.getElementById('status').textContent='Tap Play';},e=>{document.getElementById('status').textContent=e.message;});
+ if(window.testEngine==='native'){video.src='test.m3u8';video.load();begin();}
+ else if(window.testEngine==='hlsjs'){const h=new Hls();h.attachMedia(video);h.on(Hls.Events.MEDIA_ATTACHED,()=>h.loadSource('test.m3u8'));h.on(Hls.Events.MANIFEST_PARSED,begin);}
+ else document.getElementById('status').textContent='Unsupported';
+};</script></body></html>
