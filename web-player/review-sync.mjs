@@ -22,13 +22,20 @@ export function safeReceipt(r){
     review_source:r.review_source,version:r.version,version_code:r.version_code,
     unsigned_apk_sha256:digest(r.unsigned_apk_sha256),signed_apk_sha256:digest(r.signed_apk_sha256),
     production_source:/^[a-f0-9]{40}$/.test(r.production_source||'')?r.production_source:null,
-    result:r.status==='REVIEW_READY'?'REVIEW_READY':r.status==='ACTION_REQUIRED'?'ACTION_REQUIRED':'OTHER_LOCAL_STATE',
+    result:['REVIEW_READY','ACTION_REQUIRED','WEB_REVIEW_READY_ANDROID_HELD','WEB_REVIEW_READY_ANDROID_NOT_TOUCHED','SIGNED_UPDATE_PREPARED_REVIEW_PENDING'].includes(r.status)?r.status:'OTHER_LOCAL_STATE',
+    phase:['RESOURCE_PREFLIGHT','VERIFY_APK_CERTIFICATE','EMULATOR_SELECTION','REVIEW_OPEN','SIGNED_UPDATE_READY','CHECKOUT_OBSERVATION_ONLY','CONTINUITY','STARTING'].includes(r.phase)?r.phase:'OTHER_PHASE',
+    blocker_code:typeof r.blocker==='string'&&/^HOST_PRESSURE_(WARNING|CRITICAL|NOT_REPORTED)_NO_NEW_EMULATOR:/.test(r.blocker)?r.blocker.split(':',1)[0]:r.blocker?'OTHER_BLOCKER_SEE_PRIVATE_RECEIPT':null,
+    web_source:/^[a-f0-9]{40}$/.test(r.web_source||'')?r.web_source:null,
+    web_ready:r.web_player==='HEALTH_AND_SOURCE_VERIFIED_PROVIDER_PLAYBACK_UNVERIFIED',
+    signed_apk_prepared:r.prepared_signed_apk==='PERSISTED_AND_HASH_VERIFIED_BEFORE_EMULATOR_SELECTION',
+    viewer_analytics:r.analytics_routes==='DISABLED_IN_VIEWER'?'DISABLED_IN_VIEWER':'NOT_CHECKED',
+    next_action:r.status==='WEB_REVIEW_READY_ANDROID_HELD'?'REVIEW_WEB_OR_SIGNED_APK_NO_NEW_EMULATOR':'READ_CURRENT_PHASE_AND_OWNER_FEEDBACK',
     installed_foreground:/^RC\d+_INSTALLED_BYTES_VERIFIED_AND_FOREGROUND$/.test(r.emulator||''),
     obsidian_readback:r.obsidian==='WRITTEN_AND_READBACK_VERIFIED',
     bridge:r.memory_bridge?.includes('TIMEOUT')?'PENDING_TIMEOUT':r.memory_bridge?.includes('EXIT_0_EXIT_0')?'COMMANDS_EXITED_ZERO_REPLICA_UNVERIFIED':'NOT_CONFIRMED',
     collector_config_present:r.collector_config==='PRESENT',collector_auth_verified:['SUCCESS','VERIFIED_BY_SUPPORT_READ'].includes(r.collector_auth),
     signed_asset_publication:r.review_release==='SIGNED_REVIEW_ASSET_VERIFIED'?'VERIFIED':'NOT_VERIFIED',
-    host_memory_pressure_before:pressure(r.host_memory_pressure_before),host_memory_pressure_after:pressure(r.host_memory_pressure_after),performance_report_saved:r.performance_after==='MEASURED_LOCALLY',physical_tv:'NOT_VERIFIED',owner_decision:r.owner_decision==='REJECTED_PLAYBACK_BLOCKED'?'REJECTED_PLAYBACK_BLOCKED':'REVIEW_PENDING',cleanup_count:Number.isSafeInteger(r.cleanup_count)&&r.cleanup_count>=0?r.cleanup_count:0,cleanup_bytes:Number.isSafeInteger(r.cleanup_bytes)&&r.cleanup_bytes>=0?r.cleanup_bytes:0};
+    host_memory_pressure_before:pressure(r.host_memory_pressure_before),host_memory_pressure_after:pressure(r.host_memory_pressure_after),performance_report_saved:r.performance_before==='MEASURED_LOCALLY'||r.performance_after==='MEASURED_LOCALLY',physical_tv:'NOT_VERIFIED',owner_decision:r.owner_decision==='REJECTED_PLAYBACK_BLOCKED'?'REJECTED_PLAYBACK_BLOCKED':'REVIEW_PENDING',cleanup_count:Number.isSafeInteger(r.cleanup_count)&&r.cleanup_count>=0?r.cleanup_count:0,cleanup_bytes:Number.isSafeInteger(r.cleanup_bytes)&&r.cleanup_bytes>=0?r.cleanup_bytes:0};
 }
 export async function latestReview(){
   let r;

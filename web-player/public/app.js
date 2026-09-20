@@ -334,31 +334,18 @@ function base64Url(input) {
 }
 
 async function supportsWidevine() {
-  if (state.widevineSupport !== null) return state.widevineSupport;
-  if (!navigator.requestMediaKeySystemAccess) {
-    state.widevineSupport = false;
-    return false;
-  }
-  try {
-    await navigator.requestMediaKeySystemAccess("com.widevine.alpha", [{
-      initDataTypes: ["cenc"],
-      distinctiveIdentifier: "optional",
-      persistentState: "optional",
-      sessionTypes: ["temporary"],
-      audioCapabilities: [{ contentType: 'audio/mp4; codecs="mp4a.40.2"' }],
-      videoCapabilities: [{ contentType: 'video/mp4; codecs="avc1.42E01E"' }],
-    }]);
-    state.widevineSupport = true;
-  } catch {
-    state.widevineSupport = false;
-  }
+  if (state.widevineSupport === null) state.widevineSupport = await GharTVPlayback.widevine();
   return state.widevineSupport;
+}
+function startVideo(video) {
+  const generation=state.playbackGeneration;
+  return GharTVPlayback.play(video,()=>{if(generation===state.playbackGeneration){$("tapToPlay").classList.remove("hidden");$("playerStatus").textContent="Press Play to start";}},e=>{if(generation===state.playbackGeneration){$("playerStatus").textContent="Unable to play";state.playerError=e.message;$("playerProgrammeDescription").textContent=e.message;}});
 }
 
 function protectedPlaybackMessage(error) {
   const code = Number(error?.code || error?.detail?.code || error?.detail?.data?.[0]);
   if (error?.code === "widevine_unavailable" || code === 6001 || code === 6020) {
-    return "This channel uses Widevine protection. Open GharTV in Google Chrome on this Mac.";
+    return "This channel uses Widevine protection. Use the Android TV app or a browser with Widevine enabled, such as Chrome or Edge. Other compatible channels can still play here.";
   }
   return error?.message || (Number.isFinite(code) ? `Protected stream error ${code}.` : "The protected stream could not be opened.");
 }
@@ -368,7 +355,7 @@ async function playDash(video, playback, generation) {
   shaka.polyfill.installAll();
   if (!shaka.Player.isBrowserSupported()) throw new Error("This browser does not support protected live television.");
   if (playback.drm && !(await supportsWidevine())) {
-    throw Object.assign(new Error("This channel uses Widevine protection. Open GharTV in Google Chrome on this Mac."), { code: "widevine_unavailable" });
+    throw Object.assign(new Error("This channel uses Widevine protection. Use the Android TV app or a browser with Widevine enabled, such as Chrome or Edge. Other compatible channels can still play here."), { code: "widevine_unavailable" });
   }
   const player = new shaka.Player();
   state.shaka = player;
@@ -391,11 +378,11 @@ async function playDash(video, playback, generation) {
   player.addEventListener("error", (event) => {
     if (generation !== state.playbackGeneration) return;
     const message = protectedPlaybackMessage(event.detail);
-    $("playerStatus").textContent = message.includes("Google Chrome") ? "Open in Chrome" : "Unable to play";
+    $("playerStatus").textContent = message.includes("Widevine") ? "Browser compatibility" : "Unable to play";
     state.playerError=message;$("playerProgrammeDescription").textContent = message;
   });
   await player.load(playback.url, null, "application/dash+xml");
-  await video.play().catch(() => { $("playerStatus").textContent = "Press play to start"; });
+  await startVideo(video);
 }
 
 async function playChannel(channelId, autoRetry=false) {
@@ -409,6 +396,7 @@ async function playChannel(channelId, autoRetry=false) {
   state.busy = true;
   destroyPlayback();
   const generation = state.playbackGeneration;
+  $("tapToPlay").classList.add("hidden");
   state.playbackAbort=new AbortController();state.playerError="";
   const requestSignal=state.playbackAbort.signal;
   $("playerNumber").textContent = `CHANNEL ${String(channel.number).padStart(3, "0")} · ${channel.language} · ${channel.category}`;
@@ -424,15 +412,21 @@ async function playChannel(channelId, autoRetry=false) {
   showPlayerChrome();
   try {
     fetchProgrammeGuide(channel.id,generation,requestSignal).catch(()=>{});
-    const playback=await api("/api/playback",{method:"POST",body:JSON.stringify({channelId:channel.id}),signal:requestSignal});
+    const playback=await api("/api/playback",{method:"POST",body:JSON.stringify({channelId:channel.id,capabilities:{...GharTVPlayback.capabilities($("video")),widevine:await supportsWidevine()}}),signal:requestSignal});
     if(generation!==state.playbackGeneration)return;
     renderProgrammeInfo();renderProgrammeGuide();
     const video = $("video");
-    video.addEventListener("playing", () => { if (generation === state.playbackGeneration){state.playerError="";$("playerStatus").textContent = "LIVE";} }, { once: true });
+    video.addEventListener("playing", () => { if (generation === state.playbackGeneration){state.playerError="";$("tapToPlay").classList.add("hidden");$("playerStatus").textContent = "LIVE";} }, { once: true });
     video.addEventListener("waiting", () => { if (generation === state.playbackGeneration) $("playerStatus").textContent = "Buffering…"; }, { once: true });
+    video.addEventListener("error",()=>{if(generation===state.playbackGeneration){$("playerStatus").textContent="Channel unavailable in this browser";state.playerError="The provider stream could not be decoded or reached. Retry, choose another channel, or use the Android TV app.";$("playerProgrammeDescription").textContent=state.playerError;}},{once:true,signal:requestSignal});
     if (playback.protocol === "dash") {
       $("playerStatus").textContent = playback.drm ? "Opening protected stream…" : "Opening stream…";
       await playDash(video, playback, generation);
+    } else if (GharTVPlayback.engine(video) === "native") {
+      video.src = playback.url;
+      video.load();
+      $("playerStatus").textContent = "Starting video…";
+      await startVideo(video);
     } else if (window.Hls?.isSupported()) {
       state.hls = new Hls({ enableWorker: true, lowLatencyMode: true, backBufferLength: 5, maxBufferLength: 20 });
       state.hls.attachMedia(video);
@@ -440,7 +434,7 @@ async function playChannel(channelId, autoRetry=false) {
       state.hls.on(Hls.Events.MANIFEST_PARSED, () => {
         if(generation!==state.playbackGeneration)return;
         $("playerStatus").textContent = "Starting video…";
-        video.play().catch(() => { $("playerStatus").textContent = "Press play to start"; });
+        startVideo(video);
       });
       state.hls.on(Hls.Events.ERROR, (_, data) => {
         if (!data.fatal || generation !== state.playbackGeneration) return;
@@ -455,14 +449,14 @@ async function playChannel(channelId, autoRetry=false) {
     } else if (video.canPlayType("application/vnd.apple.mpegurl")) {
       video.src = playback.url;
       $("playerStatus").textContent = "Starting video…";
-      await video.play().catch(() => { $("playerStatus").textContent = "Press play to start"; });
+      await startVideo(video);
     } else throw new Error("This browser does not support HLS playback.");
     startPlayerClock();
   } catch (error) {
     if(generation!==state.playbackGeneration)return;
     const message = protectedPlaybackMessage(error);
     state.playerError=message;$("playerProgrammeDescription").textContent = message;
-    $("playerStatus").textContent = error.status === 403 ? "Not included for this account" : message.includes("Google Chrome") ? "Open in Chrome" : "Unable to play";
+    $("playerStatus").textContent = error.status === 403 ? "Not included for this account" : message.includes("Widevine") ? "Browser compatibility" : "Unable to play";
     if (error.status === 401) setConnected(false);
   } finally { if(generation===state.playbackGeneration)state.busy = false; }
 }
@@ -530,7 +524,7 @@ $("rewindButton").onclick = () => seekTo($("video").currentTime - 15);
 $("forwardButton").onclick = () => seekTo($("video").currentTime + 15);
 $("playPauseButton").onclick = () => {
   const video = $("video");
-  if (video.paused) video.play().catch(() => {}); else video.pause();
+  if (video.paused) startVideo(video); else video.pause();
   updatePlayerClock();
 };
 $("liveButton").onclick = () => {
@@ -653,3 +647,5 @@ idlePrompt.addEventListener("cancel",e=>{e.preventDefault();$("keepWatching").cl
 for(const event of ["keydown","pointerdown","touchstart"])document.addEventListener(event,activity,{passive:true});
 $("video").addEventListener("playing",()=>{if(!idleTimer)activity();});
 $("playerDialog").addEventListener("close",()=>{clearTimeout(idleTimer);idleTimer=null;clearTimeout(idleGrace);if(idlePrompt.open)idlePrompt.close();resting=false;});
+
+$("tapToPlay").onclick=()=>startVideo($("video"));

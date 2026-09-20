@@ -1,5 +1,6 @@
-import {previewContext,isPreviewActive} from './fabric-preview.mjs';
-import { ownerRoute } from "./owner-gateway.mjs";
+import {previewContext,isPreviewActive,activePreviewCount} from './fabric-preview.mjs';
+import {filmRoute} from "./film-search.mjs";
+import {selectPlayback} from "./playback-capabilities.mjs";
 import { createServer } from "node:http";
 import { createReadStream } from "node:fs";
 import { stat } from "node:fs/promises";
@@ -15,7 +16,8 @@ const PUBLIC = join(ROOT, "public");
 const HOST = process.env.GHARTV_WEB_HOST || "127.0.0.1";
 const PORT = Number(process.env.GHARTV_WEB_PORT || 8790);
 const APP_VERSION = "0.6.0-rc10.1-web-films";
-const WEB_REPAIR = "RC10-WEB-FIRST-FILMS";
+const WEB_REPAIR = "RC10.2-VIEWER-SECURITY-NATIVE-HLS";
+const filmToken = randomBytes(32).toString("hex");
 const SESSION_TTL_MS = 12 * 60 * 60 * 1000;
 const STREAM_TTL_MS = 4 * 60 * 60 * 1000;
 const MAX_BODY = 16 * 1024;
@@ -62,7 +64,7 @@ function parseCookies(header = "") {
   for (const part of header.split(";")) {
     const at = part.indexOf("=");
     if (at < 1) continue;
-    out[part.slice(0, at).trim()] = decodeURIComponent(part.slice(at + 1).trim());
+    try { out[part.slice(0, at).trim()] = decodeURIComponent(part.slice(at + 1).trim()); } catch { /* Ignore malformed cookies. */ }
   }
   return out;
 }
@@ -427,7 +429,7 @@ function providerMessage(payload, fallback) {
   return fallback;
 }
 
-async function authorizePlayback(session, channel, retry = true) {
+async function authorizePlayback(session, channel, retry = true, capabilities = {}) {
   const headers = playbackHeaders(session.account, channel);
   const response = await fetch(JIO.playback, {
     method: "POST", headers, body: new URLSearchParams({ stream_type: "Seek", channel_id: channel.id }),
@@ -438,17 +440,13 @@ async function authorizePlayback(session, channel, retry = true) {
   try { payload = raw ? JSON.parse(raw) : {}; } catch {}
   if ([401, 419, 403].includes(response.status) && retry) {
     await refreshAccount(session.account, !session.previewId);
-    return authorizePlayback(session, channel, false);
+    return authorizePlayback(session, channel, false, capabilities);
   }
   if ([401, 419].includes(response.status)) throw Object.assign(new Error("Your Jio session expired. Sign in again."), { status: 401 });
   if (response.status === 403) throw Object.assign(new Error(providerMessage(payload, "This channel is unavailable for this account or device.")), { status: 403 });
   if (!response.ok) throw Object.assign(new Error(providerMessage(payload, `Jio playback returned HTTP ${response.status}.`)), { status: response.status });
-  const hls = value(payload.result);
-  const dash = value(payload.mpd?.result);
-  const license = value(payload.mpd?.key);
-  if (!hls && !dash) throw Object.assign(new Error(providerMessage(payload, "Jio returned no browser-playable stream.")), { status: 422 });
-  const protocol = dash ? "dash" : "hls";
-  const selected = dash || hls;
+  const choice = selectPlayback(payload, capabilities);
+  const protocol = choice.protocol, selected = choice.url, license = choice.license;
   const ticket = id();
   const streamHeaders = { ...headers, "user-agent": PLAYER_USER_AGENT };
   const cookie = signedCookie(selected);
@@ -696,7 +694,7 @@ async function serveStatic(res, pathname) {
       "content-type": type,
       "content-length": info.size,
       "cache-control": "no-store",
-      "content-security-policy": "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data: https:; media-src 'self' blob:; connect-src 'self'; font-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'",
+      "content-security-policy": "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data: https:; media-src 'self' blob:; worker-src 'self' blob:; connect-src 'self'; font-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'",
       "referrer-policy": "no-referrer",
       "x-content-type-options": "nosniff",
       "x-frame-options": "DENY",
@@ -768,7 +766,7 @@ async function handleApi(req, res, url) {
     const channels = await fetchCatalogue();
     const channel = channels.find((item) => item.id === String(body.channelId || ""));
     if (!channel) return apiError(res, 404, "Channel not found.");
-    const playback = await authorizePlayback(session, channel);
+    const playback = await authorizePlayback(session, channel, true, body.capabilities || {});
     json(res, 200, { ok: true, ...playback, source: { provider: "JioTV", authorization: "experimental_owner_local", mode: playback.protocol === "dash" ? "DASH Widevine through loopback proxy" : "HLS through loopback proxy" } });
     return;
   }
@@ -789,8 +787,15 @@ export function createAppServer() {
         res.writeHead(200,{'Content-Type':'text/javascript','Cache-Control':'no-store'});
         res.end('window.GHARTV_VIEWER='+JSON.stringify({preview:!!req.ghartvViewer.preview})+';');return;
       }
-      if(req.method==='GET'&&url.pathname==='/api/health'){json(res,200,{ok:true,service:'ghartv-web-player',version:APP_VERSION,commit:process.env.GHARTV_WEB_SHA||'working-tree',host:HOST,port:PORT,timezone:'Asia/Kolkata',owner_reader:!req.ghartvViewer.preview,web_revision:WEB_REPAIR,base_source:process.env.GHARTV_WEB_SHA||'working-tree',web_overlay:process.env.GHARTV_WEB_OVERLAY||'not_verified',fabric_preview:{isolated_sessions:true,owner_routes_exposed:false,header_gate:true}});return;}
-      if(!req.ghartvViewer.preview && await ownerRoute(req,res,url))return;
+      if(req.method==='GET'&&url.pathname==='/api/health'){json(res,200,{ok:true,service:'ghartv-web-player',version:APP_VERSION,commit:process.env.GHARTV_WEB_SHA||'working-tree',host:HOST,port:PORT,timezone:'Asia/Kolkata',owner_reader:false,analytics:'NOT_SERVED_BY_VIEWER',active_previews:activePreviewCount(),web_revision:WEB_REPAIR,base_source:process.env.GHARTV_WEB_SHA||'working-tree',web_overlay:process.env.GHARTV_WEB_OVERLAY||'not_verified',fabric_preview:{isolated_sessions:true,owner_routes_exposed:false,header_gate:true}});return;}
+      // Do not import or serve private analytics, collector config or owner reports.
+      if (url.pathname.startsWith('/owner-api') || /^(?:\/owner(?:\.html)?|\/provider-access\.html|\/release-control\.html|\/performance(?:-desk)?\.html|\/support(?:\.html)?)$/.test(url.pathname)) {
+        apiError(res,404,'This page is not part of GharTV.','not_found'); return;
+      }
+      if (!req.ghartvViewer.preview && (url.pathname === '/flixmomo.html' || url.pathname.startsWith('/api/films/'))) {
+        assertLocalOrigin(req);
+        if(await filmRoute(req,res,url,r => r.headers.authorization === 'Bearer '+filmToken,filmToken)) return;
+      }
       if (url.pathname.startsWith("/api/")) await handleApi(req, res, url);
       else if (!(await serveStatic(res, url.pathname))) apiError(res, 404, "Not found.");
     } catch (error) {
@@ -799,7 +804,7 @@ export function createAppServer() {
         return;
       }
       const status = Number(error.status) || (error instanceof SyntaxError ? 400 : 502);
-      apiError(res, status, error.message || "The request failed.", status === 401 ? "auth_required" : "provider_error");
+      apiError(res, status, error.message || "The request failed.", error.code || (status === 401 ? "auth_required" : "provider_error"));
     }
   });
 }

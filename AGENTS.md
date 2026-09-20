@@ -1,3 +1,9 @@
+# First read for every GharTV continuation
+
+Fetch https://api.github.com/repos/AmritSinghGit/ghartv/issues/comments/5687119492 and verify the GHARTV_SAFE_RECEIPT_V1 marker, exact run and hashes. Read actual PR1 head, release manifest and production feed separately. Do not ask Amrit to paste a handoff that connected GitHub can read. Use existing amrit-memory bootstrap when available; a bridge timeout is not a verified replica. Never claim automatic knowledge of every arbitrary future chat.
+
+The September19 owner run signed code28 successfully. Android did not install because memory was WARNING at RESOURCE_PREFLIGHT. The public viewer homepage is approved: preserve it. Analytics belongs to the existing Operon Analytics GharTV tenant/PR61, not the viewer. New web source and unchanged Android source must remain distinct. No duplicate database, signing key, worktree, emulator or runtime controller.
+
 # GharTV continuation rules
 
 - Read CURRENT_HANDOFF.md, REVIEW_CANDIDATE.json on main, OWNER_REVIEW_REQUIREMENTS.json on this branch, live update/latest.json and actual Git refs. Older release/state records may be historical; reconcile rather than silently selecting an old candidate.

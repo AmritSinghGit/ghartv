@@ -1,5 +1,5 @@
 #!/bin/bash
-# GharTV RC10.1 startup repair R2. Same APK, same companion, no public rollout.
+# GharTV RC10.2 browser delivery. Same Android APK, new web companion, no public rollout.
 set -u
 umask 077
 if [ "$(uname -s)" != Darwin ]; then printf 'This review launcher runs on macOS. No changes made.\n'; exit 2; fi
@@ -10,7 +10,7 @@ for candidate in /opt/homebrew/bin/python3 /usr/local/bin/python3 /usr/bin/pytho
 done
 if [ -z "$PY" ] && command -v python3 >/dev/null 2>&1 && python3 -c 'import sys;raise SystemExit(0 if sys.version_info >= (3,9) else 1)' >/dev/null 2>&1; then PY="$(command -v python3)"; fi
 if [ -z "$PY" ]; then printf 'Python 3.9 or newer is required. No app, source or signing key changed.\n'; exit 1; fi
-printf '\033[38;5;51m\nGharTV Nova RC10.1 · startup repair R2\033[0m\n'
+printf '\033[38;5;51m\nGharTV Nova RC10.2 · browser and privacy review\033[0m\n'
 "$PY" - "$HERE" "$@" <<'SEED'
 from pathlib import Path
 import datetime as dt,fcntl,hashlib,io,json,os,stat,subprocess,sys,tempfile
@@ -99,13 +99,7 @@ except Exception as e:
   print('Private startup receipt: '+str(dest/'handoff.txt'))
  except Exception:print('Output path remains protected; use the handoff printed below.')
  print(text,flush=True)
- if '--noninteractive' not in sys.argv[2:]:
-  try:
-   with io.TextIOWrapper(io.FileIO('/dev/tty','r+'),encoding='utf-8',write_through=True) as tty:
-    tty.write('Press Enter to copy this handoff: ');tty.readline()
-    subprocess.run(['pbcopy'],input=text,text=True,check=False)
-    tty.write('Press Enter to finish: ');tty.readline()
-  except OSError:pass
+ if '--copy-handoff' in sys.argv[2:]:subprocess.run(['pbcopy'],input=text,text=True,check=False)
  sys.exit(1)
 SEED
 RESULT=$?

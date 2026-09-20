@@ -20,7 +20,7 @@ assert 'transport.attach_or_start(sdk,RUN)' in launcher and "sock.bind(('127.0.0
 assert 'TV_EXPERIENCE_CONTRACT.json' in (R/'tools/package_owner_review.py').read_text()
 print('REVIEW_CODE28_AND_CORRECTED_OPENER=PASS')
 
-assert 'GHARTV_CYAN_REVIEW_15_HANDOFF' in launcher and 'GHARTV_CYAN_REVIEW_14_HANDOFF' not in launcher
+assert 'GHARTV_CYAN_REVIEW_16_HANDOFF' in launcher and 'GHARTV_CYAN_REVIEW_15_HANDOFF' not in launcher
 assert 'java.util.Objects.equals(selectedChannel.id,candidate.id)' in m
 assert 'channel.number+":"+safe(channel.id)' not in c
-print('STABLE_CHANNEL_ID_AND_REVIEW15_LABEL=PASS')
+print('STABLE_CHANNEL_ID_AND_REVIEW16_LABEL=PASS')

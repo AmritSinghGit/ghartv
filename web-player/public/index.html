@@ -10,6 +10,7 @@
   <script defer src="./vendor/hls.min.js"></script>
   <script defer src="./shaka-player.compiled.js"></script>
   <script defer src="./viewer-context.js"></script>
+  <script defer src="./playback-engine.js"></script>
   <script defer src="./app.js"></script>
 </head>
 <body>
@@ -17,7 +18,7 @@
   <header class="topbar">
     <a class="brand" href="#" aria-label="GharTV home">GHAR<span>TV</span></a>
     <label class="search nav-search"><span aria-hidden="true">⌕</span><input id="search" type="search" autocomplete="off" aria-label="Search channels, language or category" placeholder="Find a channel, language or category"><kbd aria-hidden="true">/</kbd></label>
-    <div class="top-actions"><a class="owner-link" href="./flixmomo.html">FlixMomo ↗</a><a class="owner-link" href="./owner.html">Owner console ↗</a>
+    <div class="top-actions"><a class="owner-link" href="./flixmomo.html">FlixMomo ↗</a>
       <button id="accountButton" class="account" type="button">Connect JioTV</button>
     </div>
   </header>
@@ -61,7 +62,8 @@
 
   <dialog id="playerDialog" class="player-modal" aria-label="Live television player" tabindex="0">
     <div class="player-shell">
-      <video id="video" autoplay playsinline></video>
+      <video id="video" playsinline preload="metadata"></video>
+      <button id="tapToPlay" class="tap-to-play hidden" type="button">▶ Play channel</button>
       <div class="player-gradient"></div>
       <div class="player-top"><div><span class="live-dot">● LIVE</span><span class="source-badge">JioTV</span><span id="playerScope" class="scope-badge"></span></div><button id="closePlayer" type="button" aria-label="Return to channel guide" title="Return to guide · Escape">×</button></div>
       <button id="previousChannel" class="channel-step previous" type="button" aria-label="Previous channel"><span>‹</span><small>Previous<br>channel</small></button>

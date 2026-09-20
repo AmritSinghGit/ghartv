@@ -1,7 +1,7 @@
 // Transport remains owned by Operon Local Fabric. No tunnel/server is started here.
 const previews = new Map();
 const idPattern=/^shr_[a-z0-9]{6,80}$/;
-const allowedGets=new Set(['/','/index.html','/styles.css','/player.css','/app.js','/viewer-context.js','/shaka-player.compiled.js','/vendor/hls.min.js','/api/auth/status','/api/channels','/api/epg','/api/health']);
+const allowedGets=new Set(['/','/index.html','/styles.css','/player.css','/app.js','/playback-engine.js','/viewer-context.js','/shaka-player.compiled.js','/vendor/hls.min.js','/api/auth/status','/api/channels','/api/epg','/api/health']);
 const allowedPosts=new Set(['/api/auth/otp/send','/api/auth/otp/verify','/api/auth/logout','/api/playback']);
 function reply(res,status,body){if(body.error&&!body.message)body.message=body.error==='preview_not_armed_or_expired'?'This private preview is unavailable, expired or revoked. Ask the owner for a new link.':body.error==='preview_otp_limit'?'The temporary preview sign-in limit has been reached. Ask the owner to start a new test.':'This action is not available in the temporary viewer.';res.writeHead(status,{'Content-Type':'application/json','Cache-Control':'no-store','Referrer-Policy':'no-referrer','X-Content-Type-Options':'nosniff'});res.end(JSON.stringify(body));}
 export function revokePreview(id){const p=previews.get(id);if(p){clearTimeout(p.timer);for(const res of p.responses)res.destroy();previews.delete(id);}return Boolean(p);}
@@ -42,3 +42,5 @@ export function previewContext(req,res,url){
   return {preview:true,handled:false,id:p.id,prefix:p.prefix,origin:p.origin,expiresAt:p.expiresAt};
 }
 export function isPreviewActive(id){const p=previews.get(id);return !!p&&p.expiresAt>Date.now();}
+
+export function activePreviewCount(){return [...previews.values()].filter(p=>p.expiresAt>Date.now()).length;}

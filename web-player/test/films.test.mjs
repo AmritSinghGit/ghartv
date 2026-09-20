@@ -28,15 +28,15 @@ test('film page is private from Fabric previews, with frame and script CSP',asyn
  const ok=await call('/flixmomo.html',{});assert.equal(ok.status,200);assert.match(ok.headers['Content-Security-Policy'],/frame-ancestors 'none'/);assert.match(ok.body,/Tor selected/);
 });
 test('film APIs require owner session and reject cross-origin POST',async()=>{
- assert.equal((await call('/owner-api/films/status',{},()=>false)).status,401);
- assert.equal((await call('/owner-api/films/search',{method:'POST',body:{query:'dune',route:'tor'},headers:{origin:'https://evil.invalid'}})).status,403);
+ assert.equal((await call('/api/films/status',{},()=>false)).status,401);
+ assert.equal((await call('/api/films/search',{method:'POST',body:{query:'dune',route:'tor'},headers:{origin:'https://evil.invalid'}})).status,403);
 });
 test('missing browser yields actionable failure rather than invented results',async()=>{
- const r=await call('/owner-api/films/search',{method:'POST',body:{query:'dune',route:'direct'}});assert.equal(r.status,400);assert.equal(JSON.parse(r.body).error,'INSTALL_BRAVE_OR_CHROMIUM_FIRST');
+ const r=await call('/api/films/search',{method:'POST',body:{query:'dune',route:'direct'}});assert.equal(r.status,400);assert.equal(JSON.parse(r.body).error,'OPTIONAL_BROWSER_MISSING_USE_DIRECT_LINK');
 });
 test('unrecognized routes and arbitrary open URLs are rejected',async()=>{
- const r=await call('/owner-api/films/open',{method:'POST',body:{id:'movie:1',url:'https://evil.invalid',route:'direct'}});assert.equal(JSON.parse(r.body).error,'SEARCH_RESULT_EXPIRED_SEARCH_AGAIN');
- assert.equal((await call('/owner-api/films/search',{method:'POST',body:{query:'dune',route:'auto'}})).status,400);
+ const r=await call('/api/films/open',{method:'POST',body:{id:'movie:1',url:'https://evil.invalid',route:'direct'}});assert.equal(JSON.parse(r.body).error,'SEARCH_RESULT_EXPIRED_SEARCH_AGAIN');
+ assert.equal((await call('/api/films/search',{method:'POST',body:{query:'dune',route:'auto'}})).status,400);
 });
 test('UI never claims server Tor for embedded direct playback and has no report polling',()=>{
  const html=filmHTML('a'.repeat(64));assert.match(html,/Embedded playback cannot use the server's Tor route/);assert.match(html,/embed.disabled=\$\('route'\).value==='tor'/);assert.doesNotMatch(html,/setInterval|localStorage|collector.env|admin\/summary/);
@@ -45,14 +45,14 @@ test('UI never claims server Tor for embedded direct playback and has no report 
 test('parallel requests reserve browser admission before discovery resolves',async()=>{
  let release;const discovery=new Promise(resolve=>{release=resolve;});
  const route=makeFilmRoute({discover:()=>discovery});const a=response(),b=response();
- const first=route(req('/owner-api/films/search',{method:'POST',body:{query:'dune',route:'direct'}}),a,new URL('/owner-api/films/search',origin),()=>true,'a'.repeat(64));
+ const first=route(req('/api/films/search',{method:'POST',body:{query:'dune',route:'direct'}}),a,new URL('/api/films/search',origin),()=>true,'a'.repeat(64));
  await new Promise(resolve=>setImmediate(resolve));
- await route(req('/owner-api/films/search',{method:'POST',body:{query:'dune',route:'direct'}}),b,new URL('/owner-api/films/search',origin),()=>true,'a'.repeat(64));
+ await route(req('/api/films/search',{method:'POST',body:{query:'dune',route:'direct'}}),b,new URL('/api/films/search',origin),()=>true,'a'.repeat(64));
  assert.equal(b.status,409);release(null);await first;assert.equal(a.status,400);
 });
 
 test('manual provider browse uses only the registered home and explicit route',async()=>{
- const r=await call('/owner-api/films/browse',{method:'POST',body:{route:'direct'}});
- assert.equal(JSON.parse(r.body).error,'INSTALL_BRAVE_OR_CHROMIUM_FIRST');
+ const r=await call('/api/films/browse',{method:'POST',body:{route:'direct'}});
+ assert.equal(JSON.parse(r.body).error,'OPTIONAL_BROWSER_MISSING_USE_DIRECT_LINK');
  assert.match(filmHTML('a'.repeat(64)),/Complete any verification yourself/);
 });
