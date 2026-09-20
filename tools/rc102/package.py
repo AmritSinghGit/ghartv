@@ -1,0 +1,78 @@
+"""Package an improved web/runtime delivery, retaining the already-signed Android payload."""
+from pathlib import Path
+import hashlib,io,json,os,re,subprocess,sys,zipfile
+R=Path(__file__).resolve().parents[2]
+APP_SOURCE='9457654eafe86a08c402c6829c6cae3312c3e196'
+APK_HASH='cc2d95be434f6b3a8de8986f0a17813507c98471d2f39d0230108f3f8b47d810'
+PRIOR_HASH='63e1502cf9af2e6a29a4fe1ef49d4823c0a088f5003e78d33acc16e08a9440d1'
+TAG='v0.6.0-rc10.2-web-security'; NAME='GHARTV_RC10_2_REVIEW'
+prior,out,source=Path(sys.argv[1]),Path(sys.argv[2]),sys.argv[3]
+assert re.fullmatch('[a-f0-9]{40}',source)
+sha=lambda p:hashlib.sha256(p.read_bytes()).hexdigest()
+assert sha(prior)==PRIOR_HASH,'ORIGINAL_BUNDLE_CHANGED'
+out.mkdir(parents=True,exist_ok=True)
+with zipfile.ZipFile(prior) as z:
+ root='GHARTV_RC10_1_R2_REVIEW/'
+ apk=z.read(root+'assets/GharTV-review-unsigned.apk')
+ reference=z.read(root+'assets/GharTV-Jio-Live-v0.5.4-rc8-pre-birthday-recovery.apk')
+ assert hashlib.sha256(apk).hexdigest()==APK_HASH
+ assert hashlib.sha256(reference).hexdigest()=='8cff8f85403da5924865fddc687dbff11089d7c498f9863e483a7d8123c1ce13'
+(out/'GharTV-review-unsigned.apk').write_bytes(apk)
+refname='GharTV-Jio-Live-v0.5.4-rc8-pre-birthday-recovery.apk'
+(out/refname).write_bytes(reference)
+excluded={'owner-gateway.mjs','performance-desk.mjs','release-desk.mjs','support-report.mjs','provider-browser-worker.mjs'}
+paths=[]
+for p in (R/'web-player').rglob('*'):
+ rel=p.relative_to(R)
+ if not p.is_file() or p.is_symlink() or p.suffix.lower() in ('.ttf','.otf','.woff','.woff2','.pem','.key','.jks') or p.name.startswith('.'):continue
+ if p.name in excluded or 'test' in rel.parts:continue
+ if 'node_modules' in rel.parts and str(rel) not in ('web-player/node_modules/hls.js/dist/hls.min.js','web-player/node_modules/hls.js/LICENSE') and rel.parts[:4]!=('web-player','browser-tools','node_modules','playwright-core'):continue
+ paths.append(rel)
+for n in ('GHARTV_LANE_PROGRESS.md','CURRENT_HANDOFF.md','TV_EXPERIENCE_CONTRACT.json','tools/tv_local.py','tools/performance/host_check.py','tools/GharTVApkVerifier.java','tools/emulator_network_repair.py','tools/release_control.py','docs/privacy.html'):
+ paths.append(Path(n))
+with zipfile.ZipFile(out/'GharTV-review-companion.zip','w',compression=zipfile.ZIP_DEFLATED) as z:
+ for p in sorted(paths):z.write(R/p,str(p))
+ z.writestr('REVIEW_RC10_2.md',(R/'tools/rc102/REVIEW.md').read_text())
+m={'schema':'ghartv.review-manifest.v2','source_sha':APP_SOURCE,'web_source_sha':source,'delivery_source_sha':source,'branch':'codex/ghartv-remove-auto-preview','pr':1,'version_name':'0.6.0-rc10.1-web-films','version_code':28,'delivery_version':'RC10.2-WEB-SECURITY','unsigned_sha256':APK_HASH,'companion_sha256':sha(out/'GharTV-review-companion.zip'),'production_unchanged':True,'android_rebuilt':False,'owner_signed_apk_sha256':None,'owner_mac_run':'NOT_EXECUTED_THIS_DELIVERY','analytics_routes':'NOT_SERVED','ai_super_resolution':'NOT_IMPLEMENTED'}
+manifest=out/'review-manifest.json';manifest.write_text(json.dumps(m,indent=2)+'\n')
+text=(R/'tools/owner_review.command.in').read_text()
+for name,val in {'@SOURCE_SHA@':APP_SOURCE,'@WEB_SOURCE_SHA@':source,'@UNSIGNED_SHA@':APK_HASH,'@MANIFEST_SHA@':sha(manifest),'@EMBEDDED_MANIFEST_REPR@':repr(manifest.read_text()),'@COMPANION_SHA@':m['companion_sha256']}.items():text=text.replace(name,val)
+assert not re.search('@[A-Z_]+@',text)
+command=out/'GHARTV_SYNC_CURRENT_AND_REPORT.command';command.write_text(text);command.chmod(0o700)
+public={manifest.name:manifest,'GharTV-review-companion.zip':out/'GharTV-review-companion.zip','GharTV-review-unsigned.apk':out/'GharTV-review-unsigned.apk',refname:out/refname}
+expected={n:sha(p) for n,p in public.items()}
+start=(R/'tools/run_owner_bundle.command.in').read_text().replace('@ARTIFACT_HASHES_REPR@',repr(expected)).replace('@COMMAND_SHA@',sha(command))
+assert not re.search('@[A-Z_]+@',start)
+starter=out/'RUN_GHARTV_REVIEW.command';starter.write_text(start);starter.chmod(0o700)
+for p,delimiter in ((command,'PY'),(starter,'SEED')):
+ subprocess.run(['bash','-n',str(p)],check=True)
+ compile(p.read_text().split("<<'"+delimiter+"'\n",1)[1].split('\n'+delimiter+'\n',1)[0],str(p),'exec')
+package=out/(NAME+'.zip');prefix=NAME+'/'
+members={'README.md':(R/'tools/rc102/REVIEW.md').read_bytes(),command.name:command.read_bytes(),starter.name:starter.read_bytes()}
+for n,flag in [('RUN_GHARTV_WEB.command','--web-only'),('PREPARE_GHARTV_UPDATE.command','--prepare-update')]:
+ members[n]=('#!/bin/bash\nset -euo pipefail\nHERE="$(cd "$(dirname "$0")" && pwd)"\nexec /bin/bash "$HERE/RUN_GHARTV_REVIEW.command" '+flag+' "$@"\n').encode()
+for name,p in public.items():members['assets/'+name]=p.read_bytes()
+members['SHA256SUMS']=''.join(hashlib.sha256(v).hexdigest()+'  '+k+'\n' for k,v in sorted(members.items())).encode()
+with zipfile.ZipFile(package,'w',compression=zipfile.ZIP_DEFLATED) as z:
+ for name,data in sorted(members.items()):z.writestr(prefix+name,data)
+with zipfile.ZipFile(package) as z:
+ assert z.testzip() is None
+ for line in z.read(prefix+'SHA256SUMS').decode().splitlines():
+  h,n=line.split('  ',1);assert hashlib.sha256(z.read(prefix+n)).hexdigest()==h
+record={**m,'bundle_sha256':sha(package),'bundle_bytes':package.stat().st_size,'launcher_sha256':sha(command),'manifest_sha256':sha(manifest),'starter_sha256':sha(starter)}
+(out/'DELIVERY.json').write_text(json.dumps(record,indent=2)+'\n')
+entry='''#!/bin/bash
+set -euo pipefail
+umask 077
+d="$(mktemp -d "${TMPDIR:-/tmp}/ghartv-rc102.XXXXXX")"
+cleanup(){ cd /; rm -rf -- "$d"; }
+trap cleanup EXIT
+curl --proto '=https' --proto-redir '=https' -fL --show-error --connect-timeout 20 --max-time 180 --retry 2 'https://github.com/AmritSinghGit/ghartv/releases/download/'''+TAG+'/'+NAME+'''.zip' -o "$d/review.zip"
+printf '%s  %s\\n' '''+"'"+sha(package)+"'"+''' "$d/review.zip" | shasum -a 256 -c -
+unzip -q "$d/review.zip" -d "$d"
+/bin/bash "$d/'''+NAME+'''/RUN_GHARTV_REVIEW.command" "$@"
+'''
+(out/'GHARTV_REVIEW_RC10_2.command').write_text(entry)
+subprocess.run(['bash','-n',str(out/'GHARTV_REVIEW_RC10_2.command')],check=True)
+(out/'SHA256SUMS').write_text(''.join(sha(p)+'  '+p.name+'\n' for p in sorted(out.iterdir()) if p.is_file() and p.name!='SHA256SUMS'))
+print(json.dumps(record,indent=2))
