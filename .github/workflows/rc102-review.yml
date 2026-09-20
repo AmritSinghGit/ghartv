@@ -144,7 +144,8 @@ jobs:
             with zipfile.ZipFile(io.BytesIO(z.read(prefix+'assets/GharTV-review-companion.zip'))) as companion:
               assert not any(n.endswith(('.woff','.woff2','.ttf','.otf')) for n in companion.namelist())
               assert 'web-player/owner-gateway.mjs' not in companion.namelist()
-              assert not any(n.endswith('.ts') or n.endswith('fixture.html') for n in companion.namelist())
+              # TypeScript declaration .ts files are not MPEG transport-stream test media.
+              assert not any(Path(n).name in ('test.m3u8','fixture.html') or re.fullmatch(r'segment[0-9]{3}\.ts',Path(n).name) for n in companion.namelist())
           v={'schema':'ghartv.rc102-validation.v1','web_source':d['web_source_sha'],'application_source':d['source_sha'],'android_code':28,'android_rebuilt':False,'node_tests_passed':passed,'tv_contract_rules':9,'mac_upgrade_and_repeat':reports['MAC_WEB_VALIDATION.json'],'safari':reports['SAFARI_VALIDATION.json'],'chromium':reports['CHROMIUM_VALIDATION.json'],'bundle_checksums':'PASS','provider_playback':'NOT_VERIFIED','owner_mac_execution':'NOT_EXECUTED','physical_tv':'NOT_VERIFIED','real_tor_route':'NOT_VERIFIED','production_changed':False,'workflow_run':os.environ['GITHUB_RUN_ID']}
           (out/'VALIDATION.json').write_text(json.dumps(v,indent=2)+'\n')
           (out/'SHA256SUMS').write_text(''.join(hashlib.sha256(p.read_bytes()).hexdigest()+'  '+p.name+'\n' for p in sorted(out.iterdir()) if p.is_file() and p.name!='SHA256SUMS'))
