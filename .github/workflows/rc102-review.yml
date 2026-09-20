@@ -1,0 +1,159 @@
+name: GharTV RC10.2 browser and privacy review
+on:
+  push:
+    branches: [codex/ghartv-remove-auto-preview]
+    paths: ['.github/workflows/rc102-review.yml']
+permissions:
+  contents: write
+concurrency:
+  group: ghartv-rc102-review
+  cancel-in-progress: false
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    outputs:
+      source: ${{ steps.source.outputs.sha }}
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GHARTV_DISABLE_KEYCHAIN: '1'
+      PYTHONDONTWRITEBYTECODE: '1'
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Integrate the existing native files and validate behaviour
+        run: |
+          set -euo pipefail
+          if ! grep -q 'RC10.2-VIEWER-SECURITY-NATIVE-HLS' web-player/server.mjs; then
+            python tools/rc102/integrate_server.py
+            python tools/rc102/integrate_ui.py
+            python tools/rc102/integrate_delivery.py
+          fi
+          python tools/tv-first/check_contract.py
+          npm ci --ignore-scripts --prefix web-player
+          npm ci --ignore-scripts --prefix web-player/browser-tools
+          mkdir -p /tmp/rc102/proof
+          node --test web-player/test/*.mjs | tee /tmp/rc102/proof/node-tests.txt
+          node --check web-player/public/app.js
+          node --check web-player/server.mjs
+          git diff --check
+      - name: Commit exact native source; refuse competing branch changes
+        id: source
+        run: |
+          set -euo pipefail
+          test "$(git ls-remote origin refs/heads/codex/ghartv-remove-auto-preview | cut -f1)" = "$GITHUB_SHA"
+          git config user.name 'GharTV candidate builder'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          if git ls-files --error-unmatch docs/owner.html >/dev/null 2>&1; then git rm -- docs/owner.html; fi
+          git add -u
+          if ! git diff --cached --quiet; then
+            git commit -m 'fix(ghartv): integrate RC10.2 viewer privacy native Safari and automatic continuity'
+            git push origin HEAD:refs/heads/codex/ghartv-remove-auto-preview
+          fi
+          sha="$(git rev-parse HEAD)"
+          echo "sha=$sha" >> "$GITHUB_OUTPUT"
+          echo "GHARTV_WEB_SHA=$sha" >> "$GITHUB_ENV"
+      - name: Browser UI checks with remote requests blocked
+        run: node tools/rc102/browser_check.mjs /tmp/rc102/proof
+      - name: Package exact unchanged Android and improved viewer
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/rc102/delivery
+          curl --proto '=https' --proto-redir '=https' -fLsS --connect-timeout 20 --max-time 180 --retry 1 https://github.com/AmritSinghGit/ghartv/releases/download/v0.6.0-rc10.1-startup-r2/GHARTV_RC10_1_R2_REVIEW.zip -o /tmp/rc102/prior.zip
+          python tools/rc102/package.py /tmp/rc102/prior.zip /tmp/rc102/delivery '${{ steps.source.outputs.sha }}'
+          git archive --format=zip HEAD -o /tmp/rc102/delivery/GHARTV_RC10_2_SOURCE.zip
+      - name: Generate clearly labelled local HLS test media only
+        run: |
+          set -euo pipefail
+          if ! command -v ffmpeg >/dev/null; then sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg; fi
+          mkdir -p /tmp/rc102/fixture
+          cp tools/rc102/fixture.html /tmp/rc102/fixture/index.html
+          cp web-player/public/playback-engine.js /tmp/rc102/fixture/
+          cp web-player/node_modules/hls.js/dist/hls.min.js /tmp/rc102/fixture/
+          ffmpeg -hide_banner -loglevel error -f lavfi -i 'testsrc2=size=640x360:rate=25' -f lavfi -i 'sine=frequency=440:sample_rate=48000' -t 12 -c:v libx264 -pix_fmt yuv420p -profile:v baseline -level 3.0 -g 50 -sc_threshold 0 -c:a aac -b:a 64k -f hls -hls_time 2 -hls_list_size 0 -hls_playlist_type vod -hls_segment_filename '/tmp/rc102/fixture/segment%03d.ts' /tmp/rc102/fixture/test.m3u8
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: ghartv-rc102-staging
+          path: /tmp/rc102/
+          retention-days: 7
+  mac:
+    needs: build
+    runs-on: macos-14
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ needs.build.outputs.source }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: actions/download-artifact@v4
+        with:
+          name: ghartv-rc102-staging
+          path: /tmp/rc102
+      - name: Real Apple Silicon upgrade, repeat launch, native Safari UI and HLS
+        run: python3 tools/rc102/mac_web_smoke.py /tmp/rc102/delivery/GHARTV_RC10_2_REVIEW.zip /tmp/rc102/prior.zip /tmp/rc102-mac-proof '${{ needs.build.outputs.source }}' /tmp/rc102/fixture
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: ghartv-rc102-mac-proof
+          path: /tmp/rc102-mac-proof/
+          retention-days: 7
+  publish:
+    needs: [build,mac]
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ needs.build.outputs.source }}
+      - uses: actions/download-artifact@v4
+        with:
+          name: ghartv-rc102-staging
+          path: /tmp/rc102
+      - uses: actions/download-artifact@v4
+        with:
+          name: ghartv-rc102-mac-proof
+          path: /tmp/rc102/proof
+      - name: Verify final evidence and publish review only
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          from pathlib import Path
+          import hashlib,json,os,re,shutil,zipfile,io
+          root=Path('/tmp/rc102');out=root/'delivery';proof=root/'proof'
+          d=json.loads((out/'DELIVERY.json').read_text())
+          assert d['web_source_sha']=='${{ needs.build.outputs.source }}'
+          assert d['android_rebuilt'] is False
+          reports={}
+          for name in ('MAC_WEB_VALIDATION.json','SAFARI_VALIDATION.json','CHROMIUM_VALIDATION.json'):
+            reports[name]=json.loads((proof/name).read_text());assert reports[name]['status']=='PASS'
+            shutil.copyfile(proof/name,out/name)
+          log=(proof/'node-tests.txt').read_text();passed=int(re.search(r'# pass (\d+)',log)[1]);assert passed>=27 and '# fail 0' in log
+          with zipfile.ZipFile(out/'GHARTV_RC10_2_REVIEW.zip') as z:
+            prefix='GHARTV_RC10_2_REVIEW/'
+            for line in z.read(prefix+'SHA256SUMS').decode().splitlines():
+              h,n=line.split('  ',1);assert hashlib.sha256(z.read(prefix+n)).hexdigest()==h
+            with zipfile.ZipFile(io.BytesIO(z.read(prefix+'assets/GharTV-review-companion.zip'))) as companion:
+              assert not any(n.endswith(('.woff','.woff2','.ttf','.otf')) for n in companion.namelist())
+              assert 'web-player/owner-gateway.mjs' not in companion.namelist()
+              assert not any(n.endswith('.ts') or n.endswith('fixture.html') for n in companion.namelist())
+          v={'schema':'ghartv.rc102-validation.v1','web_source':d['web_source_sha'],'application_source':d['source_sha'],'android_code':28,'android_rebuilt':False,'node_tests_passed':passed,'tv_contract_rules':9,'mac_upgrade_and_repeat':reports['MAC_WEB_VALIDATION.json'],'safari':reports['SAFARI_VALIDATION.json'],'chromium':reports['CHROMIUM_VALIDATION.json'],'bundle_checksums':'PASS','provider_playback':'NOT_VERIFIED','owner_mac_execution':'NOT_EXECUTED','physical_tv':'NOT_VERIFIED','real_tor_route':'NOT_VERIFIED','production_changed':False,'workflow_run':os.environ['GITHUB_RUN_ID']}
+          (out/'VALIDATION.json').write_text(json.dumps(v,indent=2)+'\n')
+          (out/'SHA256SUMS').write_text(''.join(hashlib.sha256(p.read_bytes()).hexdigest()+'  '+p.name+'\n' for p in sorted(out.iterdir()) if p.is_file() and p.name!='SHA256SUMS'))
+          print(json.dumps(d));print(json.dumps(v))
+          PY
+          gh release create v0.6.0-rc10.2-web-security /tmp/rc102/delivery/GHARTV_RC10_2_REVIEW.zip /tmp/rc102/delivery/GHARTV_REVIEW_RC10_2.command /tmp/rc102/delivery/GHARTV_RC10_2_SOURCE.zip /tmp/rc102/delivery/GharTV-review-companion.zip /tmp/rc102/delivery/GharTV-review-unsigned.apk /tmp/rc102/delivery/review-manifest.json /tmp/rc102/delivery/GHARTV_SYNC_CURRENT_AND_REPORT.command /tmp/rc102/delivery/DELIVERY.json /tmp/rc102/delivery/VALIDATION.json /tmp/rc102/delivery/MAC_WEB_VALIDATION.json /tmp/rc102/delivery/SAFARI_VALIDATION.json /tmp/rc102/delivery/CHROMIUM_VALIDATION.json /tmp/rc102/delivery/SHA256SUMS --repo AmritSinghGit/ghartv --target '${{ needs.build.outputs.source }}' --prerelease --latest=false --title 'GharTV RC10.2 — viewer privacy, native Safari and automatic continuity' --notes-file tools/rc102/REVIEW.md
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: ghartv-rc102-completed
+          path: /tmp/rc102/delivery/
+          retention-days: 7
