@@ -17,11 +17,11 @@ class WindowTests(unittest.TestCase):
   r=m.request_window_details([(123,CMD)],run=lambda *a,**k:SimpleNamespace(returncode=0,stdout=str(os.getuid())+' /usr/bin/other'))
   self.assertEqual(r['status'],'MAC_TARGET_CHANGED_PRESERVED')
  def test_query_failure_never_reports_visible(self):
-  with patch.object(m.sys,'platform','darwin'),patch.object(m,'restore_minimized_if_authorized',return_value={}):
+  with patch.object(m.sys,'platform','darwin'),patch.object(m,'restore_minimized_if_authorized',return_value={}),patch.object(m,'verified_probe',return_value='/test/probe'):
    r=m.native_window(123,run=lambda *a,**k:SimpleNamespace(returncode=1,stdout=''))
   self.assertFalse(r['window_observed']);self.assertEqual(r['status'],'MAC_WINDOW_QUERY_UNAVAILABLE')
  def test_native_result_fields_are_separate(self):
-  with patch.object(m.sys,'platform','darwin'),patch.object(m,'restore_minimized_if_authorized',return_value={}):
+  with patch.object(m.sys,'platform','darwin'),patch.object(m,'restore_minimized_if_authorized',return_value={}),patch.object(m,'verified_probe',return_value='/test/probe'):
    r=m.native_window(123,run=lambda *a,**k:SimpleNamespace(returncode=0,stdout=json.dumps({'status':'MAC_WINDOW_ONSCREEN_OBSERVED','window_observed':True,'app_active':False})))
   self.assertTrue(r['window_observed']);self.assertFalse(r['app_active'])
  def test_launcher_calls_existing_window_helper_and_does_not_force_stop(self):

@@ -30,7 +30,7 @@ for p in (R/'web-player').rglob('*'):
  if p.name in excluded or 'test' in rel.parts or 'browser-tools' in rel.parts:continue
  if 'node_modules' in rel.parts and str(rel) not in ('web-player/node_modules/hls.js/dist/hls.min.js','web-player/node_modules/hls.js/LICENSE') and rel.parts[:4]!=('web-player','browser-tools','node_modules','playwright-core'):continue
  paths.append(rel)
-for n in ('GHARTV_LANE_PROGRESS.md','CURRENT_HANDOFF.md','TV_EXPERIENCE_CONTRACT.json','tools/tv_local.py','tools/tv_window.py','tools/performance/host_check.py','tools/GharTVApkVerifier.java','tools/emulator_network_repair.py','tools/release_control.py','docs/privacy.html'):
+for n in ('GHARTV_LANE_PROGRESS.md','CURRENT_HANDOFF.md','TV_EXPERIENCE_CONTRACT.json','tools/tv_local.py','tools/tv_window.py','tools/native/GharTVWindowProbe','tools/native/window-manifest.json','tools/performance/host_check.py','tools/GharTVApkVerifier.java','tools/emulator_network_repair.py','tools/release_control.py','docs/privacy.html'):
  paths.append(Path(n))
 with zipfile.ZipFile(out/'GharTV-review-companion.zip','w',compression=zipfile.ZIP_DEFLATED) as z:
  for p in sorted(paths):z.write(R/p,str(p))

@@ -26,7 +26,7 @@ final class FilmView: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNavig
         window.delegate = self; window.appearance = NSAppearance(named: .darkAqua)
         let content = NSView(); window.contentView = content
         let title = NSTextField(labelWithString: "GharTV  /  FlixMomo"); title.font = .boldSystemFont(ofSize: 19)
-        query.placeholderString = "Search FlixMomo inside GharTV"; query.target = self; query.action = #selector(search)
+        query.sendsWholeSearchString = true; query.placeholderString = "Search FlixMomo inside GharTV"; query.target = self; query.action = #selector(search)
         let row = NSStackView(views: [title, query,
             NSButton(title: "Search", target: self, action: #selector(search)),
             NSButton(title: "Back", target: self, action: #selector(goBack)),

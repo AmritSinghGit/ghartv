@@ -96,36 +96,36 @@ def restore_minimized_if_authorized(pid):
     return result
 
 
+def verified_probe():
+    import hashlib
+    root=Path(__file__).resolve().parent/'native'
+    executable=root/'GharTVWindowProbe';manifest=root/'window-manifest.json'
+    if executable.is_symlink() or manifest.is_symlink() or not executable.is_file() or not manifest.is_file():
+        raise ValueError('WINDOW_PROBE_UNAVAILABLE')
+    meta=json.loads(manifest.read_text())
+    if executable.stat().st_size>4000000 or hashlib.sha256(executable.read_bytes()).hexdigest()!=meta.get('sha256'):
+        raise ValueError('WINDOW_PROBE_CHECKSUM_FAILED')
+    executable.chmod(0o700)
+    return str(executable)
+
+
 def native_window(pid, run=subprocess.run):
     if sys.platform != 'darwin':
-        return {'status': 'MAC_ONLY', 'window_observed': False}
-    if not isinstance(pid, int) or pid <= 0:
-        return {'status': 'INVALID_PID', 'window_observed': False}
-    restoration = restore_minimized_if_authorized(pid)
-    # Counts and booleans only leave this script. App/window names and pixels do not.
-    code = '''ObjC.import("AppKit");ObjC.import("CoreGraphics");
-var pid=PID,app=$.NSRunningApplication.runningApplicationWithProcessIdentifier(pid);
-var result={status:"MAC_WINDOW_UNCONFIRMED",window_observed:false};
-if(!app.isNil()){
- app.unhide; result.activation_accepted=Boolean(app.activateWithOptions(3));
- $.NSThread.sleepForTimeInterval(0.5);
- var windows=ObjC.deepUnwrap($.CGWindowListCopyWindowInfo(1,0))||[];
- var own=windows.filter(function(w){var b=w.kCGWindowBounds||{};return w.kCGWindowOwnerPID===pid && w.kCGWindowLayer===0 && b.Width>=300 && b.Height>=180 && w.kCGWindowAlpha>0;});
- result.onscreen_windows=own.length;
- result.app_active=Number($.NSWorkspace.sharedWorkspace.frontmostApplication.processIdentifier)===pid;
- result.window_observed=own.length>0;
- result.status=own.length>0?(result.app_active?"MAC_WINDOW_FRONTMOST_OBSERVED":"MAC_WINDOW_ONSCREEN_OBSERVED"):"MAC_WINDOW_NOT_ONSCREEN";
-}
-JSON.stringify(result);'''.replace('PID', str(pid), 1)
+        return {'status':'MAC_ONLY','window_observed':False}
+    if not isinstance(pid,int) or pid<=0:
+        return {'status':'INVALID_PID','window_observed':False}
+    restoration={}
     try:
-        checked = run(['/usr/bin/osascript', '-l', 'JavaScript', '-e', code],
-                      stdin=subprocess.DEVNULL, capture_output=True, text=True, timeout=5)
-        value = json.loads(checked.stdout) if checked.returncode == 0 else {}
+        executable=verified_probe()
+        restoration=restore_minimized_if_authorized(pid)
+        checked=run([executable,str(pid)],stdin=subprocess.DEVNULL,capture_output=True,
+                    text=True,timeout=5,env={'PATH':'/usr/bin:/bin','LANG':'en_US.UTF-8'})
+        value=json.loads(checked.stdout) if checked.returncode==0 else {}
         if value.get('status') not in {'MAC_WINDOW_FRONTMOST_OBSERVED','MAC_WINDOW_ONSCREEN_OBSERVED','MAC_WINDOW_NOT_ONSCREEN','MAC_WINDOW_UNCONFIRMED'}:
             raise ValueError('UNRECOGNIZED_RESULT')
-        return {**value, **restoration}
-    except (ValueError, OSError, subprocess.TimeoutExpired):
-        return {'status': 'MAC_WINDOW_QUERY_UNAVAILABLE', 'window_observed': False, **restoration}
+        return {**value,**restoration}
+    except (ValueError,OSError,subprocess.TimeoutExpired):
+        return {'status':'MAC_WINDOW_QUERY_UNAVAILABLE','window_observed':False,**restoration}
 
 
 def request_window_details(rows, run=subprocess.run):
