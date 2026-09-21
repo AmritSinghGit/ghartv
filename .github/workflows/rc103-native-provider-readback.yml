@@ -11,7 +11,7 @@ jobs:
     timeout-minutes: 5
     steps:
       - uses: actions/checkout@v5
-      - name: Build an observed copy of the exact native view, retaining provider policies
+      - name: Observe only the explicit provider migration, retaining all other boundaries
         run: |
           mkdir -p /tmp/ghartv-native-readback/GharTVFilms.app/Contents/MacOS
           python3 - <<'PY'
@@ -19,17 +19,27 @@ jobs:
           import plistlib
           out=Path('/tmp/ghartv-native-readback');s=Path('tools/films/GharTVFilmView.swift').read_text()
           s=s.replace('        browser.load(URLRequest(url: url))','        emit(["event":"load_requested","bundle":Bundle.main.bundleIdentifier ?? "NONE"]); browser.load(URLRequest(url: url))')
-          s=s.replace('        let top = navigationAction.targetFrame?.isMainFrame ?? true','        emit(["event":"navigation_policy","scheme":url.scheme ?? "none","providerHost":url.host == "flixmomo.app","hasUser":url.user != nil,"hasPort":url.port != nil]); let top = navigationAction.targetFrame?.isMainFrame ?? true')
+          s=s.replace('        let top = navigationAction.targetFrame?.isMainFrame ?? true','        emit(["event":"navigation_policy","scheme":url.scheme ?? "none","host":url.host ?? "none","path":url.path]); let top = navigationAction.targetFrame?.isMainFrame ?? true')
+          s=s.replace('(!top || host == "flixmomo.app")','(!top || ["flixmomo.app","flixmomo.st","www.flixmomo.st"].contains(host))')
           s=s.replace('            if top { status.stringValue = "External navigation stayed blocked.','            emit(["event":"navigation_blocked_by_local_policy"]); if top { status.stringValue = "External navigation stayed blocked.')
           s=s.replace('        if navigationResponse.isForMainFrame, let response', '        emit(["event":"response_received","httpStatus":(navigationResponse.response as? HTTPURLResponse)?.statusCode ?? 0,"mime":navigationResponse.response.mimeType ?? "none"]); if navigationResponse.isForMainFrame, let response')
           s=s.replace('    func webViewWebContentProcessDidTerminate(_ webView: WKWebView) {','    func webViewWebContentProcessDidTerminate(_ webView: WKWebView) { emit(["event":"web_content_process_terminated"]);')
+          # Read-only observation of a public page in a credential-free test session.
+          anchor='        if !lastNavigationFailed { status.stringValue = '
+          extra='''        DispatchQueue.main.asyncAfter(deadline:.now()+8) { [weak self] in
+                      self?.browser.evaluateJavaScript("JSON.stringify({title:document.title,inputs:[...document.querySelectorAll('input')].slice(0,10).map(x=>({name:x.name,placeholder:x.placeholder,form:x.form?.action})),links:[...document.querySelectorAll('a[href]')].map(x=>x.getAttribute('href')).filter(x=>/search|movie|tv/.test(x)).slice(0,15),text:document.body.innerText.slice(0,1500)})") { value,error in
+                        self?.emit(["event":"public_page_observation","value":value as? String ?? "UNAVAILABLE"])
+                      }
+                    }
+          '''
+          s=s.replace(anchor,extra+anchor)
           (out/'Observed.swift').write_text(s)
           info={'CFBundleExecutable':'GharTVFilmView','CFBundleIdentifier':'in.ghartv.nova.films','CFBundleName':'GharTV Films','CFBundlePackageType':'APPL','CFBundleShortVersionString':'0.6.0','CFBundleVersion':'29','LSMinimumSystemVersion':'14.0','NSHighResolutionCapable':True,'NSPrincipalClass':'NSApplication'}
           (out/'GharTVFilms.app/Contents/Info.plist').write_bytes(plistlib.dumps(info))
           PY
           swiftc -O -target arm64-apple-macosx14.0 /tmp/ghartv-native-readback/Observed.swift -o /tmp/ghartv-native-readback/GharTVFilms.app/Contents/MacOS/GharTVFilmView
           codesign --force --sign - /tmp/ghartv-native-readback/GharTVFilms.app
-      - name: Observe native provider callbacks and bounded framework errors
+      - name: Observe provider pages in the normal native view
         run: |
           python3 - <<'PY'
           from pathlib import Path
@@ -37,12 +47,12 @@ jobs:
           root=Path('/tmp/ghartv-native-readback');app=root/'GharTVFilms.app/Contents/MacOS/GharTVFilmView'
           with (root/'native.stdout').open('w') as stdout,(root/'native.stderr').open('w') as stderr:
             process=subprocess.Popen([str(app),'--query','Dune'],stdin=subprocess.DEVNULL,stdout=stdout,stderr=stderr,env={'PATH':'/usr/bin:/bin','LANG':'en_US.UTF-8','HOME':str(Path.home())})
-            time.sleep(55)
+            time.sleep(60)
             subprocess.run(['/usr/sbin/screencapture','-x',str(root/'cloud-native-screen.png')],check=False,timeout=5)
             process.terminate()
             try:process.wait(timeout=5)
             except subprocess.TimeoutExpired:process.kill();process.wait()
-          print((root/'native.stdout').read_text()[-12000:]);print((root/'native.stderr').read_text()[-12000:])
+          print((root/'native.stdout').read_text()[-16000:]);print((root/'native.stderr').read_text()[-6000:])
           PY
       - uses: actions/upload-artifact@v4
         if: always()
