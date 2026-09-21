@@ -1,0 +1,25 @@
+name: GharTV RC10.3 provider observation
+on:
+  push:
+    branches: [codex/ghartv-remove-auto-preview]
+    paths: ['.github/workflows/rc103-provider-observe.yml']
+permissions:
+  contents: read
+jobs:
+  observe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 4
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: npm ci --ignore-scripts --prefix web-player/browser-tools
+      - name: Observe normal provider page and actual rendered controls
+        run: xvfb-run -a node tools/rc103/observe_provider.mjs /tmp/ghartv-rc103-provider
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: ghartv-rc103-provider-observation
+          path: /tmp/ghartv-rc103-provider/
+          retention-days: 7
