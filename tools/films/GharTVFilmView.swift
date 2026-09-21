@@ -8,6 +8,7 @@ final class FilmView: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNavig
     var browser: WKWebView!
     let query = NSSearchField()
     let status = NSTextField(labelWithString: "FlixMomo · Direct connection · Provider controls and sign-in remain unchanged")
+    var routeObservation: NSKeyValueObservation?
     var lastNavigationFailed = false
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.setActivationPolicy(.regular)
@@ -39,6 +40,12 @@ final class FilmView: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNavig
         config.mediaTypesRequiringUserActionForPlayback = .all
         browser = WKWebView(frame: .zero, configuration: config)
         browser.navigationDelegate = self; browser.uiDelegate = self; browser.allowsBackForwardNavigationGestures = true
+        routeObservation = browser.observe(\.url, options: [.new]) { [weak self] view, _ in
+            guard let self = self, view.url?.path == "/dummy" else { return }
+            self.lastNavigationFailed = true
+            self.status.stringValue = "FlixMomo declined this embedded session. Search and playback are not verified."
+            self.emit(["event":"provider_blocked","code":"DUMMY_REDIRECT","playbackVerified":false])
+        }
         for item in ([row, status, browser!] as [NSView]) { item.translatesAutoresizingMaskIntoConstraints = false; content.addSubview(item) }
         NSLayoutConstraint.activate([
             row.topAnchor.constraint(equalTo: content.topAnchor, constant: 14), row.leadingAnchor.constraint(equalTo: content.leadingAnchor, constant: 16), row.trailingAnchor.constraint(equalTo: content.trailingAnchor, constant: -16), query.widthAnchor.constraint(greaterThanOrEqualToConstant: 220),

@@ -46,11 +46,13 @@ with tempfile.TemporaryDirectory(prefix='ghartv-rc103-mac-') as name:
    for line in probe.stdout:
     try:messages.put(json.loads(line[:8192]))
     except ValueError:pass
-  threading.Thread(target=reader,daemon=True).start();deadline=time.monotonic()+40
+  threading.Thread(target=reader,daemon=True).start();deadline=time.monotonic()+40;settle=None
   while time.monotonic()<deadline:
+   if settle is not None and time.monotonic()>=settle:break
    try:item=messages.get(timeout=1);events.append(item)
    except queue.Empty:continue
-   if item.get('event') in ('page_finished','provider_blocked','navigation_failed'):break
+   if item.get('event') in ('provider_blocked','navigation_failed'):break
+   if item.get('event')=='page_finished' and settle is None:settle=time.monotonic()+8
   assert any(x.get('event')=='window_ready' and x.get('windowVisible') for x in events),'NATIVE_WINDOW_NOT_READY'
   provider='NOT_CONFIRMED'
   if any(x.get('event')=='provider_blocked' for x in events):provider='PROVIDER_DECLINED_EMBEDDED_SESSION'

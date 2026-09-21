@@ -75,6 +75,8 @@ def restore_minimized_if_authorized(pid):
             value = cf.CFStringCreateWithCString(None, text.encode(), 0x08000100)
             refs.append(value)
             return value
+        true_value=ctypes.c_void_p.in_dll(cf,'kCFBooleanTrue')
+        result['frontmost_request_accepted']=ax.AXUIElementSetAttributeValue(app,key('AXFrontmost'),true_value)==0
         windows_key, minimized_key, raise_key = key('AXWindows'), key('AXMinimized'), key('AXRaise')
         windows = ctypes.c_void_p()
         if ax.AXUIElementCopyAttributeValue(app, windows_key, ctypes.byref(windows)) != 0 or not windows.value:

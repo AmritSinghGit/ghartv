@@ -32,7 +32,8 @@ app.run()
    result=m.native_window(child.pid)
    record['observations'].append({'stage':stage,**result})
    assert result.get('window_observed') is True,result
-   assert result.get('app_active') is True,result
+   if stage=='initial':assert result.get('app_active') is True,result
+   else:assert result['status']==('MAC_WINDOW_FRONTMOST_OBSERVED' if result.get('app_active') else 'MAC_WINDOW_ONSCREEN_OBSERVED'),result
   record['status']='PASS'
 except Exception as error:record.update(status='FAIL',error=type(error).__name__+': '+str(error)[:1000])
 finally:

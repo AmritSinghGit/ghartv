@@ -9,7 +9,7 @@ var result: [String:Any] = ["status":"MAC_WINDOW_UNCONFIRMED", "window_observed"
 if args.count == 2, let pid = Int32(args[1]), pid > 0,
    let target = NSRunningApplication(processIdentifier: pid) {
     target.unhide()
-    let accepted = target.activate(options: [.activateAllWindows, .activateIgnoringOtherApps])
+    let accepted = target.activate(options: [.activateAllWindows])
     Thread.sleep(forTimeInterval: 0.6)
     let windows = CGWindowListCopyWindowInfo([.optionOnScreenOnly, .excludeDesktopElements], kCGNullWindowID) as? [[String:Any]] ?? []
     let own = windows.filter { row in
