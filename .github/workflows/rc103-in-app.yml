@@ -1,0 +1,191 @@
+name: GharTV RC10.3 in-app films and visible TV review
+on:
+  push:
+    branches: [codex/ghartv-remove-auto-preview]
+    paths: ['.github/workflows/rc103-in-app.yml']
+permissions:
+  contents: write
+concurrency:
+  group: ghartv-rc103-in-app
+  cancel-in-progress: false
+jobs:
+  android:
+    runs-on: ubuntu-latest
+    timeout-minutes: 14
+    outputs:
+      source: ${{ steps.source.outputs.sha }}
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GHARTV_DISABLE_KEYCHAIN: '1'
+      PYTHONDONTWRITEBYTECODE: '1'
+      GRADLE_OPTS: '-Dorg.gradle.daemon=false -Dorg.gradle.jvmargs=-Xmx2g'
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: android-actions/setup-android@v3
+        with:
+          packages: platform-tools
+          log-accepted-android-sdk-licenses: false
+      - name: Integrate existing sources and test exact app and delivery boundaries
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/rc103/proof
+          if ! grep -q 'CYAN REVIEW 17' tools/owner_review.command.in; then python tools/rc103/integrate.py; fi
+          if grep -q 'versionCode = 28' android-tv/app/build.gradle.kts; then python tools/rc103/in_app_integration.py; fi
+          python tools/rc103/finalize_in_app.py
+          python tools/rc103/delivery_safety.py
+          grep -q 'versionCode = 29' android-tv/app/build.gradle.kts
+          python tools/tv-first/check_contract.py | tee /tmp/rc103/proof/tv-contract.txt
+          python tools/rc103/test_tv_window.py 2>&1 | tee /tmp/rc103/proof/tv-window-tests.txt
+          mkdir -p /tmp/preview-test
+          javac -d /tmp/preview-test android-tv/app/src/main/java/in/ghartv/nova/PreviewGate.java tools/tv-first/PreviewGateSmoke.java
+          java -cp /tmp/preview-test PreviewGateSmoke | tee /tmp/rc103/proof/preview-tests.txt
+          npm ci --ignore-scripts --prefix web-player
+          node --test web-player/test/*.mjs | tee /tmp/rc103/proof/node-tests.txt
+          node --check web-player/film-page.mjs
+          node --check web-player/server.mjs
+          git diff --check
+      - name: Publish exact native source before compiling, refusing concurrent changes
+        id: source
+        run: |
+          set -euo pipefail
+          test "$(git ls-remote origin refs/heads/codex/ghartv-remove-auto-preview | cut -f1)" = "$GITHUB_SHA"
+          git config user.name 'GharTV candidate builder'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -u
+          if ! git diff --cached --quiet; then
+            git commit -m 'feat(ghartv): integrate in-app FlixMomo code29 and verified visible TV review'
+            git push origin HEAD:refs/heads/codex/ghartv-remove-auto-preview
+          fi
+          source="$(git rev-parse HEAD)";echo "sha=$source" >> "$GITHUB_OUTPUT"
+          git archive --format=zip HEAD -o /tmp/rc103/source.zip
+      - name: Compile Android release and instrumentation package
+        run: |
+          set -euo pipefail
+          sdkmanager 'platforms;android-36' 'build-tools;36.0.0'
+          cd android-tv
+          chmod +x gradlew
+          ./gradlew --no-daemon --max-workers=2 assembleRelease assembleDebugAndroidTest
+          cp app/build/outputs/apk/release/app-release-unsigned.apk /tmp/rc103/android-unsigned.apk
+      - name: Prepare prior delivery and isolated generated HLS media
+        run: |
+          set -euo pipefail
+          curl --proto '=https' --proto-redir '=https' -fLsS --connect-timeout 20 --max-time 180 --retry 1 https://github.com/AmritSinghGit/ghartv/releases/download/v0.6.0-rc10.2-web-security/GHARTV_RC10_2_REVIEW.zip -o /tmp/rc103/prior.zip
+          if ! command -v ffmpeg >/dev/null; then sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg; fi
+          mkdir -p /tmp/rc103/fixture
+          cp tools/rc102/fixture.html /tmp/rc103/fixture/index.html
+          cp web-player/public/playback-engine.js /tmp/rc103/fixture/
+          cp web-player/node_modules/hls.js/dist/hls.min.js /tmp/rc103/fixture/
+          ffmpeg -hide_banner -loglevel error -f lavfi -i 'testsrc2=size=640x360:rate=25' -f lavfi -i 'sine=frequency=440:sample_rate=48000' -t 12 -c:v libx264 -pix_fmt yuv420p -profile:v baseline -level 3.0 -g 50 -sc_threshold 0 -c:a aac -b:a 64k -f hls -hls_time 2 -hls_list_size 0 -hls_playlist_type vod -hls_segment_filename '/tmp/rc103/fixture/segment%03d.ts' /tmp/rc103/fixture/test.m3u8
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: ghartv-rc103-android-staging
+          path: /tmp/rc103/
+          retention-days: 7
+  mac:
+    needs: android
+    runs-on: macos-14
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ needs.android.outputs.source }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: actions/download-artifact@v4
+        with:
+          name: ghartv-rc103-android-staging
+          path: /tmp/rc103
+      - name: Compile native GharTV film view, no browser automation or remote command endpoint
+        run: |
+          set -euo pipefail
+          test "$(uname -m)" = arm64
+          npm ci --ignore-scripts --prefix web-player
+          mkdir -p web-player/native /tmp/rc103/delivery
+          swiftc -O -target arm64-apple-macosx14.0 tools/films/GharTVFilmView.swift -o web-player/native/GharTVFilmView
+          codesign --force --sign - web-player/native/GharTVFilmView
+          codesign --verify --strict web-player/native/GharTVFilmView
+          python3 - <<'PY'
+          from pathlib import Path
+          import hashlib,json
+          p=Path('web-player/native/GharTVFilmView')
+          data={'schema':'ghartv.native-films.v1','source':'${{ needs.android.outputs.source }}','architecture':'arm64','minimum_macos':'14.0','sha256':hashlib.sha256(p.read_bytes()).hexdigest(),'signature':'AD_HOC','notarized':False,'launch':'USER_REVIEW_COMMAND_ONLY','http_execution':False}
+          p.with_name('manifest.json').write_text(json.dumps(data,indent=2)+'\n')
+          PY
+          python3 tools/rc103/package.py /tmp/rc103/prior.zip /tmp/rc103/delivery '${{ needs.android.outputs.source }}' /tmp/rc103/android-unsigned.apk
+          cp /tmp/rc103/source.zip /tmp/rc103/delivery/GHARTV_RC10_3_SOURCE.zip
+      - name: Test real Mac upgrade, native app/window visibility and Safari HLS
+        run: python3 tools/rc103/mac_in_app_smoke.py /tmp/rc103/delivery/GHARTV_RC10_3_REVIEW.zip /tmp/rc103/prior.zip /tmp/rc103/proof '${{ needs.android.outputs.source }}' /tmp/rc103/fixture
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: ghartv-rc103-mac-candidate
+          path: |
+            /tmp/rc103/delivery/
+            /tmp/rc103/proof/
+          retention-days: 7
+  publish:
+    needs: [android,mac]
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ needs.android.outputs.source }}
+      - uses: actions/download-artifact@v4
+        with:
+          name: ghartv-rc103-mac-candidate
+          path: /tmp/rc103
+      - name: Verify final evidence and publish the review, not the household update
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          from pathlib import Path
+          import hashlib,json,os,re,shutil,zipfile,io
+          root=Path('/tmp/rc103');out=root/'delivery';proof=root/'proof'
+          d=json.loads((out/'DELIVERY.json').read_text())
+          assert d['source_sha']==d['web_source_sha']=='${{ needs.android.outputs.source }}'
+          assert d['version_code']==29 and d['android_rebuilt'] is True
+          reports={}
+          for name in ('MAC_WEB_VALIDATION.json','SAFARI_VALIDATION.json','MAC_WINDOW_VALIDATION.json','NATIVE_FILMS_VALIDATION.json'):
+            value=json.loads((proof/name).read_text())
+            assert value['status']==('PASS_NATIVE_WINDOW' if name=='NATIVE_FILMS_VALIDATION.json' else 'PASS'),(name,value)
+            reports[name]=value;shutil.copyfile(proof/name,out/name)
+          log=(proof/'node-tests.txt').read_text();passed=int(re.search(r'# pass (\d+)',log)[1]);assert passed>=24 and '# fail 0' in log
+          assert 'PREVIEW_GATE=29_PASS' in (proof/'preview-tests.txt').read_text()
+          assert 'PASS_9_RULES' in (proof/'tv-contract.txt').read_text()
+          with zipfile.ZipFile(out/'GHARTV_RC10_3_REVIEW.zip') as z:
+            assert z.testzip() is None
+            prefix='GHARTV_RC10_3_REVIEW/'
+            for line in z.read(prefix+'SHA256SUMS').decode().splitlines():
+              h,n=line.split('  ',1);assert hashlib.sha256(z.read(prefix+n)).hexdigest()==h
+            with zipfile.ZipFile(io.BytesIO(z.read(prefix+'assets/GharTV-review-companion.zip'))) as companion:
+              assert not any(n.endswith(('.woff','.woff2','.ttf','.otf')) for n in companion.namelist())
+              assert not any('browser-tools' in n or n.endswith('owner-gateway.mjs') or n.endswith('film-browser-worker.mjs') for n in companion.namelist())
+              meta=json.loads(companion.read('web-player/native/manifest.json'))
+              assert hashlib.sha256(companion.read('web-player/native/GharTVFilmView')).hexdigest()==meta['sha256'] and meta['source']==d['source_sha']
+              assert not any(Path(n).name in ('test.m3u8','fixture.html') or re.fullmatch(r'segment[0-9]{3}\.ts',Path(n).name) for n in companion.namelist())
+          v={'schema':'ghartv.rc103-validation.v1','application_source':d['source_sha'],'version_code':29,'android_release':'COMPILED_UNSIGNED','instrumentation':'COMPILED_NOT_EXECUTED','node_tests_passed':passed,'tv_window_unit_tests':8,'tv_contract_rules':9,'preview_gate_assertions':29,'mac':reports,'bundle_checksums':'PASS','native_signature':'AD_HOC_NOT_NOTARIZED','provider_search_results':'NOT_VERIFIED','provider_video_playback':'NOT_VERIFIED','physical_tv':'NOT_VERIFIED','actual_owner_emulator_window':'NOT_VERIFIED','owner_mac_execution':'NOT_EXECUTED','tor_route':'NOT_IMPLEMENTED_IN_NATIVE_VIEW','production_feed_changed':False,'workflow_run':os.environ['GITHUB_RUN_ID']}
+          (out/'VALIDATION.json').write_text(json.dumps(v,indent=2)+'\n')
+          (out/'SHA256SUMS').write_text(''.join(hashlib.sha256(p.read_bytes()).hexdigest()+'  '+p.name+'\n' for p in sorted(out.iterdir()) if p.is_file() and p.name!='SHA256SUMS'))
+          print(json.dumps(d));print(json.dumps(v))
+          PY
+          gh release create v0.6.0-rc10.3-in-app /tmp/rc103/delivery/GHARTV_RC10_3_REVIEW.zip /tmp/rc103/delivery/GHARTV_REVIEW_RC10_3.command /tmp/rc103/delivery/GHARTV_RC10_3_SOURCE.zip /tmp/rc103/delivery/GharTV-review-companion.zip /tmp/rc103/delivery/GharTV-review-unsigned.apk /tmp/rc103/delivery/review-manifest.json /tmp/rc103/delivery/GHARTV_SYNC_CURRENT_AND_REPORT.command /tmp/rc103/delivery/DELIVERY.json /tmp/rc103/delivery/VALIDATION.json /tmp/rc103/delivery/MAC_WEB_VALIDATION.json /tmp/rc103/delivery/MAC_WINDOW_VALIDATION.json /tmp/rc103/delivery/NATIVE_FILMS_VALIDATION.json /tmp/rc103/delivery/SAFARI_VALIDATION.json /tmp/rc103/delivery/SHA256SUMS --repo AmritSinghGit/ghartv --target '${{ needs.android.outputs.source }}' --prerelease --latest=false --title 'GharTV RC10.3 — in-app FlixMomo and visible TV review' --notes-file tools/rc103/REVIEW.md
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: ghartv-rc103-completed
+          path: /tmp/rc103/delivery/
+          retention-days: 7
