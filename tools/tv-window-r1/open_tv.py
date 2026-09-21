@@ -200,6 +200,7 @@ def main():
    except BlockingIOError:raise Hold('ANOTHER_OWNER_ACTION_RUNNING') from None
    prior=read(STATE/'current/receipt.json');validate_receipt(prior);old_bytes=(STATE/'current/receipt.json').read_bytes()
    r={**prior,**r,'parent_run_id':prior['run_id'],'phase':'STARTING','mac_window':'NOT_CHECKED','mac_window_observed':False,'mac_window_frontmost':False,'emulator':'UNCHANGED','blocker':None,'receipt_sync':'NOT_SENT','recovery_source':json.loads((HERE/'PACKAGE.json').read_text())['source']}
+   r['owner_decision']=prior.get('owner_decision','REVIEW_PENDING')
    publish=True
    path=safe(STATE/'runtime-current/tools/tv_local.py')
    if digest(path)!=TRANSPORT_SHA:raise Hold('EXISTING_TRANSPORT_CHANGED_PRESERVED')
