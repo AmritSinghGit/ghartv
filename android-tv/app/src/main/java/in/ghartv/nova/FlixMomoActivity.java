@@ -6,6 +6,7 @@ import android.net.Uri;
 import android.net.http.SslError;
 import android.os.Bundle;
 import android.view.View;
+import android.view.inputmethod.InputMethodManager;
 import android.webkit.CookieManager;
 import android.webkit.PermissionRequest;
 import android.webkit.SslErrorHandler;
@@ -86,16 +87,33 @@ public final class FlixMomoActivity extends Activity {
             }
             @Override public void onPageStarted(WebView v,String u,Bitmap b){pageReady=false;mainFrameError=false;status.setText("Opening provider… Playback depends on its availability and permissions.");}
             @Override public void onPageFinished(WebView v,String u){
+                // WebView can finish its own network-error document. Do not turn a
+                // main-frame DNS, connection or TLS failure into a provider-ready state.
+                if(mainFrameError){pageReady=false;return;}
                 pageReady=allowedTop(Uri.parse(u));
-                if("/dummy".equals(Uri.parse(u).getPath())){pageReady=false;status.setText("FlixMomo declined this embedded session. No protection was changed.");}
-                else if(pageReady && !mainFrameError)status.setText("FlixMomo in GharTV · select a result and use its player · direct connection");
+                if("/dummy".equals(Uri.parse(u).getPath())){mainFrameError=true;pageReady=false;status.setText("FlixMomo declined this embedded session. No protection was changed.");}
+                else if(pageReady)status.setText("FlixMomo page loaded · use its search and player · video playback not checked");
             }
             @Override public void onReceivedHttpError(WebView v,WebResourceRequest request,WebResourceResponse response){
-                if(request.isForMainFrame()){mainFrameError=true;status.setText("FlixMomo returned HTTP "+response.getStatusCode()+". Complete provider verification here if offered.");}
+                if(request.isForMainFrame()){mainFrameError=true;pageReady=false;status.setText("FlixMomo returned HTTP "+response.getStatusCode()+". Complete provider verification here if offered.");}
             }
-            @Override public void onReceivedSslError(WebView v,SslErrorHandler h,SslError e){h.cancel();status.setText("TLS verification failed. Connection stopped.");}
+            @Override public void onReceivedSslError(WebView v,SslErrorHandler h,SslError e){
+                h.cancel();mainFrameError=true;pageReady=false;
+                status.setText("TLS verification failed. Connection stopped; no video loaded.");
+            }
             @Override public void onReceivedError(WebView v,WebResourceRequest r,android.webkit.WebResourceError e){
-                if(r.isForMainFrame()){pageReady=false;status.setText("Provider unavailable. Browse retries the page; Back returns to GharTV.");}
+                if(!r.isForMainFrame())return;
+                mainFrameError=true;pageReady=false;
+                switch(e.getErrorCode()){
+                    case WebViewClient.ERROR_HOST_LOOKUP:
+                        status.setText("Android could not resolve the provider address (DNS). No page or video loaded. Your search is preserved.");break;
+                    case WebViewClient.ERROR_CONNECT:
+                        status.setText("Android could not connect to the provider. No page or video loaded. Your search is preserved.");break;
+                    case WebViewClient.ERROR_TIMEOUT:
+                        status.setText("The provider connection timed out. No page or video loaded. Your search is preserved.");break;
+                    default:
+                        status.setText("Provider navigation failed ("+e.getErrorCode()+"). No page or video loaded. Your search is preserved.");break;
+                }
             }
         });
         browser.setWebChromeClient(new WebChromeClient(){
@@ -110,7 +128,7 @@ public final class FlixMomoActivity extends Activity {
         });
         search.setOnClickListener(v->search());
         query.setOnEditorActionListener((v,action,event)->{search();return true;});
-        home.setOnClickListener(v->browser.loadUrl(HOME));back.setOnClickListener(v->finish());
+        home.setOnClickListener(v->{hideSearchKeyboard();browser.loadUrl(HOME);browser.requestFocus();});back.setOnClickListener(v->finish());
         browser.loadUrl(HOME);
     }
     private static boolean providerHost(String host){
@@ -127,8 +145,14 @@ public final class FlixMomoActivity extends Activity {
         // No DOM injection, stream extraction or authentication changes.
         Uri current=Uri.parse(browser.getUrl()==null?HOME:browser.getUrl());
         String origin=allowedTop(current)?"https://"+current.getHost():"https://flixmomo.app";
+        hideSearchKeyboard();
         browser.loadUrl(origin+"/search?q="+Uri.encode(text));
         browser.requestFocus();
+    }
+    private void hideSearchKeyboard(){
+        InputMethodManager keyboard=(InputMethodManager)getSystemService(INPUT_METHOD_SERVICE);
+        if(keyboard!=null && query!=null)keyboard.hideSoftInputFromWindow(query.getWindowToken(),0);
+        if(query!=null)query.clearFocus();
     }
     private void exitFullScreen(){
         if(custom==null)return;stage.removeView(custom);custom=null;
