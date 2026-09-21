@@ -1,0 +1,204 @@
+name: GharTV installed TV window recovery
+on:
+  push:
+    branches: [codex/ghartv-remove-auto-preview]
+    paths: ['.github/workflows/tv-window-r1.yml']
+permissions:
+  contents: write
+concurrency:
+  group: ghartv-tv-window-r1
+  cancel-in-progress: false
+jobs:
+  mac:
+    runs-on: macos-14
+    timeout-minutes: 8
+    outputs:
+      source: ${{ steps.identity.outputs.sha }}
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Preserve owner acceptance and validate the small recovery only
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('tools/tv-window-r1/open_tv.py');s=p.read_text()
+          if "r['owner_decision']=prior.get" not in s:
+            s=s.replace("   publish=True\n", "   r['owner_decision']=prior.get('owner_decision','REVIEW_PENDING')\n   publish=True\n")
+          p.write_text(s)
+          PY
+          python3 tools/tv-window-r1/test_recovery.py
+          python3 -m py_compile tools/tv-window-r1/open_tv.py
+          git diff --check
+      - name: Commit checked recovery source without touching application or runtime
+        id: identity
+        run: |
+          set -euo pipefail
+          test "$(git ls-remote origin refs/heads/codex/ghartv-remove-auto-preview | cut -f1)" = "$GITHUB_SHA"
+          git config user.name 'GharTV recovery builder'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add tools/tv-window-r1/open_tv.py
+          if ! git diff --cached --quiet; then
+            git commit -m 'fix(tv-review): preserve prior owner decision during display recovery'
+            git push origin HEAD:refs/heads/codex/ghartv-remove-auto-preview
+          fi
+          echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+      - name: Build and test unregistered-process observation on a real Mac
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/ghartv-tv-window/delivery /tmp/ghartv-tv-window/proof
+          swiftc -O -target arm64-apple-macosx14.0 tools/tv-window-r1/DisplayProbe.swift -o tools/tv-window-r1/DisplayProbe
+          codesign --force --sign - tools/tv-window-r1/DisplayProbe
+          python3 - <<'PY'
+          from pathlib import Path
+          import subprocess,json,time
+          root=Path('/tmp/ghartv-tv-window');probe=str(Path('tools/tv-window-r1/DisplayProbe').resolve());records=[]
+          fixture=root/'Window.swift';binary=root/'FixtureWindow'
+          fixture.write_text('import AppKit\nlet app=NSApplication.shared\napp.setActivationPolicy(.regular)\nlet win=NSWindow(contentRect:NSRect(x:80,y:80,width:640,height:360),styleMask:[.titled,.closable],backing:.buffered,defer:false)\nwin.title="Cloud test window"\nwin.makeKeyAndOrderFront(nil)\napp.activate(ignoringOtherApps:true)\napp.run()\n')
+          subprocess.run(['swiftc',str(fixture),'-o',str(binary)],check=True)
+          for name,args in [('registered_window',[str(binary)]),('non_app_process',['/bin/sleep','30'])]:
+            p=subprocess.Popen(args,stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)
+            try:
+              time.sleep(.8);result=json.loads(subprocess.check_output([probe,str(p.pid)],text=True))
+              if name=='registered_window':assert result['window_observed'] is True,result
+              else:assert result['app_registered'] is False and result['status']=='NO_TARGET_WINDOW_OBSERVED',result
+              records.append({'test':name,**result})
+            finally:p.terminate();p.wait(timeout=5)
+          (root/'proof/MAC_PROBE_VALIDATION.json').write_text(json.dumps({'status':'PASS','architecture':'arm64','tests':records,'owner_mac':False,'actual_nova':False},indent=2)+'\n')
+          print(json.dumps(records))
+          PY
+      - name: Validate the actual upstream Apple Silicon static display tool
+        run: |
+          python3 - <<'PY'
+          import importlib.util,json,subprocess
+          from pathlib import Path
+          path=Path('tools/tv-window-r1/open_tv.py');spec=importlib.util.spec_from_file_location('recovery',path);m=importlib.util.module_from_spec(spec);spec.loader.exec_module(m)
+          root=Path('/tmp/ghartv-tv-window').resolve();binary,server=m.prepare_scrcpy(root/'upstream')
+          version=subprocess.run([str(binary),'--version'],capture_output=True,text=True,check=True)
+          helptext=subprocess.run([str(binary),'--help'],capture_output=True,text=True,check=True).stdout
+          for option in ['--serial','--max-size','--no-clipboard-autosync','--no-power-on','--keyboard']:assert option in helptext
+          # A second verification must reuse and hash-check, not replace, the files.
+          assert m.prepare_scrcpy(root/'upstream')==(binary,server)
+          (root/'proof/MAC_SCRCPY_VALIDATION.json').write_text(json.dumps({'status':'PASS','archive_sha256':m.SCRCPY_SHA,'version':version.stdout.strip(),'binary_executes':True,'required_options_present':True,'cache_reverified':True,'actual_android_connection_on_mac':False},indent=2)+'\n')
+          PY
+      - name: Package checked recovery with the existing safe receipt mirror
+        run: |
+          python3 tools/tv-window-r1/package.py /tmp/ghartv-tv-window/delivery '${{ steps.identity.outputs.sha }}'
+          node --check /tmp/ghartv-tv-window/delivery/GHARTV_TV_WINDOW_R1/window-receipt-sync.mjs
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: ghartv-tv-window-mac
+          path: |
+            /tmp/ghartv-tv-window/delivery/
+            /tmp/ghartv-tv-window/proof/
+          retention-days: 7
+  android_display:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: android-actions/setup-android@v3
+        with:
+          packages: platform-tools
+          log-accepted-android-sdk-licenses: false
+      - name: Start one isolated cloud Android test device, not the owner emulator
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/tv-window-proof
+          test -e /dev/kvm
+          sudo chmod a+rw /dev/kvm
+          sdkmanager 'emulator' 'system-images;android-36;google_apis;x86_64'
+          echo no | avdmanager create avd --name GHARTV_CLOUD_DISPLAY_TEST_ONLY --package 'system-images;android-36;google_apis;x86_64'
+          "$ANDROID_HOME/emulator/emulator" -avd GHARTV_CLOUD_DISPLAY_TEST_ONLY -port 5580 -no-window -no-audio -no-snapshot -no-boot-anim -gpu swiftshader_indirect -memory 2048 > /tmp/tv-window-proof/cloud-emulator.log 2>&1 &
+          python - <<'PY'
+          import subprocess,time
+          end=time.monotonic()+160
+          while time.monotonic()<end:
+            r=subprocess.run(['adb','-s','emulator-5580','shell','getprop','sys.boot_completed'],capture_output=True,text=True,timeout=5)
+            if r.returncode==0 and r.stdout.strip()=='1':break
+            time.sleep(2)
+          else:raise RuntimeError('CLOUD_EMULATOR_BOOT_TIMEOUT')
+          subprocess.run(['adb','-s','emulator-5580','shell','input','keyevent','KEYCODE_WAKEUP'],check=True)
+          subprocess.run(['adb','-s','emulator-5580','shell','wm','dismiss-keyguard'],check=True)
+          subprocess.run(['adb','-s','emulator-5580','shell','am','start','-a','android.settings.SETTINGS'],check=True)
+          PY
+      - name: Actual Android display frames through the same scrcpy version
+        run: |
+          set -euo pipefail
+          curl --proto '=https' --proto-redir '=https' -fLsS --connect-timeout 15 --max-time 120 https://github.com/Genymobile/scrcpy/releases/download/v4.1/scrcpy-linux-x86_64-v4.1.tar.gz -o /tmp/scrcpy-linux.tar.gz
+          echo 'ad56ae8bfeedf41e824945c11dbf55fcb092b3e615b9b486f48a50e30d389635  /tmp/scrcpy-linux.tar.gz' | sha256sum -c -
+          tar -xzf /tmp/scrcpy-linux.tar.gz -C /tmp
+          if ! command -v ffprobe >/dev/null; then sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg; fi
+          (sleep 3; adb -s emulator-5580 shell input keyevent KEYCODE_DPAD_DOWN; sleep 2; adb -s emulator-5580 shell input keyevent KEYCODE_DPAD_DOWN) &
+          export ADB="$(command -v adb)"
+          xvfb-run -a /tmp/scrcpy-linux-x86_64-v4.1/scrcpy --serial=emulator-5580 --max-size=1280 --max-fps=30 --video-codec=h264 --video-bit-rate=4M --keyboard=sdk --no-clipboard-autosync --no-power-on --no-audio --time-limit=9 --record=/tmp/tv-window-proof/cloud-test.mkv > /tmp/tv-window-proof/cloud-mirror.log 2>&1
+          python - <<'PY'
+          from pathlib import Path
+          import json,subprocess,re
+          root=Path('/tmp/tv-window-proof');log=(root/'cloud-mirror.log').read_text();assert re.search(r'Texture:\s*\d+x\d+',log),log
+          info=json.loads(subprocess.check_output(['ffprobe','-v','error','-count_frames','-show_streams','-of','json',str(root/'cloud-test.mkv')],text=True))
+          video=next(s for s in info['streams'] if s['codec_type']=='video');assert int(video.get('nb_read_frames','0'))>=2
+          result={'status':'PASS','transport':'REAL_SCRCPY_4_1_TO_HEADLESS_ANDROID_36','window_backend':'X11_UNDER_XVFB','frames_decoded':int(video['nb_read_frames']),'width':video['width'],'height':video['height'],'device_content':'ISOLATED_CLOUD_ANDROID_SETTINGS_ONLY','owner_mac':False,'owner_nova':False,'provider_playback':False,'test_recording_shipped':False}
+          (root/'ANDROID_DISPLAY_VALIDATION.json').write_text(json.dumps(result,indent=2)+'\n');print(json.dumps(result))
+          PY
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: ghartv-tv-window-android-proof
+          path: |
+            /tmp/tv-window-proof/ANDROID_DISPLAY_VALIDATION.json
+            /tmp/tv-window-proof/cloud-mirror.log
+          retention-days: 7
+  publish:
+    needs: [mac,android_display]
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ needs.mac.outputs.source }}
+      - uses: actions/download-artifact@v4
+        with:
+          name: ghartv-tv-window-mac
+          path: /tmp/tv-window
+      - uses: actions/download-artifact@v4
+        with:
+          name: ghartv-tv-window-android-proof
+          path: /tmp/tv-window/proof
+      - name: Verify evidence and publish a recovery-only attachment
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import hashlib,json,os,zipfile
+          root=Path('/tmp/tv-window');out=root/'delivery';proof=root/'proof';reports={}
+          for p in proof.glob('*VALIDATION.json'):
+            data=json.loads(p.read_text());assert data['status']=='PASS';reports[p.name]=data
+          assert len(reports)==3
+          delivery=json.loads((out/'DELIVERY.json').read_text());assert delivery['source']=='${{ needs.mac.outputs.source }}'
+          with zipfile.ZipFile(out/'GHARTV_TV_WINDOW_R1.zip') as z:
+            assert z.testzip() is None
+            meta=json.loads(z.read('GHARTV_TV_WINDOW_R1/PACKAGE.json'))
+            for name,h in meta['files'].items():assert hashlib.sha256(z.read('GHARTV_TV_WINDOW_R1/'+name)).hexdigest()==h
+          v={'schema':'ghartv.tv-window-validation.v1','recovery_source':delivery['source'],'application_source':delivery['application_source'],'unit_tests':11,'reports':reports,'owner_mac_executed':False,'owner_nova_window_verified':False,'application_rebuilt':False,'application_reinstalled':False,'production_feed_changed':False,'workflow_run':os.environ['GITHUB_RUN_ID']}
+          (out/'VALIDATION.json').write_text(json.dumps(v,indent=2)+'\n')
+          (out/'SHA256SUMS').write_text(''.join(hashlib.sha256(p.read_bytes()).hexdigest()+'  '+p.name+'\n' for p in sorted(out.iterdir()) if p.is_file() and p.name!='SHA256SUMS'))
+          print(json.dumps(delivery));print(json.dumps(v))
+          PY
+          gh release create v0.6.0-rc10.3.1-tv-window-r1 /tmp/tv-window/delivery/GHARTV_TV_WINDOW_R1.zip /tmp/tv-window/delivery/OPEN_GHARTV_TV_WINDOW.command /tmp/tv-window/delivery/DELIVERY.json /tmp/tv-window/delivery/VALIDATION.json /tmp/tv-window/delivery/SHA256SUMS --repo AmritSinghGit/ghartv --target '${{ needs.mac.outputs.source }}' --prerelease --latest=false --title 'GharTV code30 — open the existing TV display, no reinstall' --notes-file /tmp/tv-window/delivery/GHARTV_TV_WINDOW_R1/README.md
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: ghartv-tv-window-completed
+          path: /tmp/tv-window/delivery/
+          retention-days: 7
