@@ -48,17 +48,10 @@ try:
  assert script("return !document.querySelector('a[href*=\"owner.html\"]')")
  click('#accountButton');assert script("return document.getElementById('loginDialog').open")
  shot('safari-viewer.png');click('#closeLogin');record['viewer_login_ui']='PASS_NO_CREDENTIALS_SENT'
- record['stage']='NATIVE_PROVIDER_FORM';action('POST','/url',{'url':BASE+'/flixmomo.html'})
- wait_for(lambda:script("return document.querySelector('option[value=\"tor-browser\"]') && !document.querySelector('option[value=\"tor-browser\"]').disabled"))
- assert script("const f=document.getElementById('search');return f.action==='https://flixmomo.app/search' && f.method==='get' && f.target==='_blank' && document.getElementById('query').name==='q' && document.getElementById('browse').href==='https://flixmomo.app/';")
- # Observe this local form's submission without contacting or evading the provider.
- script("document.getElementById('query').value='Dune & friends';document.getElementById('search').addEventListener('submit',e=>{e.preventDefault();const f=e.currentTarget;window.formObserved={action:f.action,method:f.method,query:new FormData(f).get('q')};});return true;")
- click('#submit');wait_for(lambda:script('return !!window.formObserved'))
- assert script("return formObserved.action==='https://flixmomo.app/search' && formObserved.query==='Dune & friends'")
- script("document.getElementById('route').value='tor-browser';document.getElementById('route').dispatchEvent(new Event('change'));return true")
- assert script("return document.getElementById('search').getAttribute('action')==='/api/films/native-only' && document.getElementById('browse').getAttribute('href')==='#tor-browser'")
- script("document.getElementById('route').value='direct';document.getElementById('route').dispatchEvent(new Event('change'));return true")
- shot('safari-films.png');record['native_form_and_explicit_route_ui']='PASS_LOCAL_FORM_ONLY'
+ record['stage']='IN_APP_INFORMATION_PAGE';action('POST','/url',{'url':BASE+'/flixmomo.html'})
+ wait_for(lambda:script("return document.body.innerText.includes('Inside GharTV')"))
+ assert script("return !document.querySelector('form') && !document.querySelector('a[target=\"_blank\"]')")
+ shot('safari-films.png');record['in_app_route']='PASS_NO_EXTERNAL_TAB_OR_NATIVE_EXECUTION'
  record['stage']='NATIVE_HLS_TEST_MEDIA';action('POST','/url',{'url':'http://127.0.0.1:8801/index.html'})
  wait_for(lambda:script('return !!window.GharTVPlayback'));click('#play')
  wait_for(lambda:script("return document.getElementById('video').currentTime>0.35"),25)

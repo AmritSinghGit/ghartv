@@ -38,7 +38,7 @@ test('viewer does not serve analytics, collector config, support exports or owne
   const index=await fetch(base+'/');const html=await index.text();assert.doesNotMatch(html,/Owner console|owner\.html|owner-api/);
   assert.match(index.headers.get('content-security-policy'),/worker-src 'self' blob:/);
   const health=await (await fetch(base+'/api/health')).json();assert.equal(health.owner_reader,false);assert.equal(health.analytics,'NOT_SERVED_BY_VIEWER');
-  const films=await (await fetch(base+'/flixmomo.html')).text();assert.match(films,/Open FlixMomo in this browser/);assert.doesNotMatch(films,/\/owner.html|Owner analytics/);
+  const films=await (await fetch(base+'/flixmomo.html')).text();assert.match(films,/Inside GharTV/);assert.doesNotMatch(films,/\/owner.html|Owner analytics/);
   assert.equal((await fetch(base+'/api/films/status')).status,401);
   assert.equal((await fetch(base+'/api/films/status',{headers:{Origin:'https://untrusted.invalid'}})).status,403);
   assert.equal((await fetch(base+'/flixmomo.html',{headers:{'x-operon-preview':'fake'}})).status,403);

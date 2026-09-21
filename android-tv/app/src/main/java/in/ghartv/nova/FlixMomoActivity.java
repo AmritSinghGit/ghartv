@@ -34,6 +34,7 @@ public final class FlixMomoActivity extends Activity {
     private View custom;
     private WebChromeClient.CustomViewCallback customCallback;
     private boolean pageReady;
+    private boolean mainFrameError;
 
     @Override public void onCreate(Bundle state) {
         super.onCreate(state);
@@ -46,7 +47,7 @@ public final class FlixMomoActivity extends Activity {
         chrome.addView(title);
         LinearLayout bar=new LinearLayout(this);
         query=new EditText(this);query.setSingleLine(true);query.setTextColor(TvUi.TEXT);
-        query.setHintTextColor(TvUi.MUTED);query.setHint("Search movies and series on FlixMomo");
+        query.setHintTextColor(TvUi.MUTED);query.setHint("Search FlixMomo inside GharTV");
         bar.addView(query,new LinearLayout.LayoutParams(0,TvUi.dp(this,52),1));
         Button search=TvUi.button(this,"Search",true);bar.addView(search);
         Button home=TvUi.button(this,"Browse",false);bar.addView(home);
@@ -83,10 +84,14 @@ public final class FlixMomoActivity extends Activity {
                     return new WebResourceResponse("text/plain","UTF-8",new ByteArrayInputStream(new byte[0]));
                 return null;
             }
-            @Override public void onPageStarted(WebView v,String u,Bitmap b){pageReady=false;status.setText("Opening provider… Playback depends on its availability and permissions.");}
+            @Override public void onPageStarted(WebView v,String u,Bitmap b){pageReady=false;mainFrameError=false;status.setText("Opening provider… Playback depends on its availability and permissions.");}
             @Override public void onPageFinished(WebView v,String u){
                 pageReady=allowedTop(Uri.parse(u));
-                if(pageReady)status.setText("Provider page loaded · not a playback verification · device network, not Tor");
+                if("/dummy".equals(Uri.parse(u).getPath())){pageReady=false;status.setText("FlixMomo declined this embedded session. No protection was changed.");}
+                else if(pageReady && !mainFrameError)status.setText("FlixMomo in GharTV · select a result and use its player · direct connection");
+            }
+            @Override public void onReceivedHttpError(WebView v,WebResourceRequest request,WebResourceResponse response){
+                if(request.isForMainFrame()){mainFrameError=true;status.setText("FlixMomo returned HTTP "+response.getStatusCode()+". Complete provider verification here if offered.");}
             }
             @Override public void onReceivedSslError(WebView v,SslErrorHandler h,SslError e){h.cancel();status.setText("TLS verification failed. Connection stopped.");}
             @Override public void onReceivedError(WebView v,WebResourceRequest r,android.webkit.WebResourceError e){
@@ -114,16 +119,11 @@ public final class FlixMomoActivity extends Activity {
     private void search(){
         String text=query.getText().toString().trim();
         if(text.length()<2 || text.length()>120){status.setText("Enter 2–120 characters.");return;}
-        if(browser==null || !pageReady){status.setText("Let the provider page load, then Search again.");return;}
-        String js="(()=>{const el=[...document.querySelectorAll('input')].find(x=>x.type==='search'||/search/i.test(x.placeholder||''));"+
-            "if(!el){const b=[...document.querySelectorAll('button,a')].find(x=>/search/i.test((x.getAttribute('aria-label')||'')+' '+x.textContent));if(b)b.click();return 'OPEN_SEARCH';}"+
-            "el.focus();Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value').set.call(el,"+JSONObject.quote(text)+");"+
-            "el.dispatchEvent(new Event('input',{bubbles:true}));el.dispatchEvent(new Event('change',{bubbles:true}));"+
-            "el.dispatchEvent(new KeyboardEvent('keydown',{key:'Enter',code:'Enter',bubbles:true}));if(el.form)el.form.requestSubmit();return 'SUBMITTED';})()";
-        browser.evaluateJavascript(js,result->{
-            if("\"SUBMITTED\"".equals(result)){browser.requestFocus();status.setText("Search sent to provider. Use the remote or keyboard to select a result.");}
-            else status.setText("Provider search opened. Press Search once more, or use the page's search field.");
-        });
+        if(browser==null){status.setText("Android System WebView is unavailable.");return;}
+        // Provider-owned search and player remain inside this GharTV activity.
+        // No DOM injection, stream extraction or authentication changes.
+        browser.loadUrl(HOME+"search?q="+Uri.encode(text));
+        browser.requestFocus();
     }
     private void exitFullScreen(){
         if(custom==null)return;stage.removeView(custom);custom=null;

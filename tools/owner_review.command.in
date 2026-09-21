@@ -2,7 +2,7 @@
 # RC10 exact review and approval workflow. Restore existing configured signing; never generate a key or prompt for passwords.
 set -u
 umask 077
-printf '\033[38;5;51m\nGharTV · CYAN REVIEW 16 · RC10.2 browser review · same signed Android code28 · private analytics removed\033[0m\n'
+printf '\033[38;5;51m\nGharTV · CYAN REVIEW 17 · RC10.3 in-app films and visible TV review · compiled Android code29 · private analytics removed\033[0m\n'
 if ! command -v python3 >/dev/null 2>&1; then echo 'Python 3 is required; no TV or source changed.'; exit 1; fi
 CLOSE_MARKER="${TMPDIR:-/tmp}/ghartv-review-close-$$"
 export GHARTV_CLOSE_MARKER="$CLOSE_MARKER"
@@ -11,9 +11,9 @@ from __future__ import annotations
 import argparse, datetime as dt, fcntl, hashlib, io, json, os, re, shlex, shutil, socket, stat, subprocess, sys, tempfile, time, zipfile, signal, urllib.request, urllib.error
 from pathlib import Path
 REPO='AmritSinghGit/ghartv'; SOURCE='@SOURCE_SHA@'; WEB_SOURCE='@WEB_SOURCE_SHA@'
-PROD='59c130abc1283e66607315db916973553164064d'; TAG='v0.6.0-rc10.2-web-security'; PACKAGE='in.ghartv.nova'
+PROD='59c130abc1283e66607315db916973553164064d'; TAG='v0.6.0-rc10.3-in-app'; PACKAGE='in.ghartv.nova'
 BACKEND_VERSION='0.6.0-rc4-owner-convergence'
-VERSION='0.6.0-rc10.1-web-films'; UNSIGNED='@UNSIGNED_SHA@'
+VERSION='0.6.0-rc10.3-in-app-films'; UNSIGNED='@UNSIGNED_SHA@'
 PROD_HASH='8cff8f85403da5924865fddc687dbff11089d7c498f9863e483a7d8123c1ce13'
 MANIFEST_SHA='@MANIFEST_SHA@'; AVD='GharTV_Nova_Manual_google_tv_API36'; ASSET='GharTV-review-current.apk'
 HOME=Path.home(); SELF=Path(sys.argv[1]).resolve(); STATE=HOME/'Library/Application Support/GharTV/owner-review'; CURRENT=STATE/'current'
@@ -21,10 +21,10 @@ PROJECT=Path(os.environ.get('GHARTV_PROJECT',str(HOME/'Downloads/GharTV_Nova_v0.
 RUNTIME=STATE/'runtime-current';COLLECTOR='https://ghartv-telemetry.ghartv-47d9a0.workers.dev'; manifest={}
 EMBEDDED_MANIFEST=@EMBEDDED_MANIFEST_REPR@
 IST=dt.timezone(dt.timedelta(hours=5,minutes=30))
-RUN_ID='GHARTV-CYAN-16-'+dt.datetime.now(dt.timezone.utc).strftime('%Y%m%dT%H%M%SZ')+'-'+str(os.getpid()); RUN=STATE/'runs'/RUN_ID
-parser=argparse.ArgumentParser();parser.add_argument('--memory-only',action='store_true');parser.add_argument('--signed-apk',type=Path);parser.add_argument('--noninteractive',action='store_true');parser.add_argument('--skip-backend-deploy',action='store_true');parser.add_argument('--bundled-review',action='store_true');parser.add_argument('--web-only',action='store_true');parser.add_argument('--prepare-update',action='store_true');parser.add_argument('--copy-handoff',action='store_true');args=parser.parse_args(sys.argv[2:])
+RUN_ID='GHARTV-CYAN-17-'+dt.datetime.now(dt.timezone.utc).strftime('%Y%m%dT%H%M%SZ')+'-'+str(os.getpid()); RUN=STATE/'runs'/RUN_ID
+parser=argparse.ArgumentParser();parser.add_argument('--memory-only',action='store_true');parser.add_argument('--signed-apk',type=Path);parser.add_argument('--noninteractive',action='store_true');parser.add_argument('--skip-backend-deploy',action='store_true');parser.add_argument('--bundled-review',action='store_true');parser.add_argument('--web-only',action='store_true');parser.add_argument('--prepare-update',action='store_true');parser.add_argument('--copy-handoff',action='store_true');parser.add_argument('--films-only',action='store_true');parser.add_argument('--tv-only',action='store_true');args=parser.parse_args(sys.argv[2:])
 r=dict(review_slot='GREEN_LOCAL_REVIEW',public_slot='BLUE_HOUSEHOLD_RELEASE',development='SOURCE_ONLY_CHECKOUT_READ_ONLY',time_ist=dt.datetime.now(IST).isoformat(),time_utc=dt.datetime.now(dt.timezone.utc).isoformat(),checkout='READ_ONLY_NOT_INSPECTED',backend='NOT_CHECKED',web_player='NOT_STARTED',run_id=RUN_ID,lane_id='ghartv',repository=REPO,operon_session=os.environ.get('OPERON_SESSION_ID','UNBOUND'),
- production_source=PROD,review_source=SOURCE,web_source=WEB_SOURCE,delivery_revision='RC10.2-WEB-SECURITY',analytics_routes='DISABLED_IN_VIEWER',version=VERSION,version_code=28,unsigned_apk_sha256=UNSIGNED,signed_apk_sha256='NOT_VERIFIED',
+ production_source=PROD,review_source=SOURCE,web_source=WEB_SOURCE,delivery_revision='RC10.3-IN-APP',analytics_routes='DISABLED_IN_VIEWER',version=VERSION,version_code=29,unsigned_apk_sha256=UNSIGNED,signed_apk_sha256='NOT_VERIFIED',
  delivery_sha='NOT_READ',local_sha='NOT_READ',production_feed='NOT_CHECKED',obsidian='NOT_WRITTEN',memory_bridge='NOT_RUN',
  review_release='NOT_CHECKED',emulator='UNCHANGED',physical_tv='NOT_VERIFIED',owner_decision='REVIEW_PENDING',
  dashboard='NOT_OPENED',signing_mode='NOT_ATTEMPTED',signing_error_code='NONE',signer_exit_code='NOT_RUN',
@@ -55,7 +55,7 @@ ARTIFACTS={
  'GharTV-review-unsigned.apk':UNSIGNED,
  'GharTV-Jio-Live-v0.5.4-rc8-pre-birthday-recovery.apk':PROD_HASH,
 }
-NETWORK_RECOVERY='CYAN16-VIEWER-SECURITY'
+NETWORK_RECOVERY='CYAN17-NATIVE-FILMS'
 CACHE=STATE/'artifact-cache'
 
 
@@ -159,8 +159,8 @@ def recovery_note():
  dest=vault/'90 System/Operon Portfolio/Handoffs/Terminal Runs/ghartv';mkdir(dest)
  note=dest/(RUN_ID+'-network-recovery.md')
  body='# GharTV RC10 — TV-first automatic preview restoration\n\n'
- body+='Same Android source `'+SOURCE+'`, code28. Bounded previews, smooth focus, local timing measurements, comfort settings and manual reporting.\n\n'
- body+='Last verified owner selection opened Nova code24 on5580; the manual Preview 12s/off-default change was explicitly rejected. Automatic focus-owned muted preview is restored in code28. Code25 remains recovery-only.\n\n'
+ body+='Same Android source `'+SOURCE+'`, code29. Bounded previews, smooth focus, local timing measurements, comfort settings and manual reporting.\n\n'
+ body+='Last verified owner selection opened Nova code24 on5580; the manual Preview 12s/off-default change was explicitly rejected. Automatic focus-owned muted preview is restored in code29. Code25 remains recovery-only.\n\n'
  body+='This run verifies local/bundled/cached immutable bytes first. Public release publication and live collector status are separate from local installation. Production is not changed. Other lanes must not infer a signed APK or running emulator from this note alone.\n\n```text\n'+receipt()+'```\n'
  write(note,body)
  if note.read_bytes()!=body.encode():raise Stop('RECOVERY_NOTE_READBACK_FAILED')
@@ -175,7 +175,7 @@ def observe_production():
   r['production_feed']='UNAVAILABLE_LOCAL_REVIEW_ONLY_NO_PRODUCTION_WRITE';return
  r['production_feed']=str(m.get('versionName','UNKNOWN'))+' / code '+str(m.get('versionCode','UNKNOWN'))
  r['observed_production_source']=m.get('sourceCommit','UNKNOWN')
- if int(m.get('versionCode',0))>=28:raise Stop('Production has caught up or advanced; review identity needs reconciliation')
+ if int(m.get('versionCode',0))>=29:raise Stop('Production has caught up or advanced; review identity needs reconciliation')
 
 
 def publish_review_after_local_success():
@@ -200,7 +200,7 @@ def publish_review_after_local_success():
  except Exception:r['review_release']='GITHUB_PUBLICATION_PENDING_LOCAL_REVIEW_PRESERVED'
 
 def git(*a):return call(['git','-C',PROJECT,*a]).stdout.strip()
-def receipt():return 'GHARTV_CYAN_REVIEW_16_HANDOFF\n'+'\n'.join(k.upper()+'='+str(v) for k,v in r.items())+'\n'
+def receipt():return 'GHARTV_CYAN_REVIEW_17_HANDOFF\n'+'\n'.join(k.upper()+'='+str(v) for k,v in r.items())+'\n'
 def persist():
  r['evidence']=str(RUN)
  write(RUN/'handoff.txt',receipt());write(RUN/'receipt.json',json.dumps(r,indent=2)+'\n');write(CURRENT/'handoff.txt',receipt());write(CURRENT/'receipt.json',json.dumps(r,indent=2)+'\n')
@@ -217,7 +217,7 @@ def note_sync(note_text,transport=True):
  write(dest/(RUN_ID+'-receipt.txt'),receipt())
 
 def light_handoff():
- keep=('run_id','review_source','web_source','version','version_code','status','phase','web_player','emulator','signed_apk_sha256','prepared_signed_apk','blocker','next_action','obsidian','receipt_sync','receipt_url')
+ keep=('run_id','review_source','web_source','version','version_code','status','phase','web_player','emulator','signed_apk_sha256','prepared_signed_apk','blocker','next_action','obsidian','receipt_sync','receipt_url','mac_window','mac_window_observed','mac_window_frontmost')
  data={key:r[key] for key in keep if key in r}
  path=CURRENT/'light-handoff.md'
  write(path,'# GharTV current run\n\nRead the live GitHub PR1 managed receipt before resuming. This local snapshot is not production approval.\n\n```json\n'+json.dumps(data,indent=2)+'\n```\n')
@@ -260,7 +260,7 @@ def reconcile():
   download(f'https://github.com/{REPO}/releases/download/{TAG}/review-manifest.json',meta)
   if digest(meta)!=MANIFEST_SHA:raise Stop('RELEASE_MANIFEST_CHECKSUM_MISMATCH')
   manifest=json.loads(meta.read_text())
-  if manifest.get('web_source_sha')!=WEB_SOURCE or manifest.get('source_sha')!=SOURCE or manifest.get('unsigned_sha256')!=UNSIGNED or manifest.get('version_code')!=28:raise Stop('RELEASE_IDENTITY_MISMATCH')
+  if manifest.get('web_source_sha')!=WEB_SOURCE or manifest.get('source_sha')!=SOURCE or manifest.get('unsigned_sha256')!=UNSIGNED or manifest.get('version_code')!=29:raise Stop('RELEASE_IDENTITY_MISMATCH')
   r['phase']='ARTIFACT_COMPANION'
   bundle=t/'companion.zip';download(f'https://github.com/{REPO}/releases/download/{TAG}/GharTV-review-companion.zip',bundle)
   if digest(bundle)!=manifest['companion_sha256']:raise Stop('COMPANION_CHECKSUM_MISMATCH')
@@ -419,7 +419,7 @@ def preserve_verified_signed(candidate,digest_value):
   temp.chmod(0o600)
   if digest(temp)!=digest_value:raise Stop('PREPARED_SIGNED_CACHE_READBACK_FAILED')
   os.replace(temp,dest)
- write(CURRENT/'prepared-review-artifact.json',json.dumps({'source':SOURCE,'sha256':digest_value,'version_code':28,'installed':False,'certificate_verified':True},indent=2)+'\n')
+ write(CURRENT/'prepared-review-artifact.json',json.dumps({'source':SOURCE,'sha256':digest_value,'version_code':29,'installed':False,'certificate_verified':True},indent=2)+'\n')
  r['prepared_signed_apk']='PERSISTED_AND_HASH_VERIFIED_BEFORE_EMULATOR_SELECTION'
  r['prepared_signed_apk_path']=str(dest)
  # Preserve technical identity now, even if boot later times out.
@@ -508,9 +508,9 @@ def review():
    if candidateCert!=referenceCert:raise Stop('RELEASE_SIGNER_MISMATCH: saved key differs from the published signing reference; no uninstall or key replacement')
    r['signing_certificate_sha256']=','.join(sorted(candidateCert))
    r['phase']='SIGNED_PAYLOAD_AND_CERTIFICATE_VERIFIED'
-   print('3 / 5 · Signed APK payload and original certificate verified. Open local review first.',flush=True)
+   print('3 / 5 · New code29 APK and original signing certificate verified.',flush=True)
    badging=call([aapt,'dump','badging',c],env=env).stdout
-   if not all(v in badging for v in ["name='in.ghartv.nova'","versionCode='28'","versionName='0.6.0-rc10.1-web-films'"]):raise Stop('Wrong package or Android version')
+   if not all(v in badging for v in ["name='in.ghartv.nova'","versionCode='29'","versionName='0.6.0-rc10.3-in-app-films'"]):raise Stop('Wrong package or Android version')
    # Development checkout is intentionally untouched; verified artifact bytes are authoritative.
    h=digest(c);r['signed_apk_sha256']=h
    preserve_verified_signed(c,h)
@@ -519,10 +519,10 @@ def review():
    try:resource_preflight()
    except Stop as error:
     if not str(error).startswith('HOST_PRESSURE_'):raise
-    r['status']='WEB_REVIEW_READY_ANDROID_HELD';r['blocker']=str(error)
+    r['status']='WEB_REVIEW_READY_ANDROID_HELD' if r.get('web_player')=='HEALTH_AND_SOURCE_VERIFIED_PROVIDER_PLAYBACK_UNVERIFIED' else 'ANDROID_HELD_RESOURCE_PRESSURE';r['blocker']=str(error)
     r['next_action']='REVIEW_WEB_OR_PREPARED_APK_WITHOUT_NEW_EMULATOR'
     call(['open','-R',r['prepared_signed_apk_path']],check=False)
-    print('Web review is ready. Android APK is signed and preserved; no new emulator was started under memory pressure.',flush=True)
+    print('Android APK is signed and preserved. No new emulator was started under memory pressure. Web status: '+r.get('web_player','NOT_STARTED'),flush=True)
     return
    r['review_release']='SIGNED_LOCAL_VERIFIED_GITHUB_PUBLICATION_PENDING';r['phase']='EMULATOR_SELECTION'
    print('4 / 5 · Update and open the same named emulator; no physical-TV change.',flush=True)
@@ -535,7 +535,7 @@ def review():
    adb,started=attach_with_boot_evidence(transport,sdk)
    serial=transport.SERIAL;r['emulator_serial']=serial;r['started_existing_avd']=started
    codes=re.findall(r'versionCode=(\d+)',call([adb,'-s',serial,'shell','dumpsys','package',PACKAGE]).stdout)
-   if codes and int(codes[0])>28:raise Stop('Newer version installed; no downgrade')
+   if codes and int(codes[0])>29:raise Stop('Newer version installed; no downgrade')
    def pull_installed(destination):
     paths=call([adb,'-s',serial,'shell','pm','path',PACKAGE]).stdout.splitlines()
     if len(paths)!=1 or not paths[0].startswith('package:'):raise Stop('Unexpected installed package layout')
@@ -543,15 +543,15 @@ def review():
    if codes:
     old=t/'installed.apk';pull_installed(old)
     if cert(old)!=cert(c):raise Stop('Installed signer differs; no uninstall or storage clearing')
-    if int(codes[0])==28 and digest(old)!=h:raise Stop('Different code-28 APK installed; reconcile first')
-   if not codes or int(codes[0])<28:
+    if int(codes[0])==29 and digest(old)!=h:raise Stop('Different code-29 APK installed; reconcile first')
+   if not codes or int(codes[0])<29:
     result=call([adb,'-s',serial,'install','-r',c],120).stdout
     if 'Success' not in result:raise Stop('Android did not confirm install')
    installed=t/'installed-final.apk';pull_installed(installed)
    if digest(installed)!=h:raise Stop('Installed byte verification failed')
    r['emulator']='RC10_INSTALLED_BYTES_VERIFIED';r['phase']='OPENING_REVIEW'
    call([adb,'-s',serial,'shell','input','keyevent','KEYCODE_WAKEUP'],check=False)
-   call([adb,'-s',serial,'shell','am','force-stop',PACKAGE])
+   call([adb,'-s',serial,'shell','wm','dismiss-keyguard'],check=False)
    out=call([adb,'-s',serial,'shell','am','start','-W','-n',PACKAGE+'/.MainActivity']).stdout
    if 'Status: ok' not in out:raise Stop('RC10_INSTALLED_LAUNCH_NOT_CONFIRMED: no data clear or downgrade attempted')
    foreground=False
@@ -566,14 +566,23 @@ def review():
    if not foreground:raise Stop('RC10_INSTALLED_FOREGROUND_NOT_CONFIRMED: launch did not settle in GharTV; installed identity retained in this receipt')
    c.chmod(0o600);os.replace(c,target)
    write(CURRENT/'review-artifact.json',json.dumps({'source':SOURCE,'sha256':h,'unsigned_sha256':UNSIGNED,'version':VERSION},indent=2)+'\n')
-   r['emulator']='RC10_INSTALLED_BYTES_VERIFIED_AND_FOREGROUND';r['phase']='REVIEW_OPEN';r['status']='REVIEW_READY'
+   r['emulator']='RC10_INSTALLED_BYTES_VERIFIED_AND_FOREGROUND';r['phase']='REVIEW_OPEN'
+   window=transport.request_window_details()
+   r['mac_window']=window['status'];r['mac_window_observed']=window.get('window_observed') is True
+   r['mac_window_frontmost']=window.get('app_active') is True
+   write(RUN/'TV_WINDOW.json',json.dumps(window,indent=2)+'\n')
+   r['status']='REVIEW_READY' if r['mac_window_observed'] and r['mac_window_frontmost'] else 'ANDROID_READY_WINDOW_UNCONFIRMED'
+   if r['status']!='REVIEW_READY':
+    r['blocker']='TV_WINDOW_'+window['status']
+    r['next_action']='SHOW_EXISTING_NOVA_WINDOW_NO_SECOND_VM'
+   print('Mac TV window: '+r['mac_window'],flush=True)
    print('RC10 is installed and GharTV is the foreground Android activity: '+r['review_screen'],flush=True)
    r['network_check']='NOT_RERUN_PERFORMANCE_REVIEW_USE_EXPLICIT_CONNECTION_CHECK'
    r['emulator_network_restart']='NOT_ATTEMPTED'
    r['provider_playback']='OWNER_PLAYBACK_REVIEW_REQUIRED'
 
    obsolete=CURRENT/'GharTV-review-unsigned.apk'
-   if obsolete.is_file() and not obsolete.is_symlink() and digest(obsolete)==UNSIGNED:
+   if r['status']=='REVIEW_READY' and obsolete.is_file() and not obsolete.is_symlink() and digest(obsolete)==UNSIGNED:
     r['cleanup_bytes']+=obsolete.stat().st_size;obsolete.unlink();r['cleanup_count']+=1
 
 def performance_snapshot(label):
@@ -626,6 +635,10 @@ def stop_owned_web_if_needed():
  except Exception:raise Stop('PREVIEW_ACTIVITY_NOT_VERIFIED_PRESERVED')
 
  if health.get('commit')==WEB_SOURCE:return
+ native_pid=STATE/'native-films/current.pid'
+ if native_pid.is_file() and native_pid.read_text().strip().isdigit():
+  cmd=call(['/bin/ps','-p',native_pid.read_text().strip(),'-o','command='],5,False).stdout.strip()
+  if cmd==str(RUNTIME/'web-player/native/GharTVFilmView'):raise Stop('CLOSE_GHARTV_FILM_WINDOW_BEFORE_UPDATING')
  if not pidfile.is_file() or pidfile.is_symlink():raise Stop('EXISTING_WEB_PID_NOT_OWNED: no process killed')
  value=pidfile.read_text().strip()
  if not value.isdigit():raise Stop('EXISTING_WEB_PID_INVALID')
@@ -669,6 +682,35 @@ def open_dashboard():
  call(['open',r['web_url']],check=False)
  r['dashboard']='VIEWER_OPEN_REQUESTED_ANALYTICS_REMOVED'
  if r.get('prior_runtime_preserved'):r['old_managed_runtime_cleanup']='PRIOR_REVIEW_PRESERVED_UNTIL_OWNER_ACCEPTANCE'
+
+def open_films():
+ executable=RUNTIME/'web-player/native/GharTVFilmView';metadata=RUNTIME/'web-player/native/manifest.json'
+ for p in (executable,metadata):safe(p)
+ if not executable.is_file() or not metadata.is_file():raise Stop('NATIVE_FILM_COMPONENT_MISSING')
+ identity=json.loads(metadata.read_text())
+ if identity.get('source')!=WEB_SOURCE or digest(executable)!=identity.get('sha256'):raise Stop('NATIVE_FILM_COMPONENT_CHECKSUM_FAILED')
+ if call(['/usr/bin/uname','-m'],5,False).stdout.strip()!='arm64':raise Stop('NATIVE_FILM_REVIEW_REQUIRES_APPLE_SILICON')
+ executable.chmod(0o700)
+ state=STATE/'native-films';mkdir(state);pidfile=state/'current.pid';safe(pidfile)
+ pid=None
+ if pidfile.is_file():
+  text=pidfile.read_text().strip()
+  if text.isdigit():
+   observed=call(['/bin/ps','-p',text,'-o','uid=,command='],5,False).stdout.strip().split(None,1)
+   if len(observed)==2 and observed[0]==str(os.getuid()) and observed[1]==str(executable):pid=int(text)
+ if pid is None:
+  with open(state/(RUN_ID+'.log'),'x') as log:
+   process=subprocess.Popen([str(executable)],stdin=subprocess.DEVNULL,stdout=log,stderr=subprocess.DEVNULL,env={'PATH':'/usr/bin:/bin','LANG':'en_US.UTF-8'},start_new_session=True)
+  pid=process.pid;write(pidfile,str(pid)+'\n');time.sleep(1)
+ import importlib.util
+ spec=importlib.util.spec_from_file_location('ghartv_film_window',RUNTIME/'tools/tv_window.py');helper=importlib.util.module_from_spec(spec);spec.loader.exec_module(helper)
+ result=helper.native_window(pid)
+ for attempt in range(5):
+  if result.get('window_observed'):break
+  time.sleep(.4);result=helper.native_window(pid)
+ r['film_window']=result['status'];r['film_playback']='NOT_VERIFIED'
+ print('GharTV film window: '+r['film_window'],flush=True)
+ if not result.get('window_observed'):raise Stop('NATIVE_FILM_WINDOW_NOT_CONFIRMED')
 
 def capture_support_once():
  try:
@@ -753,11 +795,16 @@ try:
  observe_production()
  r['status']='MEMORY_UPDATED' if r['obsidian']=='WRITTEN_AND_READBACK_VERIFIED' else 'CONTINUITY_REQUIRES_ATTENTION'
  if not args.memory_only:
-  open_dashboard()
-  if args.web_only:
+  if not args.tv_only:open_dashboard()
+  if args.films_only:
+   open_films();r['status']='FILM_WINDOW_OPEN_ANDROID_NOT_TOUCHED'
+  elif args.web_only:
    if r.get('web_player')!='HEALTH_AND_SOURCE_VERIFIED_PROVIDER_PLAYBACK_UNVERIFIED':raise Stop('WEB_NOT_READY')
    r['status']='WEB_REVIEW_READY_ANDROID_NOT_TOUCHED'
   else:
+   if not args.tv_only:
+    try:open_films()
+    except Stop as e:r['film_window']=str(e);print('Film component: '+str(e),flush=True)
    performance_snapshot('before');review()
    if r['status']=='REVIEW_READY':cleanup()
 except Exception as e:
@@ -767,7 +814,7 @@ finally:
   if lock_acquired:
    persist()
    try:
-    if note_text and not args.memory_only:
+    if note_text and not args.memory_only and not args.tv_only:
      if r.get('dashboard')!='VIEWER_OPEN_REQUESTED_ANALYTICS_REMOVED':open_dashboard()
      r['collector_capture']='NOT_REQUESTED_MANUAL_REPORTING_ONLY'
    except Exception as e:r['dashboard']='OPEN_FAILED_'+(str(e) if isinstance(e,Stop) else type(e).__name__)
@@ -798,6 +845,7 @@ finally:
  print('\nGharTV review result: '+r['status'])
  print('Web: '+r.get('web_url','NOT_STARTED'))
  print('Android: '+r.get('emulator','UNCHANGED'))
+ print('TV window: '+r.get('mac_window','NOT_CHECKED'))
  if r.get('prepared_signed_apk_path'):print('Signed APK: '+r['prepared_signed_apk_path'])
  if r.get('blocker'):print('Android / startup note: '+str(r['blocker']))
  print('Continuity: '+r.get('receipt_sync','NOT_CONFIRMED')+' · Obsidian: '+r.get('obsidian','NOT_WRITTEN'))

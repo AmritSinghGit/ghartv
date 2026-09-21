@@ -229,16 +229,15 @@ def open_activity(adb):
         time.sleep(.5)
     raise Hold('TV_ACTIVITY_NOT_FOREGROUND')
 
+def request_window_details():
+    import importlib.util
+    path=Path(__file__).with_name('tv_window.py')
+    spec=importlib.util.spec_from_file_location('ghartv_tv_window',path)
+    helper=importlib.util.module_from_spec(spec);spec.loader.exec_module(helper)
+    return helper.request_window_details(avd_processes())
+
 def request_window():
-    procs=avd_processes()
-    qemu=[pid for pid,cmd in procs if 'qemu-system-' in cmd]
-    if len(qemu)!=1: return 'MAC_WINDOW_NOT_CONFIRMED'
-    # AppKit activation does not grant Accessibility or send remote-control keystrokes.
-    script='ObjC.import("AppKit"); var a=$.NSRunningApplication.runningApplicationWithProcessIdentifier('+str(qemu[0])+'); if(a.isNil()) false; else a.activateWithOptions(3);'
-    try:
-        p=call(['/usr/bin/osascript','-l','JavaScript','-e',script],5)
-        return 'MAC_ACTIVATION_ACCEPTED' if p.returncode==0 and p.stdout.strip()=='true' else 'MAC_WINDOW_NOT_CONFIRMED'
-    except Exception:return 'MAC_WINDOW_NOT_CONFIRMED'
+    return request_window_details()['status']
 
 def host_dns(host):
     try:
@@ -321,10 +320,17 @@ def main_action(action, expected=None):
             if not re.fullmatch('[a-f0-9]{40}',source) or (expected and source!=expected):raise Hold('REVIEW_SOURCE_CHANGED')
             result['stage']='OPEN_EMULATOR'
             root=sdk();adb=root/'platform-tools/adb'
+            pressure=call(['/usr/sbin/sysctl','-n','kern.memorystatus_vm_pressure_level']).stdout.strip()
+            if pressure!='1':
+                boot=call([adb,'-s',SERIAL,'shell','getprop','sys.boot_completed'],4).stdout.strip()
+                if boot!='1':raise Hold('HOST_PRESSURE_NO_NEW_EMULATOR')
+                verify_target(adb)
             adb,started=attach_or_start(root,run)
             result.update(started_existing_avd=started,apk_sha256=installed_identity(adb,receipt))
             result['stage']='OPEN_APP';open_activity(adb)
-            result.update(ok=True,foreground=True,window=request_window(),stage='APP_OPEN')
+            window=request_window_details()
+            result.update(ok=window.get('window_observed') is True,foreground=True,window=window['status'],window_observed=window.get('window_observed') is True,stage='APP_OPEN')
+            if not result['ok']:result['error']='TV_WINDOW_'+window['status']
             result.update(version=receipt.get('version'),version_code=receipt.get('version_code'),source=source)
             # Opening doesn't rewrite the installation receipt or remove a rejection.
             result['owner_decision']=receipt.get('owner_decision','REVIEW_PENDING')

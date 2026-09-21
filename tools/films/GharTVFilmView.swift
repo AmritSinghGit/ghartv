@@ -39,7 +39,7 @@ final class FilmView: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNavig
         config.mediaTypesRequiringUserActionForPlayback = .all
         browser = WKWebView(frame: .zero, configuration: config)
         browser.navigationDelegate = self; browser.uiDelegate = self; browser.allowsBackForwardNavigationGestures = true
-        for item in [row, status, browser!] { item.translatesAutoresizingMaskIntoConstraints = false; content.addSubview(item) }
+        for item in ([row, status, browser!] as [NSView]) { item.translatesAutoresizingMaskIntoConstraints = false; content.addSubview(item) }
         NSLayoutConstraint.activate([
             row.topAnchor.constraint(equalTo: content.topAnchor, constant: 14), row.leadingAnchor.constraint(equalTo: content.leadingAnchor, constant: 16), row.trailingAnchor.constraint(equalTo: content.trailingAnchor, constant: -16), query.widthAnchor.constraint(greaterThanOrEqualToConstant: 220),
             status.topAnchor.constraint(equalTo: row.bottomAnchor, constant: 8), status.leadingAnchor.constraint(equalTo: row.leadingAnchor), status.trailingAnchor.constraint(equalTo: row.trailingAnchor),
@@ -47,26 +47,17 @@ final class FilmView: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNavig
         ])
         window.center(); window.makeKeyAndOrderFront(nil); NSApp.activate(ignoringOtherApps: true)
         emit(["event":"window_ready", "windowVisible":window.isVisible])
-        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
-            while let line = readLine() {
-                guard line.utf8.count <= 4096, let data = line.data(using: .utf8), let value = try? JSONSerialization.jsonObject(with: data) as? [String:Any] else { continue }
-                DispatchQueue.main.async { self?.handle(value) }
-            }
-            DispatchQueue.main.async { NSApp.terminate(nil) }
-        }
+        let args = CommandLine.arguments
+        if args.count == 3, args[1] == "--query", let url = target("search", args[2]) {
+            query.stringValue = args[2]; open(url)
+        } else { open(URL(string: "https://flixmomo.app/")!) }
+
     }
     func target(_ action: String, _ text: String) -> URL? {
         if action == "browse" { return URL(string: "https://flixmomo.app/") }
         guard action == "search", text.count >= 2, text.count <= 120, !text.unicodeScalars.contains(where: { CharacterSet.controlCharacters.contains($0) }) else { return nil }
         var url = URLComponents(string: "https://flixmomo.app/search")!
         url.queryItems = [URLQueryItem(name: "q", value: text)]; return url.url
-    }
-    func handle(_ value: [String:Any]) {
-        guard let action = value["action"] as? String, let id = value["id"] as? String, id.range(of: "^[a-f0-9]{32}$", options: .regularExpression) != nil else { return }
-        let text = (value["query"] as? String ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
-        guard let url = target(action, text) else { emit(["id":id,"ok":false,"error":"INVALID_SEARCH"]); return }
-        query.stringValue = text; open(url)
-        emit(["id":id,"ok":true,"status":"IN_GHARTV_NAVIGATION_REQUESTED","windowVisible":window.isVisible,"playbackVerified":false])
     }
     func open(_ url: URL) {
         lastNavigationFailed = false; window.deminiaturize(nil); window.makeKeyAndOrderFront(nil); NSApp.activate(ignoringOtherApps: true)
@@ -104,7 +95,7 @@ final class FilmView: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNavig
             emit(["event":"provider_blocked","code":"DUMMY_REDIRECT","playbackVerified":false]); return
         }
         if !lastNavigationFailed { status.stringValue = "FlixMomo in GharTV · Select a result and use the provider’s player · Direct connection" }
-        emit(["event":"page_finished","providerPage":webView.url?.host == "flixmomo.app","pageError":lastNavigationFailed,"playbackVerified":false])
+        emit(["event":"page_finished","providerPage":webView.url?.host == "flixmomo.app","pageError":lastNavigationFailed,"providerPath":webView.url?.path == "/search" ? "search" : "other","playbackVerified":false])
     }
     func webView(_ webView: WKWebView, didFailProvisionalNavigation navigation: WKNavigation!, withError error: Error) { failed(error) }
     func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError error: Error) { failed(error) }

@@ -14,13 +14,13 @@ assert 'emulator-5580' in contract['canonical_serial']
 print('TV_EXPERIENCE_CONTRACT=PASS_9_RULES_SOURCE_CHECKED')
 
 launcher=(R/'tools/owner_review.command.in').read_text()
-assert "version_code=28" in launcher and "manifest.get('version_code')!=28" in launcher
-assert "int(codes[0])==28" in launcher and "int(codes[0])<28" in launcher
+assert "version_code=29" in launcher and "manifest.get('version_code')!=29" in launcher
+assert "int(codes[0])==29" in launcher and "int(codes[0])<29" in launcher
 assert 'transport.attach_or_start(sdk,RUN)' in launcher and "sock.bind(('127.0.0.1',port))" not in launcher
 assert 'TV_EXPERIENCE_CONTRACT.json' in (R/'tools/package_owner_review.py').read_text()
-print('REVIEW_CODE28_AND_CORRECTED_OPENER=PASS')
+print('REVIEW_CODE29_AND_CORRECTED_OPENER=PASS')
 
-assert 'GHARTV_CYAN_REVIEW_16_HANDOFF' in launcher and 'GHARTV_CYAN_REVIEW_15_HANDOFF' not in launcher
+assert 'GHARTV_CYAN_REVIEW_17_HANDOFF' in launcher and 'GHARTV_CYAN_REVIEW_16_HANDOFF' not in launcher
 assert 'java.util.Objects.equals(selectedChannel.id,candidate.id)' in m
 assert 'channel.number+":"+safe(channel.id)' not in c
-print('STABLE_CHANNEL_ID_AND_REVIEW16_LABEL=PASS')
+print('STABLE_CHANNEL_ID_AND_REVIEW17_LABEL=PASS')
