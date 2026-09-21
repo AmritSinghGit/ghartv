@@ -1,58 +1,32 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {Readable} from 'node:stream';
-import {filmURL,torProxy,launchOptions,normalizeResults} from '../film-browser-worker.mjs';
+import {providerTarget,openInTorBrowser} from '../native-provider.mjs';
 import {makeFilmRoute,filmHTML} from '../film-search.mjs';
 const origin='http://127.0.0.1:8790';
-function req(path,{method='GET',body,headers={}}={}){const r=Readable.from(body?[Buffer.from(JSON.stringify(body))]:[]);r.method=method;r.headers={host:'127.0.0.1:8790',origin,'content-type':'application/json',...headers};return r;}
+function req({method='GET',body,headers={}}={}){const r=Readable.from(body?[Buffer.from(JSON.stringify(body))]:[]);r.method=method;r.headers={host:'127.0.0.1:8790',origin,'content-type':'application/json',...headers};return r;}
 function response(){return {status:0,headers:{},body:'',writeHead(s,h){this.status=s;this.headers=h;},end(b){this.body=b;}};}
-async function call(path,options,authorized=()=>true,discover=async()=>null){const r=response(),route=makeFilmRoute({discover,start(){throw Error('UNEXPECTED_BROWSER_START');}});assert.equal(await route(req(path,options),r,new URL(path,origin),authorized,'a'.repeat(64)),true);return r;}
-test('film URLs are restricted to the exact registered provider and catalogue paths',()=>{
- assert.equal(filmURL('https://flixmomo.app/movie/438631/dune/watch?p=1'),'https://flixmomo.app/movie/438631/dune/watch?p=1');
- for(const v of ['https://flixmomo.app.evil/movie/1/a','https://user:pass@flixmomo.app/movie/1/a','http://flixmomo.app/movie/1/a','https://127.0.0.1/movie/1/a','https://flixmomo.app/api/private'])assert.throws(()=>filmURL(v));
+async function call(path,options,authorized=()=>true,settings={find:async()=>null}){const r=response(),route=makeFilmRoute(settings);assert.equal(await route(req(options),r,new URL(path,origin),authorized,'a'.repeat(64)),true);return r;}
+test('Browse is exactly the provider root, never a synthetic movie route',()=>{assert.equal(providerTarget('browse'),'https://flixmomo.app/');});
+test('Search uses the provider own verified q route and encodes punctuation and Punjabi',()=>{
+ for(const query of ['Dune','ਜੱਟ ਐਂਡ ਜੂਲੀਅਟ','A&B #1 / test?','https://private.invalid/']){const u=new URL(providerTarget('search',query));assert.equal(u.origin,'https://flixmomo.app');assert.equal(u.pathname,'/search');assert.equal(u.searchParams.get('q'),query);assert.equal(u.hash,'');}
 });
-test('Tor accepts only local SOCKS on supported ports, no arbitrary proxy or credentials',()=>{
- assert.equal(torProxy(),'socks5://127.0.0.1:9050');assert.equal(torProxy('socks5://127.0.0.1:9150'),'socks5://127.0.0.1:9150');
- for(const v of ['http://127.0.0.1:9050','socks5://localhost:9050','socks5://example.org:9050','socks5://u:p@127.0.0.1:9050','socks5://127.0.0.1:9050/direct'])assert.throws(()=>torProxy(v));
+test('Invalid actions, control input and unbounded queries are rejected',()=>{for(const [a,q] of [['open','x'],['search','x'],['search','x'.repeat(121)],['search','a\r\nb'],['search',{}]])assert.throws(()=>providerTarget(a,q));});
+test('Native Tor request uses fixed open executable, arguments and verified provider URL only',async()=>{
+ let got;const r=await openInTorBrowser('search','Dune & me',{find:async()=>'/Applications/Tor Browser.app',run:async(...args)=>{got=args;return {};}});
+ assert.equal(got[0],'/usr/bin/open');assert.deepEqual(got[1],['-a','/Applications/Tor Browser.app','--','https://flixmomo.app/search?q=Dune+%26+me']);assert.equal(got[2].shell,undefined);assert.equal(r.torVerified,false);assert.equal(r.automaticSearch,false);
 });
-test('Tor launch has no direct fallback, suppresses local DNS, keeps sandbox on',()=>{
- const o=launchOptions({executable:'/browser',route:'tor'});assert.equal(o.chromiumSandbox,true);assert.equal(o.proxy.server,'socks5://127.0.0.1:9050');assert.ok(o.args.some(a=>a.includes('MAP * ~NOTFOUND')));assert.ok(o.args.includes('--disable-quic'));assert.ok(!o.args.some(a=>a.includes('no-sandbox')||a.includes('direct://')));
- assert.equal(launchOptions({executable:'/browser',route:'direct'}).proxy,undefined);assert.throws(()=>launchOptions({route:'automatic'}));
-});
-test('results are real-provider bounded, normalized and deduplicated by stable ID',()=>{
- const r=normalizeResults([{url:'/movie/12/a',title:'  Film   A  '},{url:'/movie/12/a/watch',title:'Play'},{url:'https://evil.invalid/movie/4/a',title:'Bad'},...Array.from({length:90},(_,i)=>({url:'/tv/'+i+'/a',title:'Series '+i}))]);
- assert.equal(r.length,40);assert.deepEqual(r[0],{id:'movie:12',title:'Film A',url:'https://flixmomo.app/movie/12/a',type:'Movie'});
-});
-test('film page is private from Fabric previews, with frame and script CSP',async()=>{
- assert.equal((await call('/flixmomo.html',{headers:{'x-operon-preview':'1'}})).status,404);
- const ok=await call('/flixmomo.html',{});assert.equal(ok.status,200);assert.match(ok.headers['Content-Security-Policy'],/frame-ancestors 'none'/);assert.match(ok.body,/Tor selected/);
-});
-test('film APIs require owner session and reject cross-origin POST',async()=>{
+test('Missing Tor Browser never opens a direct fallback',async()=>{let calls=0;await assert.rejects(openInTorBrowser('browse','',{find:async()=>null,run:async()=>{calls++;}}),/TOR_BROWSER_NOT_FOUND/);assert.equal(calls,0);});
+test('Native form remains usable with no browser driver or JavaScript',()=>{const h=filmHTML('a'.repeat(64));assert.match(h,/action="https:\/\/flixmomo.app\/search" method="get" target="_blank"/);assert.match(h,/name="q"/);assert.match(h,/value="tor-browser" disabled/);assert.doesNotMatch(h,/playwright|webdriver|iframe|owner.html|localStorage|setInterval|normalizeResults/);});
+test('Film page excludes previews and has tightly scoped native form CSP',async()=>{assert.equal((await call('/flixmomo.html',{headers:{'x-operon-preview':'1'}})).status,404);const r=await call('/flixmomo.html',{});assert.equal(r.status,200);assert.match(r.headers['Content-Security-Policy'],/form-action https:\/\/flixmomo.app/);assert.match(r.headers['Content-Security-Policy'],/frame-ancestors 'none'/);});
+test('API requires local token, same origin and JSON for native opening',async()=>{
  assert.equal((await call('/api/films/status',{},()=>false)).status,401);
- assert.equal((await call('/api/films/search',{method:'POST',body:{query:'dune',route:'tor'},headers:{origin:'https://evil.invalid'}})).status,403);
+ assert.equal((await call('/api/films/search',{method:'POST',body:{query:'Dune',route:'tor-browser'},headers:{origin:'https://evil.invalid'}})).status,403);
+ assert.equal((await call('/api/films/search',{method:'POST',body:{query:'Dune'},headers:{'content-type':'text/plain'}})).status,415);
 });
-test('missing browser yields actionable failure rather than invented results',async()=>{
- const r=await call('/api/films/search',{method:'POST',body:{query:'dune',route:'direct'}});assert.equal(r.status,400);assert.equal(JSON.parse(r.body).error,'OPTIONAL_BROWSER_MISSING_USE_DIRECT_LINK');
+test('Legacy automated endpoints are retired rather than a false search result',async()=>{
+ const r=await call('/api/films/search',{method:'POST',body:{query:'Dune',route:'direct'}});assert.equal(r.status,409);assert.equal(JSON.parse(r.body).targetUrl,'https://flixmomo.app/search?q=Dune');assert.equal((await call('/api/films/open',{})).status,410);
 });
-test('unrecognized routes and arbitrary open URLs are rejected',async()=>{
- const r=await call('/api/films/open',{method:'POST',body:{id:'movie:1',url:'https://evil.invalid',route:'direct'}});assert.equal(JSON.parse(r.body).error,'SEARCH_RESULT_EXPIRED_SEARCH_AGAIN');
- assert.equal((await call('/api/films/search',{method:'POST',body:{query:'dune',route:'auto'}})).status,400);
-});
-test('UI never claims server Tor for embedded direct playback and has no report polling',()=>{
- const html=filmHTML('a'.repeat(64));assert.match(html,/Embedded playback cannot use the server's Tor route/);assert.match(html,/embed.disabled=\$\('route'\).value==='tor'/);assert.doesNotMatch(html,/setInterval|localStorage|collector.env|admin\/summary/);
-});
-
-test('parallel requests reserve browser admission before discovery resolves',async()=>{
- let release;const discovery=new Promise(resolve=>{release=resolve;});
- const route=makeFilmRoute({discover:()=>discovery});const a=response(),b=response();
- const first=route(req('/api/films/search',{method:'POST',body:{query:'dune',route:'direct'}}),a,new URL('/api/films/search',origin),()=>true,'a'.repeat(64));
- await new Promise(resolve=>setImmediate(resolve));
- await route(req('/api/films/search',{method:'POST',body:{query:'dune',route:'direct'}}),b,new URL('/api/films/search',origin),()=>true,'a'.repeat(64));
- assert.equal(b.status,409);release(null);await first;assert.equal(a.status,400);
-});
-
-test('manual provider browse uses only the registered home and explicit route',async()=>{
- const r=await call('/api/films/browse',{method:'POST',body:{route:'direct'}});
- assert.equal(JSON.parse(r.body).error,'OPTIONAL_BROWSER_MISSING_USE_DIRECT_LINK');
- assert.match(filmHTML('a'.repeat(64)),/Complete any verification yourself/);
-});
+test('Local status does not contact the provider, collect data or advertise automated search',async()=>{const r=await call('/api/films/status',{});const v=JSON.parse(r.body);assert.equal(v.automaticSearch,false);assert.equal(v.automaticProviderRequests,false);assert.equal(v.browserRequired,false);assert.equal(v.torBrowserAvailable,false);});
+test('Oversized requests are bounded and unknown routes never launch',async()=>{assert.equal((await call('/api/films/search',{method:'POST',body:{query:'x'.repeat(3000)}})).status,413);const r=await call('/api/films/search',{method:'POST',body:{query:'Dune',route:'auto'}});assert.equal(JSON.parse(r.body).error,'EXPLICIT_ROUTE_REQUIRED');});
+test('Tor route selection removes direct form and browse destinations before submit',()=>{const h=filmHTML('a'.repeat(64));assert.match(h,/tor\?'\/api\/films\/native-only'/);assert.match(h,/tor\?'#tor-browser'/);assert.match(h,/event.preventDefault\(\);void openTor\('search'\)/);});
