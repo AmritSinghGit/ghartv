@@ -12,6 +12,9 @@ jobs:
     timeout-minutes: 10
     env:
       GH_TOKEN: ${{ github.token }}
+      ANDROID_USER_HOME: /tmp/ghartv-cloud-android
+      ANDROID_EMULATOR_HOME: /tmp/ghartv-cloud-android
+      ANDROID_AVD_HOME: /tmp/ghartv-cloud-avds
     steps:
       - uses: actions/checkout@v5
       - uses: actions/setup-java@v5
@@ -22,25 +25,29 @@ jobs:
         with:
           packages: platform-tools
           log-accepted-android-sdk-licenses: false
-      - name: Download the exact successful Mac recovery build without rebuilding it
+      - name: Reuse exact successful Mac recovery bytes
         run: gh run download 35590689784 --repo AmritSinghGit/ghartv --name ghartv-tv-window-mac --dir /tmp/tv-window
-      - name: Start an isolated diagnostic Android device and preserve its actual boot errors
+      - name: Create only the isolated cloud test AVD at an explicit path
         run: |
           set -euo pipefail
-          mkdir -p /tmp/tv-window/proof
+          mkdir -p /tmp/tv-window/proof "$ANDROID_USER_HOME" "$ANDROID_AVD_HOME"
           test -e /dev/kvm
           sudo chmod a+rw /dev/kvm
           sudo apt-get update -qq
           sudo apt-get install -y -qq libpulse0 libasound2t64 libnss3 libxcomposite1 libxcursor1 libxi6 libxtst6 libxrandr2 libegl1 libglu1-mesa xvfb ffmpeg
           sdkmanager 'emulator' 'system-images;android-36;google_apis;x86_64'
-          echo no | avdmanager create avd --name GHARTV_CLOUD_DISPLAY_TEST_ONLY --package 'system-images;android-36;google_apis;x86_64'
           python - <<'PY'
           from pathlib import Path
           import os,subprocess,time,re
-          proof=Path('/tmp/tv-window/proof');sdk=Path(os.environ['ANDROID_HOME']);config=Path.home()/'.android/avd/GHARTV_CLOUD_DISPLAY_TEST_ONLY.avd/config.ini'
+          proof=Path('/tmp/tv-window/proof');sdk=Path(os.environ['ANDROID_HOME']);avd=Path(os.environ['ANDROID_AVD_HOME'])/'GHARTV_CLOUD_DISPLAY_TEST_ONLY.avd'
+          create=subprocess.run(['avdmanager','create','avd','--name','GHARTV_CLOUD_DISPLAY_TEST_ONLY','--package','system-images;android-36;google_apis;x86_64','--path',str(avd)],input='no\n',capture_output=True,text=True,timeout=45)
+          (proof/'avd-creation.log').write_text(create.stdout+create.stderr)
+          assert create.returncode==0,create.stdout+create.stderr
+          config=avd/'config.ini';assert config.is_file(),'Explicit AVD config missing: '+create.stdout+create.stderr
           s=config.read_text();s=re.sub(r'^disk.dataPartition.size=.*$', 'disk.dataPartition.size=1G',s,flags=re.M)
           if 'disk.dataPartition.size=' not in s:s+='\ndisk.dataPartition.size=1G\n'
           config.write_text(s)
+          listed=subprocess.check_output([str(sdk/'emulator/emulator'),'-list-avds'],text=True);assert 'GHARTV_CLOUD_DISPLAY_TEST_ONLY' in listed.splitlines(),listed
           with (proof/'cloud-emulator.log').open('w') as log:
             p=subprocess.Popen([str(sdk/'emulator/emulator'),'-avd','GHARTV_CLOUD_DISPLAY_TEST_ONLY','-port','5580','-no-window','-no-audio','-no-snapshot','-no-boot-anim','-gpu','swiftshader','-feature','-Vulkan','-memory','2048'],stdin=subprocess.DEVNULL,stdout=log,stderr=log,start_new_session=True)
           end=time.monotonic()+150
@@ -51,11 +58,10 @@ jobs:
             if r.returncode==0 and r.stdout.strip()=='1':break
             time.sleep(2)
           else:raise RuntimeError('CLOUD_BOOT_TIMEOUT: '+(proof/'cloud-emulator.log').read_text()[-8000:])
-          name=subprocess.check_output(['adb','-s','emulator-5580','emu','avd','name'],text=True)
-          assert name.splitlines()[0]=='GHARTV_CLOUD_DISPLAY_TEST_ONLY'
+          name=subprocess.check_output(['adb','-s','emulator-5580','emu','avd','name'],text=True);assert name.splitlines()[0]=='GHARTV_CLOUD_DISPLAY_TEST_ONLY'
           for args in [['input','keyevent','KEYCODE_WAKEUP'],['wm','dismiss-keyguard'],['am','start','-a','android.settings.SETTINGS']]:subprocess.run(['adb','-s','emulator-5580','shell']+args,check=True)
           PY
-      - name: Verify actual encoded Android frames through scrcpy
+      - name: Verify actual encoded Android display frames
         run: |
           set -euo pipefail
           curl --proto '=https' --proto-redir '=https' -fLsS --connect-timeout 15 --max-time 120 https://github.com/Genymobile/scrcpy/releases/download/v4.1/scrcpy-linux-x86_64-v4.1.tar.gz -o /tmp/scrcpy-linux.tar.gz
@@ -73,7 +79,7 @@ jobs:
           result={'status':'PASS','transport':'REAL_SCRCPY_4_1_TO_HEADLESS_ANDROID_36','window_backend':'X11_UNDER_XVFB','frames_decoded':int(video['nb_read_frames']),'width':video['width'],'height':video['height'],'device_content':'ISOLATED_CLOUD_ANDROID_SETTINGS_ONLY','owner_mac':False,'owner_nova':False,'provider_playback':False,'test_recording_shipped':False}
           (root/'ANDROID_DISPLAY_VALIDATION.json').write_text(json.dumps(result,indent=2)+'\n');print(json.dumps(result))
           PY
-      - name: Publish the same verified recovery bytes with complete test scope
+      - name: Publish same verified recovery with exact evidence boundaries
         run: |
           python - <<'PY'
           from pathlib import Path
@@ -88,7 +94,7 @@ jobs:
           with zipfile.ZipFile(out/'GHARTV_TV_WINDOW_R1.zip') as z:
             assert z.testzip() is None;meta=json.loads(z.read('GHARTV_TV_WINDOW_R1/PACKAGE.json'))
             for name,h in meta['files'].items():assert hashlib.sha256(z.read('GHARTV_TV_WINDOW_R1/'+name)).hexdigest()==h
-          v={'schema':'ghartv.tv-window-validation.v1','recovery_source':d['source'],'application_source':d['application_source'],'unit_tests':11,'reports':reports,'owner_mac_executed':False,'owner_nova_window_verified':False,'application_rebuilt':False,'application_reinstalled':False,'production_feed_changed':False,'mac_workflow_run':35590689784,'display_workflow_run':os.environ['GITHUB_RUN_ID'],'prior_cloud_boot_attempt':'TIMED_OUT_NO_DISPLAY_RESULT_CLAIMED'}
+          v={'schema':'ghartv.tv-window-validation.v1','recovery_source':d['source'],'application_source':d['application_source'],'unit_tests':11,'reports':reports,'owner_mac_executed':False,'owner_nova_window_verified':False,'application_rebuilt':False,'application_reinstalled':False,'production_feed_changed':False,'mac_workflow_run':35590689784,'display_workflow_run':os.environ['GITHUB_RUN_ID'],'prior_cloud_attempts':'BOOT_TIMEOUT_THEN_WRONG_CONFIG_PATH_NO_FRAME_SUCCESS_CLAIMED'}
           (out/'VALIDATION.json').write_text(json.dumps(v,indent=2)+'\n')
           (out/'SHA256SUMS').write_text(''.join(hashlib.sha256(p.read_bytes()).hexdigest()+'  '+p.name+'\n' for p in sorted(out.iterdir()) if p.is_file() and p.name!='SHA256SUMS'))
           print(json.dumps(d));print(json.dumps(v))
