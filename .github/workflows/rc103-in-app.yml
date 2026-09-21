@@ -1,8 +1,9 @@
 name: GharTV RC10.3 in-app films and visible TV review
 on:
+  workflow_dispatch:
   push:
     branches: [codex/ghartv-remove-auto-preview]
-    paths: ['.github/workflows/rc103-in-app.yml']
+    paths: ['.github/workflows/rc103-in-app.yml', 'tools/rc103/delivery_safety.py']
 permissions:
   contents: write
 concurrency:
@@ -34,15 +35,15 @@ jobs:
         with:
           packages: platform-tools
           log-accepted-android-sdk-licenses: false
-      - name: Integrate existing sources and test exact app and delivery boundaries
+      - name: Integrate and test the existing app and delivery
         run: |
           set -euo pipefail
           mkdir -p /tmp/rc103/proof
           if ! grep -q 'CYAN REVIEW 17' tools/owner_review.command.in; then python tools/rc103/integrate.py; fi
           if grep -q 'versionCode = 28' android-tv/app/build.gradle.kts; then python tools/rc103/in_app_integration.py; fi
           python tools/rc103/finalize_in_app.py
-          python tools/rc103/delivery_safety.py
           if ! grep -q 'def verified_probe' tools/tv_window.py; then python tools/rc103/repair_window_bridge.py; fi
+          python tools/rc103/delivery_safety.py
           grep -q 'versionCode = 29' android-tv/app/build.gradle.kts
           python tools/tv-first/check_contract.py | tee /tmp/rc103/proof/tv-contract.txt
           python tools/rc103/test_tv_window.py 2>&1 | tee /tmp/rc103/proof/tv-window-tests.txt
@@ -54,7 +55,7 @@ jobs:
           node --check web-player/film-page.mjs
           node --check web-player/server.mjs
           git diff --check
-      - name: Publish exact native source before compiling, refusing concurrent changes
+      - name: Commit exact native sources before compiling
         id: source
         run: |
           set -euo pipefail
@@ -63,7 +64,7 @@ jobs:
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git add -u
           if ! git diff --cached --quiet; then
-            git commit -m 'fix(ghartv): integrate native AppKit window probe for RC10.3 review'
+            git commit -m 'fix(ghartv): preserve honest focus and late provider navigation observations'
             git push origin HEAD:refs/heads/codex/ghartv-remove-auto-preview
           fi
           source="$(git rev-parse HEAD)";echo "sha=$source" >> "$GITHUB_OUTPUT"
@@ -76,7 +77,7 @@ jobs:
           chmod +x gradlew
           ./gradlew --no-daemon --max-workers=2 assembleRelease assembleDebugAndroidTest
           cp app/build/outputs/apk/release/app-release-unsigned.apk /tmp/rc103/android-unsigned.apk
-      - name: Prepare prior delivery and isolated generated HLS media
+      - name: Prepare verified prior bundle and generated test media
         run: |
           set -euo pipefail
           curl --proto '=https' --proto-redir '=https' -fLsS --connect-timeout 20 --max-time 180 --retry 1 https://github.com/AmritSinghGit/ghartv/releases/download/v0.6.0-rc10.2-web-security/GHARTV_RC10_2_REVIEW.zip -o /tmp/rc103/prior.zip
@@ -107,7 +108,7 @@ jobs:
         with:
           name: ghartv-rc103-android-staging
           path: /tmp/rc103
-      - name: Compile native GharTV view and AppKit visibility probe
+      - name: Compile native view and verified visibility probe
         run: |
           set -euo pipefail
           test "$(uname -m)" = arm64
@@ -129,7 +130,7 @@ jobs:
           PY
           python3 tools/rc103/package.py /tmp/rc103/prior.zip /tmp/rc103/delivery '${{ needs.android.outputs.source }}' /tmp/rc103/android-unsigned.apk
           cp /tmp/rc103/source.zip /tmp/rc103/delivery/GHARTV_RC10_3_SOURCE.zip
-      - name: Test real Mac upgrade, native app/window visibility and Safari HLS
+      - name: Verify Mac upgrade native windows provider observation and Safari
         run: python3 tools/rc103/mac_in_app_smoke.py /tmp/rc103/delivery/GHARTV_RC10_3_REVIEW.zip /tmp/rc103/prior.zip /tmp/rc103/proof '${{ needs.android.outputs.source }}' /tmp/rc103/fixture
       - uses: actions/upload-artifact@v4
         if: always()
@@ -153,7 +154,7 @@ jobs:
         with:
           name: ghartv-rc103-mac-candidate
           path: /tmp/rc103
-      - name: Verify final evidence and publish review without household rollout
+      - name: Verify evidence and publish the exact prerelease
         run: |
           set -euo pipefail
           python - <<'PY'
