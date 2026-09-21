@@ -113,8 +113,11 @@ public final class FlixMomoActivity extends Activity {
         home.setOnClickListener(v->browser.loadUrl(HOME));back.setOnClickListener(v->finish());
         browser.loadUrl(HOME);
     }
+    private static boolean providerHost(String host){
+        return "flixmomo.app".equals(host) || "flixmomo.st".equals(host) || "www.flixmomo.st".equals(host);
+    }
     static boolean allowedTop(Uri u){
-        return "https".equals(u.getScheme()) && "flixmomo.app".equals(u.getHost()) && u.getUserInfo()==null && u.getPort()==-1;
+        return "https".equals(u.getScheme()) && providerHost(u.getHost()) && u.getUserInfo()==null && u.getPort()==-1;
     }
     private void search(){
         String text=query.getText().toString().trim();
@@ -122,7 +125,9 @@ public final class FlixMomoActivity extends Activity {
         if(browser==null){status.setText("Android System WebView is unavailable.");return;}
         // Provider-owned search and player remain inside this GharTV activity.
         // No DOM injection, stream extraction or authentication changes.
-        browser.loadUrl(HOME+"search?q="+Uri.encode(text));
+        Uri current=Uri.parse(browser.getUrl()==null?HOME:browser.getUrl());
+        String origin=allowedTop(current)?"https://"+current.getHost():"https://flixmomo.app";
+        browser.loadUrl(origin+"/search?q="+Uri.encode(text));
         browser.requestFocus();
     }
     private void exitFullScreen(){

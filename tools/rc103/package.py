@@ -5,7 +5,7 @@ R=Path(__file__).resolve().parents[2]
 APP_SOURCE=None
 APK_HASH=None
 PRIOR_HASH='b19c0136d1934ed913c3df5aa7e442917544a4a6fb058c1fd6e88015b8bb3528'
-TAG='v0.6.0-rc10.3-in-app'; NAME='GHARTV_RC10_3_REVIEW'
+TAG='v0.6.0-rc10.3.1-in-app'; NAME='GHARTV_RC10_3_1_REVIEW'
 prior,out,source=Path(sys.argv[1]),Path(sys.argv[2]),sys.argv[3]
 assert re.fullmatch('[a-f0-9]{40}',source)
 APP_SOURCE=source
@@ -35,7 +35,7 @@ for n in ('GHARTV_LANE_PROGRESS.md','CURRENT_HANDOFF.md','TV_EXPERIENCE_CONTRACT
 with zipfile.ZipFile(out/'GharTV-review-companion.zip','w',compression=zipfile.ZIP_DEFLATED) as z:
  for p in sorted(paths):z.write(R/p,str(p))
  z.writestr('REVIEW_RC10_3.md',(R/'tools/rc103/REVIEW.md').read_text())
-m={'schema':'ghartv.review-manifest.v2','source_sha':APP_SOURCE,'web_source_sha':source,'delivery_source_sha':source,'branch':'codex/ghartv-remove-auto-preview','pr':1,'version_name':'0.6.0-rc10.3-in-app-films','version_code':29,'delivery_version':'RC10.3-IN-APP','unsigned_sha256':APK_HASH,'companion_sha256':sha(out/'GharTV-review-companion.zip'),'production_unchanged':True,'android_rebuilt':True,'owner_signed_apk_sha256':None,'owner_mac_run':'NOT_EXECUTED_THIS_DELIVERY','analytics_routes':'NOT_SERVED','ai_super_resolution':'NOT_IMPLEMENTED'}
+m={'schema':'ghartv.review-manifest.v2','source_sha':APP_SOURCE,'web_source_sha':source,'delivery_source_sha':source,'branch':'codex/ghartv-remove-auto-preview','pr':1,'version_name':'0.6.0-rc10.3.1-in-app-films','version_code':30,'delivery_version':'RC10.3.1-IN-APP','unsigned_sha256':APK_HASH,'companion_sha256':sha(out/'GharTV-review-companion.zip'),'production_unchanged':True,'android_rebuilt':True,'owner_signed_apk_sha256':None,'owner_mac_run':'NOT_EXECUTED_THIS_DELIVERY','analytics_routes':'NOT_SERVED','ai_super_resolution':'NOT_IMPLEMENTED'}
 manifest=out/'review-manifest.json';manifest.write_text(json.dumps(m,indent=2)+'\n')
 text=(R/'tools/owner_review.command.in').read_text()
 for name,val in {'@SOURCE_SHA@':APP_SOURCE,'@WEB_SOURCE_SHA@':source,'@UNSIGNED_SHA@':APK_HASH,'@MANIFEST_SHA@':sha(manifest),'@EMBEDDED_MANIFEST_REPR@':repr(manifest.read_text()),'@COMPANION_SHA@':m['companion_sha256']}.items():text=text.replace(name,val)
@@ -74,7 +74,7 @@ printf '%s  %s\\n' '''+"'"+sha(package)+"'"+''' "$d/review.zip" | shasum -a 256 
 unzip -q "$d/review.zip" -d "$d"
 /bin/bash "$d/'''+NAME+'''/RUN_GHARTV_REVIEW.command" "$@"
 '''
-(out/'GHARTV_REVIEW_RC10_3.command').write_text(entry)
-subprocess.run(['bash','-n',str(out/'GHARTV_REVIEW_RC10_3.command')],check=True)
+(out/'GHARTV_REVIEW_RC10_3_1.command').write_text(entry)
+subprocess.run(['bash','-n',str(out/'GHARTV_REVIEW_RC10_3_1.command')],check=True)
 (out/'SHA256SUMS').write_text(''.join(sha(p)+'  '+p.name+'\n' for p in sorted(out.iterdir()) if p.is_file() and p.name!='SHA256SUMS'))
 print(json.dumps(record,indent=2))

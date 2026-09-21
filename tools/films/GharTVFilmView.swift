@@ -4,6 +4,7 @@ import WebKit
 // Normal, attributed in-app provider view: no automation, script injection,
 // API-key extraction, header rewriting, profile import or anti-detection changes.
 final class FilmView: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNavigationDelegate, WKUIDelegate {
+    let providerHosts: Set<String> = ["flixmomo.app", "flixmomo.st", "www.flixmomo.st"]
     var window: NSWindow!
     var browser: WKWebView!
     let query = NSSearchField()
@@ -61,9 +62,11 @@ final class FilmView: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNavig
 
     }
     func target(_ action: String, _ text: String) -> URL? {
-        if action == "browse" { return URL(string: "https://flixmomo.app/") }
+        let current = browser?.url
+        let origin = current?.scheme == "https" && providerHosts.contains(current?.host ?? "") ? "https://" + current!.host! : "https://flixmomo.app"
+        if action == "browse" { return URL(string: origin + "/") }
         guard action == "search", text.count >= 2, text.count <= 120, !text.unicodeScalars.contains(where: { CharacterSet.controlCharacters.contains($0) }) else { return nil }
-        var url = URLComponents(string: "https://flixmomo.app/search")!
+        var url = URLComponents(string: origin + "/search")!
         url.queryItems = [URLQueryItem(name: "q", value: text)]; return url.url
     }
     func open(_ url: URL) {
@@ -75,7 +78,7 @@ final class FilmView: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNavig
         let text = query.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
         guard let url = target("search", text) else { status.stringValue = "Enter 2–120 characters."; return }; open(url)
     }
-    @objc func browse() { open(URL(string: "https://flixmomo.app/")!) }
+    @objc func browse() { if let url = target("browse", "") { open(url) } }
     @objc func goBack() { if browser.canGoBack { browser.goBack() } }
     @objc func reload() { browser.reload() }
     func localHost(_ host: String) -> Bool {
@@ -86,7 +89,7 @@ final class FilmView: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNavig
         guard let url = navigationAction.request.url else { decisionHandler(.cancel); return }
         let top = navigationAction.targetFrame?.isMainFrame ?? true
         if !top && ["about", "blob", "data"].contains(url.scheme ?? "") { decisionHandler(.allow); return }
-        guard url.scheme == "https", url.user == nil, url.password == nil, url.port == nil, let host = url.host, !localHost(host), (!top || host == "flixmomo.app") else {
+        guard url.scheme == "https", url.user == nil, url.password == nil, url.port == nil, let host = url.host, !localHost(host), (!top || providerHosts.contains(host)) else {
             if top { status.stringValue = "External navigation stayed blocked. Search and playback remain in the provider view." }; decisionHandler(.cancel); return
         }; decisionHandler(.allow)
     }
@@ -102,7 +105,7 @@ final class FilmView: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNavig
             emit(["event":"provider_blocked","code":"DUMMY_REDIRECT","playbackVerified":false]); return
         }
         if !lastNavigationFailed { status.stringValue = "FlixMomo in GharTV · Select a result and use the provider’s player · Direct connection" }
-        emit(["event":"page_finished","providerPage":webView.url?.host == "flixmomo.app","pageError":lastNavigationFailed,"providerPath":webView.url?.path == "/search" ? "search" : "other","playbackVerified":false])
+        emit(["event":"page_finished","providerPage":providerHosts.contains(webView.url?.host ?? ""),"pageError":lastNavigationFailed,"providerPath":webView.url?.path == "/search" ? "search" : "other","playbackVerified":false])
     }
     func webView(_ webView: WKWebView, didFailProvisionalNavigation navigation: WKNavigation!, withError error: Error) { failed(error) }
     func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError error: Error) { failed(error) }
@@ -113,7 +116,7 @@ final class FilmView: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNavig
     }
     func webViewWebContentProcessDidTerminate(_ webView: WKWebView) { status.stringValue = "The provider view stopped. Reload to reopen it; no automatic loop was started." }
     func webView(_ webView: WKWebView, createWebViewWith configuration: WKWebViewConfiguration, for navigationAction: WKNavigationAction, windowFeatures: WKWindowFeatures) -> WKWebView? {
-        if navigationAction.navigationType == .linkActivated, let url = navigationAction.request.url, url.scheme == "https", url.host == "flixmomo.app", url.user == nil, url.password == nil { open(url) }; return nil
+        if navigationAction.navigationType == .linkActivated, let url = navigationAction.request.url, url.scheme == "https", providerHosts.contains(url.host ?? ""), url.user == nil, url.password == nil { open(url) }; return nil
     }
     func webView(_ webView: WKWebView, requestMediaCapturePermissionFor origin: WKSecurityOrigin, initiatedByFrame frame: WKFrameInfo, type: WKMediaCaptureType, decisionHandler: @escaping (WKPermissionDecision) -> Void) { decisionHandler(.deny) }
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool { return true }

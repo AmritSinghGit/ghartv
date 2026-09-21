@@ -11,9 +11,9 @@ from __future__ import annotations
 import argparse, datetime as dt, fcntl, hashlib, io, json, os, re, shlex, shutil, socket, stat, subprocess, sys, tempfile, time, zipfile, signal, urllib.request, urllib.error
 from pathlib import Path
 REPO='AmritSinghGit/ghartv'; SOURCE='@SOURCE_SHA@'; WEB_SOURCE='@WEB_SOURCE_SHA@'
-PROD='59c130abc1283e66607315db916973553164064d'; TAG='v0.6.0-rc10.3-in-app'; PACKAGE='in.ghartv.nova'
+PROD='59c130abc1283e66607315db916973553164064d'; TAG='v0.6.0-rc10.3.1-in-app'; PACKAGE='in.ghartv.nova'
 BACKEND_VERSION='0.6.0-rc4-owner-convergence'
-VERSION='0.6.0-rc10.3-in-app-films'; UNSIGNED='@UNSIGNED_SHA@'
+VERSION='0.6.0-rc10.3.1-in-app-films'; UNSIGNED='@UNSIGNED_SHA@'
 PROD_HASH='8cff8f85403da5924865fddc687dbff11089d7c498f9863e483a7d8123c1ce13'
 MANIFEST_SHA='@MANIFEST_SHA@'; AVD='GharTV_Nova_Manual_google_tv_API36'; ASSET='GharTV-review-current.apk'
 HOME=Path.home(); SELF=Path(sys.argv[1]).resolve(); STATE=HOME/'Library/Application Support/GharTV/owner-review'; CURRENT=STATE/'current'
@@ -24,7 +24,7 @@ IST=dt.timezone(dt.timedelta(hours=5,minutes=30))
 RUN_ID='GHARTV-CYAN-17-'+dt.datetime.now(dt.timezone.utc).strftime('%Y%m%dT%H%M%SZ')+'-'+str(os.getpid()); RUN=STATE/'runs'/RUN_ID
 parser=argparse.ArgumentParser();parser.add_argument('--memory-only',action='store_true');parser.add_argument('--signed-apk',type=Path);parser.add_argument('--noninteractive',action='store_true');parser.add_argument('--skip-backend-deploy',action='store_true');parser.add_argument('--bundled-review',action='store_true');parser.add_argument('--web-only',action='store_true');parser.add_argument('--prepare-update',action='store_true');parser.add_argument('--copy-handoff',action='store_true');parser.add_argument('--films-only',action='store_true');parser.add_argument('--tv-only',action='store_true');args=parser.parse_args(sys.argv[2:])
 r=dict(review_slot='GREEN_LOCAL_REVIEW',public_slot='BLUE_HOUSEHOLD_RELEASE',development='SOURCE_ONLY_CHECKOUT_READ_ONLY',time_ist=dt.datetime.now(IST).isoformat(),time_utc=dt.datetime.now(dt.timezone.utc).isoformat(),checkout='READ_ONLY_NOT_INSPECTED',backend='NOT_CHECKED',web_player='NOT_STARTED',run_id=RUN_ID,lane_id='ghartv',repository=REPO,operon_session=os.environ.get('OPERON_SESSION_ID','UNBOUND'),
- production_source=PROD,review_source=SOURCE,web_source=WEB_SOURCE,delivery_revision='RC10.3-IN-APP',analytics_routes='DISABLED_IN_VIEWER',version=VERSION,version_code=29,unsigned_apk_sha256=UNSIGNED,signed_apk_sha256='NOT_VERIFIED',
+ production_source=PROD,review_source=SOURCE,web_source=WEB_SOURCE,delivery_revision='RC10.3.1-IN-APP',analytics_routes='DISABLED_IN_VIEWER',version=VERSION,version_code=30,unsigned_apk_sha256=UNSIGNED,signed_apk_sha256='NOT_VERIFIED',
  delivery_sha='NOT_READ',local_sha='NOT_READ',production_feed='NOT_CHECKED',obsidian='NOT_WRITTEN',memory_bridge='NOT_RUN',
  review_release='NOT_CHECKED',emulator='UNCHANGED',physical_tv='NOT_VERIFIED',owner_decision='REVIEW_PENDING',
  dashboard='NOT_OPENED',signing_mode='NOT_ATTEMPTED',signing_error_code='NONE',signer_exit_code='NOT_RUN',
@@ -175,7 +175,7 @@ def observe_production():
   r['production_feed']='UNAVAILABLE_LOCAL_REVIEW_ONLY_NO_PRODUCTION_WRITE';return
  r['production_feed']=str(m.get('versionName','UNKNOWN'))+' / code '+str(m.get('versionCode','UNKNOWN'))
  r['observed_production_source']=m.get('sourceCommit','UNKNOWN')
- if int(m.get('versionCode',0))>=29:raise Stop('Production has caught up or advanced; review identity needs reconciliation')
+ if int(m.get('versionCode',0))>=30:raise Stop('Production has caught up or advanced; review identity needs reconciliation')
 
 
 def publish_review_after_local_success():
@@ -260,7 +260,7 @@ def reconcile():
   download(f'https://github.com/{REPO}/releases/download/{TAG}/review-manifest.json',meta)
   if digest(meta)!=MANIFEST_SHA:raise Stop('RELEASE_MANIFEST_CHECKSUM_MISMATCH')
   manifest=json.loads(meta.read_text())
-  if manifest.get('web_source_sha')!=WEB_SOURCE or manifest.get('source_sha')!=SOURCE or manifest.get('unsigned_sha256')!=UNSIGNED or manifest.get('version_code')!=29:raise Stop('RELEASE_IDENTITY_MISMATCH')
+  if manifest.get('web_source_sha')!=WEB_SOURCE or manifest.get('source_sha')!=SOURCE or manifest.get('unsigned_sha256')!=UNSIGNED or manifest.get('version_code')!=30:raise Stop('RELEASE_IDENTITY_MISMATCH')
   r['phase']='ARTIFACT_COMPANION'
   bundle=t/'companion.zip';download(f'https://github.com/{REPO}/releases/download/{TAG}/GharTV-review-companion.zip',bundle)
   if digest(bundle)!=manifest['companion_sha256']:raise Stop('COMPANION_CHECKSUM_MISMATCH')
@@ -419,7 +419,7 @@ def preserve_verified_signed(candidate,digest_value):
   temp.chmod(0o600)
   if digest(temp)!=digest_value:raise Stop('PREPARED_SIGNED_CACHE_READBACK_FAILED')
   os.replace(temp,dest)
- write(CURRENT/'prepared-review-artifact.json',json.dumps({'source':SOURCE,'sha256':digest_value,'version_code':29,'installed':False,'certificate_verified':True},indent=2)+'\n')
+ write(CURRENT/'prepared-review-artifact.json',json.dumps({'source':SOURCE,'sha256':digest_value,'version_code':30,'installed':False,'certificate_verified':True},indent=2)+'\n')
  r['prepared_signed_apk']='PERSISTED_AND_HASH_VERIFIED_BEFORE_EMULATOR_SELECTION'
  r['prepared_signed_apk_path']=str(dest)
  # Preserve technical identity now, even if boot later times out.
@@ -508,9 +508,9 @@ def review():
    if candidateCert!=referenceCert:raise Stop('RELEASE_SIGNER_MISMATCH: saved key differs from the published signing reference; no uninstall or key replacement')
    r['signing_certificate_sha256']=','.join(sorted(candidateCert))
    r['phase']='SIGNED_PAYLOAD_AND_CERTIFICATE_VERIFIED'
-   print('3 / 5 · New code29 APK and original signing certificate verified.',flush=True)
+   print('3 / 5 · New code30 APK and original signing certificate verified.',flush=True)
    badging=call([aapt,'dump','badging',c],env=env).stdout
-   if not all(v in badging for v in ["name='in.ghartv.nova'","versionCode='29'","versionName='0.6.0-rc10.3-in-app-films'"]):raise Stop('Wrong package or Android version')
+   if not all(v in badging for v in ["name='in.ghartv.nova'","versionCode='30'","versionName='0.6.0-rc10.3.1-in-app-films'"]):raise Stop('Wrong package or Android version')
    # Development checkout is intentionally untouched; verified artifact bytes are authoritative.
    h=digest(c);r['signed_apk_sha256']=h
    preserve_verified_signed(c,h)
@@ -535,7 +535,7 @@ def review():
    adb,started=attach_with_boot_evidence(transport,sdk)
    serial=transport.SERIAL;r['emulator_serial']=serial;r['started_existing_avd']=started
    codes=re.findall(r'versionCode=(\d+)',call([adb,'-s',serial,'shell','dumpsys','package',PACKAGE]).stdout)
-   if codes and int(codes[0])>29:raise Stop('Newer version installed; no downgrade')
+   if codes and int(codes[0])>30:raise Stop('Newer version installed; no downgrade')
    def pull_installed(destination):
     paths=call([adb,'-s',serial,'shell','pm','path',PACKAGE]).stdout.splitlines()
     if len(paths)!=1 or not paths[0].startswith('package:'):raise Stop('Unexpected installed package layout')
@@ -543,8 +543,8 @@ def review():
    if codes:
     old=t/'installed.apk';pull_installed(old)
     if cert(old)!=cert(c):raise Stop('Installed signer differs; no uninstall or storage clearing')
-    if int(codes[0])==29 and digest(old)!=h:raise Stop('Different code-29 APK installed; reconcile first')
-   if not codes or int(codes[0])<29:
+    if int(codes[0])==30 and digest(old)!=h:raise Stop('Different code-30 APK installed; reconcile first')
+   if not codes or int(codes[0])<30:
     result=call([adb,'-s',serial,'install','-r',c],120).stdout
     if 'Success' not in result:raise Stop('Android did not confirm install')
    installed=t/'installed-final.apk';pull_installed(installed)
@@ -638,7 +638,7 @@ def stop_owned_web_if_needed():
  native_pid=STATE/'native-films/current.pid'
  if native_pid.is_file() and native_pid.read_text().strip().isdigit():
   cmd=call(['/bin/ps','-p',native_pid.read_text().strip(),'-o','command='],5,False).stdout.strip()
-  if cmd==str(RUNTIME/'web-player/native/GharTVFilmView'):raise Stop('CLOSE_GHARTV_FILM_WINDOW_BEFORE_UPDATING')
+  if cmd in (str(RUNTIME/'web-player/native/GharTVFilms.app/Contents/MacOS/GharTVFilmView'),str(RUNTIME/'web-player/native/GharTVFilmView')):raise Stop('CLOSE_GHARTV_FILM_WINDOW_BEFORE_UPDATING')
  if not pidfile.is_file() or pidfile.is_symlink():raise Stop('EXISTING_WEB_PID_NOT_OWNED: no process killed')
  value=pidfile.read_text().strip()
  if not value.isdigit():raise Stop('EXISTING_WEB_PID_INVALID')
@@ -684,7 +684,7 @@ def open_dashboard():
  if r.get('prior_runtime_preserved'):r['old_managed_runtime_cleanup']='PRIOR_REVIEW_PRESERVED_UNTIL_OWNER_ACCEPTANCE'
 
 def open_films():
- executable=RUNTIME/'web-player/native/GharTVFilmView';metadata=RUNTIME/'web-player/native/manifest.json'
+ executable=RUNTIME/'web-player/native/GharTVFilms.app/Contents/MacOS/GharTVFilmView';metadata=RUNTIME/'web-player/native/manifest.json'
  for p in (executable,metadata):safe(p)
  if not executable.is_file() or not metadata.is_file():raise Stop('NATIVE_FILM_COMPONENT_MISSING')
  identity=json.loads(metadata.read_text())
@@ -700,7 +700,7 @@ def open_films():
    if len(observed)==2 and observed[0]==str(os.getuid()) and observed[1]==str(executable):pid=int(text)
  if pid is None:
   with open(state/(RUN_ID+'.log'),'x') as log:
-   process=subprocess.Popen([str(executable)],stdin=subprocess.DEVNULL,stdout=log,stderr=subprocess.DEVNULL,env={'PATH':'/usr/bin:/bin','LANG':'en_US.UTF-8'},start_new_session=True)
+   process=subprocess.Popen([str(executable)],stdin=subprocess.DEVNULL,stdout=log,stderr=subprocess.DEVNULL,env={'PATH':'/usr/bin:/bin','LANG':'en_US.UTF-8','HOME':str(HOME)},start_new_session=True)
   pid=process.pid;write(pidfile,str(pid)+'\n');time.sleep(1)
  import importlib.util
  spec=importlib.util.spec_from_file_location('ghartv_film_window',RUNTIME/'tools/tv_window.py');helper=importlib.util.module_from_spec(spec);spec.loader.exec_module(helper)

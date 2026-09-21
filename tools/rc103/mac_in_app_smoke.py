@@ -12,7 +12,7 @@ with tempfile.TemporaryDirectory(prefix='ghartv-rc103-mac-') as name:
  env.update(HOME=str(home),GHARTV_DISABLE_KEYCHAIN='1',GH_PROMPT_DISABLED='1')
  state=home/'Library/Application Support/GharTV/owner-review';webpid=home/'Library/Application Support/GharTV/web-player/server.pid';observed=[];probe=None
  try:
-  for folder,expected in [('GHARTV_RC10_2_REVIEW','0b5f94b1fdac9dfaabe6dc9780bc4df454e9ccb5'),('GHARTV_RC10_3_REVIEW',source),('GHARTV_RC10_3_REVIEW',source)]:
+  for folder,expected in [('GHARTV_RC10_2_REVIEW','0b5f94b1fdac9dfaabe6dc9780bc4df454e9ccb5'),('GHARTV_RC10_3_1_REVIEW',source),('GHARTV_RC10_3_1_REVIEW',source)]:
    logical=str(base/folder).replace('/private/var/','/var/',1)
    run=subprocess.run(['/bin/bash',logical+'/RUN_GHARTV_REVIEW.command','--web-only','--noninteractive'],env=env,text=True,capture_output=True,timeout=110)
    assert run.returncode==0,run.stdout[-6000:]+run.stderr[-1000:]
@@ -28,20 +28,20 @@ with tempfile.TemporaryDirectory(prefix='ghartv-rc103-mac-') as name:
    observed.append({'delivery':folder,'result':receipt['status'],'source':expected,'emulator':'UNCHANGED','analytics':404})
   (out/'MAC_WEB_VALIDATION.json').write_text(json.dumps({'status':'PASS','architecture':os.uname().machine,'owner_mac':False,'upgrade_and_repeat':observed},indent=2)+'\n')
   subprocess.run([sys.executable,str(script_root/'mac_window_smoke.py'),str(out)],check=True,timeout=100)
-  logical=str(base/'GHARTV_RC10_3_REVIEW').replace('/private/var/','/var/',1)
+  logical=str(base/'GHARTV_RC10_3_1_REVIEW').replace('/private/var/','/var/',1)
   run=subprocess.run(['/bin/bash',logical+'/RUN_GHARTV_REVIEW.command','--films-only','--noninteractive'],env=env,text=True,capture_output=True,timeout=110)
   assert run.returncode==0,run.stdout[-6000:]+run.stderr[-1000:]
   receipt=json.loads((state/'current/receipt.json').read_text());assert receipt['status']=='FILM_WINDOW_OPEN_ANDROID_NOT_TOUCHED',receipt
   assert receipt['film_window'] in ('MAC_WINDOW_FRONTMOST_OBSERVED','MAC_WINDOW_ONSCREEN_OBSERVED')
   filmpid=state/'native-films/current.pid';pid=int(filmpid.read_text())
   cmd=subprocess.run(['/bin/ps','-p',str(pid),'-o','command='],capture_output=True,text=True).stdout.strip()
-  exe=state/'runtime-current/web-player/native/GharTVFilmView';assert cmd==str(exe)
+  exe=state/'runtime-current/web-player/native/GharTVFilms.app/Contents/MacOS/GharTVFilmView';assert cmd==str(exe)
   os.kill(pid,signal.SIGTERM)
   for _ in range(30):
    if subprocess.run(['/bin/ps','-p',str(pid),'-o','pid='],capture_output=True,text=True).stdout.strip()=='':break
    time.sleep(.1)
   events=[];messages=queue.Queue()
-  probe=subprocess.Popen([str(exe),'--query','Dune'],stdin=subprocess.DEVNULL,stdout=subprocess.PIPE,stderr=subprocess.DEVNULL,text=True,env={'PATH':'/usr/bin:/bin','LANG':'en_US.UTF-8'})
+  probe=subprocess.Popen([str(exe),'--query','Dune'],stdin=subprocess.DEVNULL,stdout=subprocess.PIPE,stderr=subprocess.DEVNULL,text=True,env={'PATH':'/usr/bin:/bin','LANG':'en_US.UTF-8','HOME':str(home)})
   def reader():
    for line in probe.stdout:
     try:messages.put(json.loads(line[:8192]))
@@ -52,8 +52,9 @@ with tempfile.TemporaryDirectory(prefix='ghartv-rc103-mac-') as name:
    try:item=messages.get(timeout=1);events.append(item)
    except queue.Empty:continue
    if item.get('event') in ('provider_blocked','navigation_failed'):break
-   if item.get('event')=='page_finished' and settle is None:settle=time.monotonic()+8
+   if item.get('event')=='page_finished' and settle is None:settle=time.monotonic()+15
   assert any(x.get('event')=='window_ready' and x.get('windowVisible') for x in events),'NATIVE_WINDOW_NOT_READY'
+  assert any(x.get('event') in ('page_finished','provider_blocked','navigation_failed') for x in events),'NATIVE_PROVIDER_NAVIGATION_NOT_OBSERVED'
   provider='NOT_CONFIRMED'
   if any(x.get('event')=='provider_blocked' for x in events):provider='PROVIDER_DECLINED_EMBEDDED_SESSION'
   elif any(x.get('httpStatus',0)>=400 for x in events):provider='PROVIDER_HTTP_ERROR_OR_VERIFICATION'
