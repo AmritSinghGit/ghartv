@@ -1,0 +1,38 @@
+name: GharTV provider embedding observation
+on:
+  push:
+    branches: [codex/ghartv-remove-auto-preview]
+    paths: ['.github/workflows/rc103-integration-observe.yml']
+permissions:
+  contents: read
+jobs:
+  observe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - uses: actions/checkout@v5
+      - name: Snapshot exact current source and ordinary public response policies
+        run: |
+          mkdir -p /tmp/ghartv-integration-observe
+          git archive --format=zip HEAD -o /tmp/ghartv-integration-observe/source.zip
+          python - <<'PY'
+          import json,urllib.request,urllib.error
+          from pathlib import Path
+          out=Path('/tmp/ghartv-integration-observe');rows=[]
+          for suffix,name in [('/','home'),('/search?q=Dune','search')]:
+            row={'url':'https://flixmomo.app'+suffix,'credentials':False}
+            try:
+              with urllib.request.urlopen(row['url'],timeout=20) as r:
+                text=r.read(1000000).decode('utf-8','replace')
+                row.update(status=r.status,final_url=r.url,headers={k.lower():v for k,v in r.headers.items() if k.lower() in ('content-security-policy','x-frame-options','content-type','cross-origin-resource-policy','access-control-allow-origin')})
+                (out/(name+'.html')).write_text(text)
+            except urllib.error.HTTPError as e:row.update(status=e.code,headers={k.lower():v for k,v in e.headers.items() if k.lower() in ('content-security-policy','x-frame-options','content-type')})
+            except Exception as e:row.update(error=type(e).__name__)
+            rows.append(row)
+          (out/'PUBLIC_HEADERS.json').write_text(json.dumps(rows,indent=2)+'\n');print(json.dumps(rows))
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ghartv-integration-observe
+          path: /tmp/ghartv-integration-observe/
+          retention-days: 3
