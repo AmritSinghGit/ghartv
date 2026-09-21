@@ -42,6 +42,7 @@ jobs:
           if grep -q 'versionCode = 28' android-tv/app/build.gradle.kts; then python tools/rc103/in_app_integration.py; fi
           python tools/rc103/finalize_in_app.py
           python tools/rc103/delivery_safety.py
+          if ! grep -q 'def verified_probe' tools/tv_window.py; then python tools/rc103/repair_window_bridge.py; fi
           grep -q 'versionCode = 29' android-tv/app/build.gradle.kts
           python tools/tv-first/check_contract.py | tee /tmp/rc103/proof/tv-contract.txt
           python tools/rc103/test_tv_window.py 2>&1 | tee /tmp/rc103/proof/tv-window-tests.txt
@@ -62,7 +63,7 @@ jobs:
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git add -u
           if ! git diff --cached --quiet; then
-            git commit -m 'feat(ghartv): integrate in-app FlixMomo code29 and verified visible TV review'
+            git commit -m 'fix(ghartv): integrate native AppKit window probe for RC10.3 review'
             git push origin HEAD:refs/heads/codex/ghartv-remove-auto-preview
           fi
           source="$(git rev-parse HEAD)";echo "sha=$source" >> "$GITHUB_OUTPUT"
@@ -106,21 +107,25 @@ jobs:
         with:
           name: ghartv-rc103-android-staging
           path: /tmp/rc103
-      - name: Compile native GharTV film view, no browser automation or remote command endpoint
+      - name: Compile native GharTV view and AppKit visibility probe
         run: |
           set -euo pipefail
           test "$(uname -m)" = arm64
           npm ci --ignore-scripts --prefix web-player
-          mkdir -p web-player/native /tmp/rc103/delivery
+          mkdir -p web-player/native tools/native /tmp/rc103/delivery
           swiftc -O -target arm64-apple-macosx14.0 tools/films/GharTVFilmView.swift -o web-player/native/GharTVFilmView
+          swiftc -O -target arm64-apple-macosx14.0 tools/films/GharTVWindowProbe.swift -o tools/native/GharTVWindowProbe
           codesign --force --sign - web-player/native/GharTVFilmView
+          codesign --force --sign - tools/native/GharTVWindowProbe
           codesign --verify --strict web-player/native/GharTVFilmView
+          codesign --verify --strict tools/native/GharTVWindowProbe
           python3 - <<'PY'
           from pathlib import Path
           import hashlib,json
-          p=Path('web-player/native/GharTVFilmView')
-          data={'schema':'ghartv.native-films.v1','source':'${{ needs.android.outputs.source }}','architecture':'arm64','minimum_macos':'14.0','sha256':hashlib.sha256(p.read_bytes()).hexdigest(),'signature':'AD_HOC','notarized':False,'launch':'USER_REVIEW_COMMAND_ONLY','http_execution':False}
-          p.with_name('manifest.json').write_text(json.dumps(data,indent=2)+'\n')
+          for filename,manifest,schema in [('web-player/native/GharTVFilmView','manifest.json','ghartv.native-films.v1'),('tools/native/GharTVWindowProbe','window-manifest.json','ghartv.native-window.v1')]:
+            p=Path(filename)
+            data={'schema':schema,'source':'${{ needs.android.outputs.source }}','architecture':'arm64','minimum_macos':'14.0','sha256':hashlib.sha256(p.read_bytes()).hexdigest(),'signature':'AD_HOC','notarized':False,'launch':'USER_REVIEW_COMMAND_ONLY','http_execution':False}
+            p.with_name(manifest).write_text(json.dumps(data,indent=2)+'\n')
           PY
           python3 tools/rc103/package.py /tmp/rc103/prior.zip /tmp/rc103/delivery '${{ needs.android.outputs.source }}' /tmp/rc103/android-unsigned.apk
           cp /tmp/rc103/source.zip /tmp/rc103/delivery/GHARTV_RC10_3_SOURCE.zip
@@ -148,7 +153,7 @@ jobs:
         with:
           name: ghartv-rc103-mac-candidate
           path: /tmp/rc103
-      - name: Verify final evidence and publish the review, not the household update
+      - name: Verify final evidence and publish review without household rollout
         run: |
           set -euo pipefail
           python - <<'PY'
@@ -174,8 +179,8 @@ jobs:
             with zipfile.ZipFile(io.BytesIO(z.read(prefix+'assets/GharTV-review-companion.zip'))) as companion:
               assert not any(n.endswith(('.woff','.woff2','.ttf','.otf')) for n in companion.namelist())
               assert not any('browser-tools' in n or n.endswith('owner-gateway.mjs') or n.endswith('film-browser-worker.mjs') for n in companion.namelist())
-              meta=json.loads(companion.read('web-player/native/manifest.json'))
-              assert hashlib.sha256(companion.read('web-player/native/GharTVFilmView')).hexdigest()==meta['sha256'] and meta['source']==d['source_sha']
+              for filename,manifest in [('web-player/native/GharTVFilmView','web-player/native/manifest.json'),('tools/native/GharTVWindowProbe','tools/native/window-manifest.json')]:
+                meta=json.loads(companion.read(manifest));assert hashlib.sha256(companion.read(filename)).hexdigest()==meta['sha256'] and meta['source']==d['source_sha']
               assert not any(Path(n).name in ('test.m3u8','fixture.html') or re.fullmatch(r'segment[0-9]{3}\.ts',Path(n).name) for n in companion.namelist())
           v={'schema':'ghartv.rc103-validation.v1','application_source':d['source_sha'],'version_code':29,'android_release':'COMPILED_UNSIGNED','instrumentation':'COMPILED_NOT_EXECUTED','node_tests_passed':passed,'tv_window_unit_tests':8,'tv_contract_rules':9,'preview_gate_assertions':29,'mac':reports,'bundle_checksums':'PASS','native_signature':'AD_HOC_NOT_NOTARIZED','provider_search_results':'NOT_VERIFIED','provider_video_playback':'NOT_VERIFIED','physical_tv':'NOT_VERIFIED','actual_owner_emulator_window':'NOT_VERIFIED','owner_mac_execution':'NOT_EXECUTED','tor_route':'NOT_IMPLEMENTED_IN_NATIVE_VIEW','production_feed_changed':False,'workflow_run':os.environ['GITHUB_RUN_ID']}
           (out/'VALIDATION.json').write_text(json.dumps(v,indent=2)+'\n')
