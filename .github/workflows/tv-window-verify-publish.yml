@@ -1,0 +1,102 @@
+name: GharTV TV display verification and recovery publication
+on:
+  push:
+    branches: [codex/ghartv-remove-auto-preview]
+    paths: ['.github/workflows/tv-window-verify-publish.yml']
+permissions:
+  contents: write
+  actions: read
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: android-actions/setup-android@v3
+        with:
+          packages: platform-tools
+          log-accepted-android-sdk-licenses: false
+      - name: Download the exact successful Mac recovery build without rebuilding it
+        run: gh run download 35590689784 --repo AmritSinghGit/ghartv --name ghartv-tv-window-mac --dir /tmp/tv-window
+      - name: Start an isolated diagnostic Android device and preserve its actual boot errors
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/tv-window/proof
+          test -e /dev/kvm
+          sudo chmod a+rw /dev/kvm
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq libpulse0 libasound2t64 libnss3 libxcomposite1 libxcursor1 libxi6 libxtst6 libxrandr2 libegl1 libglu1-mesa xvfb ffmpeg
+          sdkmanager 'emulator' 'system-images;android-36;google_apis;x86_64'
+          echo no | avdmanager create avd --name GHARTV_CLOUD_DISPLAY_TEST_ONLY --package 'system-images;android-36;google_apis;x86_64'
+          python - <<'PY'
+          from pathlib import Path
+          import os,subprocess,time,re
+          proof=Path('/tmp/tv-window/proof');sdk=Path(os.environ['ANDROID_HOME']);config=Path.home()/'.android/avd/GHARTV_CLOUD_DISPLAY_TEST_ONLY.avd/config.ini'
+          s=config.read_text();s=re.sub(r'^disk.dataPartition.size=.*$', 'disk.dataPartition.size=1G',s,flags=re.M)
+          if 'disk.dataPartition.size=' not in s:s+='\ndisk.dataPartition.size=1G\n'
+          config.write_text(s)
+          with (proof/'cloud-emulator.log').open('w') as log:
+            p=subprocess.Popen([str(sdk/'emulator/emulator'),'-avd','GHARTV_CLOUD_DISPLAY_TEST_ONLY','-port','5580','-no-window','-no-audio','-no-snapshot','-no-boot-anim','-gpu','swiftshader','-feature','-Vulkan','-memory','2048'],stdin=subprocess.DEVNULL,stdout=log,stderr=log,start_new_session=True)
+          end=time.monotonic()+150
+          while time.monotonic()<end:
+            if p.poll() is not None:raise RuntimeError('CLOUD_EMULATOR_EXITED: '+(proof/'cloud-emulator.log').read_text()[-8000:])
+            try:r=subprocess.run(['adb','-s','emulator-5580','shell','getprop','sys.boot_completed'],capture_output=True,text=True,timeout=5)
+            except subprocess.TimeoutExpired:time.sleep(1);continue
+            if r.returncode==0 and r.stdout.strip()=='1':break
+            time.sleep(2)
+          else:raise RuntimeError('CLOUD_BOOT_TIMEOUT: '+(proof/'cloud-emulator.log').read_text()[-8000:])
+          name=subprocess.check_output(['adb','-s','emulator-5580','emu','avd','name'],text=True)
+          assert name.splitlines()[0]=='GHARTV_CLOUD_DISPLAY_TEST_ONLY'
+          for args in [['input','keyevent','KEYCODE_WAKEUP'],['wm','dismiss-keyguard'],['am','start','-a','android.settings.SETTINGS']]:subprocess.run(['adb','-s','emulator-5580','shell']+args,check=True)
+          PY
+      - name: Verify actual encoded Android frames through scrcpy
+        run: |
+          set -euo pipefail
+          curl --proto '=https' --proto-redir '=https' -fLsS --connect-timeout 15 --max-time 120 https://github.com/Genymobile/scrcpy/releases/download/v4.1/scrcpy-linux-x86_64-v4.1.tar.gz -o /tmp/scrcpy-linux.tar.gz
+          echo 'ad56ae8bfeedf41e824945c11dbf55fcb092b3e615b9b486f48a50e30d389635  /tmp/scrcpy-linux.tar.gz' | sha256sum -c -
+          tar -xzf /tmp/scrcpy-linux.tar.gz -C /tmp
+          export ADB="$(command -v adb)"
+          (sleep 3; adb -s emulator-5580 shell input keyevent KEYCODE_DPAD_DOWN; sleep 2; adb -s emulator-5580 shell input keyevent KEYCODE_DPAD_DOWN) &
+          xvfb-run -a /tmp/scrcpy-linux-x86_64-v4.1/scrcpy --serial=emulator-5580 --max-size=1280 --max-fps=30 --video-codec=h264 --video-bit-rate=4M --keyboard=sdk --no-clipboard-autosync --no-power-on --no-audio --time-limit=9 --record=/tmp/cloud-test.mkv > /tmp/tv-window/proof/cloud-mirror.log 2>&1
+          python - <<'PY'
+          from pathlib import Path
+          import json,subprocess,re
+          root=Path('/tmp/tv-window/proof');log=(root/'cloud-mirror.log').read_text();assert re.search(r'Texture:\s*\d+x\d+',log),log
+          info=json.loads(subprocess.check_output(['ffprobe','-v','error','-count_frames','-show_streams','-of','json','/tmp/cloud-test.mkv'],text=True))
+          video=next(s for s in info['streams'] if s['codec_type']=='video');assert int(video.get('nb_read_frames','0'))>=2
+          result={'status':'PASS','transport':'REAL_SCRCPY_4_1_TO_HEADLESS_ANDROID_36','window_backend':'X11_UNDER_XVFB','frames_decoded':int(video['nb_read_frames']),'width':video['width'],'height':video['height'],'device_content':'ISOLATED_CLOUD_ANDROID_SETTINGS_ONLY','owner_mac':False,'owner_nova':False,'provider_playback':False,'test_recording_shipped':False}
+          (root/'ANDROID_DISPLAY_VALIDATION.json').write_text(json.dumps(result,indent=2)+'\n');print(json.dumps(result))
+          PY
+      - name: Publish the same verified recovery bytes with complete test scope
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import hashlib,json,os,zipfile
+          root=Path('/tmp/tv-window');out=root/'delivery';proof=root/'proof';reports={}
+          for p in proof.glob('*VALIDATION.json'):
+            data=json.loads(p.read_text());assert data['status']=='PASS';reports[p.name]=data
+          assert len(reports)==3
+          d=json.loads((out/'DELIVERY.json').read_text());assert d['source']=='aae3184907554f402c2939ad95f3113c2d9f03cc'
+          assert d['bundle_sha256']=='35d8615f4047c7de87b9d4f386eed225ae29ecb053c0c928dc3c07797e96abd6'
+          assert hashlib.sha256((out/'GHARTV_TV_WINDOW_R1.zip').read_bytes()).hexdigest()==d['bundle_sha256']
+          with zipfile.ZipFile(out/'GHARTV_TV_WINDOW_R1.zip') as z:
+            assert z.testzip() is None;meta=json.loads(z.read('GHARTV_TV_WINDOW_R1/PACKAGE.json'))
+            for name,h in meta['files'].items():assert hashlib.sha256(z.read('GHARTV_TV_WINDOW_R1/'+name)).hexdigest()==h
+          v={'schema':'ghartv.tv-window-validation.v1','recovery_source':d['source'],'application_source':d['application_source'],'unit_tests':11,'reports':reports,'owner_mac_executed':False,'owner_nova_window_verified':False,'application_rebuilt':False,'application_reinstalled':False,'production_feed_changed':False,'mac_workflow_run':35590689784,'display_workflow_run':os.environ['GITHUB_RUN_ID'],'prior_cloud_boot_attempt':'TIMED_OUT_NO_DISPLAY_RESULT_CLAIMED'}
+          (out/'VALIDATION.json').write_text(json.dumps(v,indent=2)+'\n')
+          (out/'SHA256SUMS').write_text(''.join(hashlib.sha256(p.read_bytes()).hexdigest()+'  '+p.name+'\n' for p in sorted(out.iterdir()) if p.is_file() and p.name!='SHA256SUMS'))
+          print(json.dumps(d));print(json.dumps(v))
+          PY
+          gh release create v0.6.0-rc10.3.1-tv-window-r1 /tmp/tv-window/delivery/GHARTV_TV_WINDOW_R1.zip /tmp/tv-window/delivery/OPEN_GHARTV_TV_WINDOW.command /tmp/tv-window/delivery/DELIVERY.json /tmp/tv-window/delivery/VALIDATION.json /tmp/tv-window/delivery/SHA256SUMS --repo AmritSinghGit/ghartv --target aae3184907554f402c2939ad95f3113c2d9f03cc --prerelease --latest=false --title 'GharTV code30 — open the existing TV display, no reinstall' --notes-file /tmp/tv-window/delivery/GHARTV_TV_WINDOW_R1/README.md
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: ghartv-tv-window-completed
+          path: /tmp/tv-window/
+          retention-days: 7
