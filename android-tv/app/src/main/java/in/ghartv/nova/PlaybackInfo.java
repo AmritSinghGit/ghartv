@@ -26,4 +26,24 @@ public final class PlaybackInfo {
         if (!unavailable && accessRestricted) unavailable = true;
         if (!accessRestricted && unavailable && !subscriptionRequired && !authRequired) accessRestricted = true;
     }
+
+    public PlaybackInfo copy() {
+        PlaybackInfo out = new PlaybackInfo();
+        out.streamUrl = streamUrl;
+        out.mimeType = mimeType;
+        out.licenseUrl = licenseUrl;
+        try { out.streamHeaders = new JSONObject(streamHeaders.toString()); }
+        catch (Exception ignored) { out.streamHeaders = new JSONObject(); }
+        try { out.licenseHeaders = new JSONObject(licenseHeaders.toString()); }
+        catch (Exception ignored) { out.licenseHeaders = new JSONObject(); }
+        out.drm = drm;
+        out.subscriptionRequired = subscriptionRequired;
+        out.unavailable = unavailable;
+        out.authRequired = authRequired;
+        out.responseCode = responseCode;
+        out.message = message;
+        out.accessRestricted = accessRestricted;
+        out.statusCode = statusCode;
+        return out;
+    }
 }

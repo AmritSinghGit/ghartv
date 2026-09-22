@@ -6,7 +6,10 @@ import android.content.res.ColorStateList;
 import android.graphics.Color;
 import android.graphics.Typeface;
 import android.graphics.drawable.GradientDrawable;
+import android.os.Build;
 import android.view.Gravity;
+import android.view.MotionEvent;
+import android.view.PointerIcon;
 import android.view.View;
 import android.view.animation.AccelerateDecelerateInterpolator;
 import android.widget.Button;
@@ -97,6 +100,7 @@ public final class TvUi {
     public static void focusCard(View view, int normalColor, int focusColor, float radiusDp) {
         view.setFocusable(true);
         view.setFocusableInTouchMode(true);
+        pointerTarget(view, true);
         view.setClipToOutline(false);
         view.setBackground(rounded(normalColor, radiusDp, Color.argb(42, 255, 255, 255), 1, view.getContext()));
         view.setOnFocusChangeListener((v, focused) -> {
@@ -108,6 +112,23 @@ public final class TvUi {
                     v.getContext()));
             v.animate().cancel();v.setScaleX(1f);v.setScaleY(1f);v.setTranslationZ(0);v.setAlpha(1f);
         });
+    }
+
+    /** Make emulator/TV mouse input visible and keep pointer selection aligned with D-pad focus. */
+    public static void pointerTarget(View view, boolean focusOnHover) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+            view.setPointerIcon(PointerIcon.getSystemIcon(view.getContext(), PointerIcon.TYPE_HAND));
+        }
+        if (focusOnHover) {
+            view.setOnHoverListener((target, event) -> {
+                if ((event.getActionMasked() == MotionEvent.ACTION_HOVER_ENTER
+                        || event.getActionMasked() == MotionEvent.ACTION_HOVER_MOVE)
+                        && !target.hasFocus()) {
+                    target.requestFocus();
+                }
+                return false;
+            });
+        }
     }
 
 

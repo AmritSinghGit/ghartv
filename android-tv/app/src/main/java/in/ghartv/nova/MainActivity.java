@@ -159,6 +159,11 @@ public final class MainActivity extends Activity implements ChannelNavigator.Lis
         super.onDestroy();
     }
 
+    @Override protected void onActivityResult(int requestCode, int resultCode, Intent data) {
+        super.onActivityResult(requestCode, resultCode, data);
+        if (FamilyTheme.handlePhotoResult(this, requestCode, resultCode, data)) recreate();
+    }
+
     private void routeToLogin() {
         if (redirectingToLogin) return;
         redirectingToLogin = true;
@@ -287,6 +292,8 @@ public final class MainActivity extends Activity implements ChannelNavigator.Lis
         previewHost.setBackground(TvUi.rounded(Color.rgb(2, 9, 15), 18,
                 Color.argb(70, 110, 231, 255), 1, this));
         previewHost.setOnClickListener(view -> play(selectedChannel));
+        previewHost.setContentDescription("Selected channel preview. Click or press OK to watch live.");
+        TvUi.pointerTarget(previewHost, false);
 
         heroPreviewView = new PlayerView(this);
         previewHost.addView(heroPreviewView, new FrameLayout.LayoutParams(-1, -1));

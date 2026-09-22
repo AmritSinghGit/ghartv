@@ -44,6 +44,7 @@ public final class HeroPreviewController {
     private ExoPlayer player;
     private Future<?> request;
     private Runnable pendingStart,deadline,autoStop;
+    private long previewStartedAt;
     private boolean released;
 
     public HeroPreviewController(Activity a,ChannelRepository repository,PlayerView view,
@@ -88,10 +89,15 @@ public final class HeroPreviewController {
     private void start(long token){
         Channel channel=selected;
         if(channel==null||activity.isFinishing()||released)return;
+        previewStartedAt=android.os.SystemClock.elapsedRealtime();
         // Create the video surface UNDER the poster; GONE cannot deliver a first frame.
         playerView.setVisibility(View.VISIBLE);poster.setVisibility(View.VISIBLE);
         loading.setVisibility(View.VISIBLE);copy("Starting preview…",TvUi.MUTED);
-        deadline=()->finish(token,true,"Preview unavailable · OK still opens live TV");
+        deadline=()->{
+            LocalPerformance.record(activity,"preview_timeout_ms",
+                    android.os.SystemClock.elapsedRealtime()-previewStartedAt);
+            finish(token,true,"Preview unavailable · OK still opens live TV");
+        };
         main.postDelayed(deadline,PreviewGate.FIRST_FRAME_BUDGET_MS);
         Telemetry.event(activity,"guide_preview_request",Telemetry.data("automatic",true,
                 "language",channel.language,"category",channel.category));
@@ -127,6 +133,8 @@ public final class HeroPreviewController {
         player.addListener(new Player.Listener(){
             @Override public void onRenderedFirstFrame(){
                 if(!gate.firstFrame(token))return;
+                LocalPerformance.record(activity,"preview_first_picture_ms",
+                        android.os.SystemClock.elapsedRealtime()-previewStartedAt);
                 if(deadline!=null)main.removeCallbacks(deadline);deadline=null;
                 poster.setVisibility(View.GONE);loading.setVisibility(View.GONE);
                 copy("Muted preview · OK to watch",TvUi.MINT);

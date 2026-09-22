@@ -6,6 +6,7 @@ import android.content.Context;
 import android.content.Intent;
 import android.content.SharedPreferences;
 import android.graphics.Color;
+import android.net.Uri;
 import android.view.Gravity;
 import android.view.View;
 import android.widget.LinearLayout;
@@ -29,6 +30,9 @@ public final class FamilyTheme {
     private static final String PREFS = "ghartv_family_theme";
     private static final String KEY_MODE = "mode";
     private static final String KEY_PERSON = "preview_person";
+    private static final String KEY_PENDING_PHOTO = "pending_photo_member";
+    private static final String KEY_PHOTO_PREFIX = "photo_uri_";
+    public static final int PHOTO_REQUEST = 7314;
 
     public static final String MODE_AUTO = "auto";
     public static final String MODE_BIRTHDAY = "birthday";
@@ -151,6 +155,53 @@ public final class FamilyTheme {
         if (birthday == null) return 0;
         return "dad".equals(birthday.key) || "simrit".equals(birthday.key)
                 ? R.drawable.family_dad_simrat_backdrop : 0;
+    }
+
+    public static Uri activePhotoUri(Context context) {
+        Birthday birthday = activeBirthday(context);
+        return birthday == null ? null : photoUri(context, birthday.key);
+    }
+
+    public static Uri photoUri(Context context, String key) {
+        String value = prefs(context).getString(KEY_PHOTO_PREFIX + key, "");
+        if (value == null || value.isEmpty()) return null;
+        Uri uri = Uri.parse(value);
+        return "content".equals(uri.getScheme()) ? uri : null;
+    }
+
+    public static boolean hasPhoto(Context context, String key) { return photoUri(context, key) != null; }
+
+    public static void choosePhoto(Activity activity, String key) {
+        boolean exists = false;
+        for (Birthday birthday : allBirthdays(activity)) if (birthday.key.equals(key)) exists = true;
+        if (!exists) throw new IllegalArgumentException("Save this person before choosing a photo.");
+        prefs(activity).edit().putString(KEY_PENDING_PHOTO, key).apply();
+        Intent picker = new Intent(Intent.ACTION_OPEN_DOCUMENT)
+                .addCategory(Intent.CATEGORY_OPENABLE)
+                .setType("image/*")
+                .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION | Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION);
+        activity.startActivityForResult(picker, PHOTO_REQUEST);
+    }
+
+    public static boolean handlePhotoResult(Activity activity, int requestCode, int resultCode, Intent data) {
+        if (requestCode != PHOTO_REQUEST) return false;
+        String key = prefs(activity).getString(KEY_PENDING_PHOTO, "");
+        prefs(activity).edit().remove(KEY_PENDING_PHOTO).apply();
+        if (resultCode != Activity.RESULT_OK || data == null || data.getData() == null || key.isEmpty()) return false;
+        Uri uri = data.getData();
+        if (!"content".equals(uri.getScheme())) return false;
+        try {
+            activity.getContentResolver().takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION);
+            prefs(activity).edit().putString(KEY_PHOTO_PREFIX + key, uri.toString()).apply();
+            return true;
+        } catch (SecurityException error) {
+            android.widget.Toast.makeText(activity, "This photo provider did not grant lasting access. Nothing changed.", android.widget.Toast.LENGTH_LONG).show();
+            return false;
+        }
+    }
+
+    public static void removePhoto(Context context, String key) {
+        prefs(context).edit().remove(KEY_PHOTO_PREFIX + key).apply();
     }
 
     public static int accent(Context context) {
@@ -287,7 +338,8 @@ public final class FamilyTheme {
                 org.json.JSONObject row=old.optJSONObject(i);
                 if(row==null || !key.equals(row.optString("key"))) remaining.put(old.opt(i));
             }
-            edit.putString("custom_members_v1",remaining.toString()).remove("name_"+key).remove("date_"+key);
+            edit.putString("custom_members_v1",remaining.toString()).remove("name_"+key).remove("date_"+key)
+                    .remove(KEY_PHOTO_PREFIX + key);
         }
         if(key.equals(migrateLegacyKey(prefs(context).getString(KEY_PERSON,"")))) edit.putString(KEY_MODE,MODE_AUTO).remove("preview_expires_at");
         edit.apply();

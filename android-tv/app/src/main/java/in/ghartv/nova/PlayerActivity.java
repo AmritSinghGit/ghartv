@@ -204,6 +204,9 @@ public final class PlayerActivity extends Activity implements ChannelNavigator.L
         playerView.setKeepScreenOn(true);
         playerView.setFocusable(true);
         playerView.setFocusableInTouchMode(true);
+        playerView.setContentDescription("Live television. Click or press OK to show channel controls.");
+        playerView.setOnClickListener(view -> showGuide(true, nextButton));
+        TvUi.pointerTarget(playerView, false);
         root.addView(playerView, new FrameLayout.LayoutParams(-1, -1));
 
         loading = new ProgressBar(this);

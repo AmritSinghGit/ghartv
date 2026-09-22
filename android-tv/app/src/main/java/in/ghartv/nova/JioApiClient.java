@@ -40,8 +40,49 @@ public final class JioApiClient {
             .retryOnConnectionFailure(true).connectionPool(new ConnectionPool(8,5,TimeUnit.MINUTES)).build();
     private final OkHttpClient client = SHARED;
     private final java.util.Set<okhttp3.Call> playbackCalls = java.util.concurrent.ConcurrentHashMap.newKeySet();
+    private static final long PLAYBACK_HANDOFF_MS = 20_000L;
+    private static final java.util.LinkedHashMap<String, CachedPlayback> PLAYBACK_HANDOFFS =
+            new java.util.LinkedHashMap<>(8, .75f, true);
+    private static final class CachedPlayback {
+        final long until;
+        final PlaybackInfo info;
+        CachedPlayback(PlaybackInfo value) {
+            until = android.os.SystemClock.elapsedRealtime() + PLAYBACK_HANDOFF_MS;
+            info = value.copy();
+        }
+    }
     public JioApiClient(Context context) { this.context=context.getApplicationContext(); }
     public void cancelPlayback() { for(okhttp3.Call c:playbackCalls)c.cancel(); }
+    public static void clearPlaybackHandoffs() { synchronized (PLAYBACK_HANDOFFS) { PLAYBACK_HANDOFFS.clear(); } }
+
+    private static String handoffKey(JioSession session, Channel channel) {
+        String owner = session.uniqueId.isEmpty() ? session.deviceId : session.uniqueId;
+        return Integer.toHexString(owner.hashCode()) + ":" + channel.id;
+    }
+
+    private static PlaybackInfo takePlaybackHandoff(JioSession session, Channel channel) {
+        synchronized (PLAYBACK_HANDOFFS) {
+            long now = android.os.SystemClock.elapsedRealtime();
+            PLAYBACK_HANDOFFS.entrySet().removeIf(entry -> entry.getValue().until <= now);
+            CachedPlayback cached = PLAYBACK_HANDOFFS.remove(handoffKey(session, channel));
+            if (cached == null || cached.until <= now) return null;
+            PlaybackInfo info = cached.info.copy();
+            try { info.licenseHeaders.put("srno", UUID.randomUUID().toString()); }
+            catch (Exception ignored) {}
+            return info;
+        }
+    }
+
+    private static void rememberPlaybackHandoff(JioSession session, Channel channel, PlaybackInfo info) {
+        if (info == null || info.authRequired || info.subscriptionRequired || info.unavailable
+                || info.streamUrl == null || info.streamUrl.isEmpty()) return;
+        synchronized (PLAYBACK_HANDOFFS) {
+            PLAYBACK_HANDOFFS.put(handoffKey(session, channel), new CachedPlayback(info));
+            while (PLAYBACK_HANDOFFS.size() > 8) {
+                PLAYBACK_HANDOFFS.remove(PLAYBACK_HANDOFFS.keySet().iterator().next());
+            }
+        }
+    }
     private final class TrackedPlayback implements java.io.Closeable {
         final okhttp3.Call call; final Response response;
         TrackedPlayback(okhttp3.Call c,Response r){call=c;response=r;}
@@ -287,7 +328,11 @@ public final class JioApiClient {
         if (!session.isPresent()) throw new IOException("Sign in to JioTV first");
         if (!session.isValid()) session = refreshSession(session);
         if (!session.isPresent()) throw new IOException("The JioTV session has expired. Sign in again.");
-        return fetchJioPlayback(channel, session, true);
+        PlaybackInfo cached = takePlaybackHandoff(session, channel);
+        if (cached != null) return cached;
+        PlaybackInfo resolved = fetchJioPlayback(channel, session, true);
+        rememberPlaybackHandoff(session, channel, resolved);
+        return resolved;
     }
 
     private PlaybackInfo fetchJioPlayback(Channel channel, JioSession session, boolean retryAuth) throws Exception {

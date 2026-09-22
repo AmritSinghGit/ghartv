@@ -18,9 +18,8 @@ import android.widget.LinearLayout;
 import android.widget.TextView;
 
 /**
- * Lightweight television launch screen. Birthday mode uses the family photo
- * only for Dad and Simrat; other birthdays retain the same celebration system
- * without inventing a personal photograph.
+ * Lightweight television launch screen. Birthday mode uses an owner-selected
+ * local photo when present, otherwise the existing bundled family photo or art.
  */
 public final class SplashActivity extends Activity {
     private static final long STANDARD_DURATION_MS = 650L;
@@ -56,18 +55,25 @@ public final class SplashActivity extends Activity {
 
         if (FamilyTheme.isBirthday(this)) {
             int photo = FamilyTheme.splashPhotoRes(this);
-            if (photo != 0) {
+            android.net.Uri selectedPhoto = FamilyTheme.activePhotoUri(this);
+            boolean hasPhoto = false;
+            if (selectedPhoto != null || photo != 0) {
                 ImageView image = new ImageView(this);
                 image.setScaleType(ImageView.ScaleType.CENTER_CROP);
-                image.setImageResource(photo);
-                root.addView(image, new FrameLayout.LayoutParams(-1, -1));
-            } else {
+                try {
+                    if (selectedPhoto != null) image.setImageURI(selectedPhoto);
+                    else image.setImageResource(photo);
+                    hasPhoto = image.getDrawable() != null;
+                } catch (RuntimeException ignored) { hasPhoto = false; }
+                if (hasPhoto) root.addView(image, new FrameLayout.LayoutParams(-1, -1));
+            }
+            if (!hasPhoto) {
                 root.addView(new AuroraBackgroundView(this), new FrameLayout.LayoutParams(-1, -1));
             }
 
             View veil = new View(this);
             veil.setBackground(TvUi.gradient(
-                    Color.argb(photo == 0 ? 132 : 70, 39, 9, 53),
+                    Color.argb(hasPhoto ? 70 : 132, 39, 9, 53),
                     Color.argb(235, 4, 12, 26),
                     0, Color.TRANSPARENT, 0, this));
             root.addView(veil, new FrameLayout.LayoutParams(-1, -1));

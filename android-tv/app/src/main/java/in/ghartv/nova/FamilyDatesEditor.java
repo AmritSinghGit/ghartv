@@ -45,6 +45,15 @@ public final class FamilyDatesEditor {
         box.addView(name);
         LinearLayout dates=new LinearLayout(activity);dates.addView(day,new LinearLayout.LayoutParams(0,-2,1));dates.addView(month,new LinearLayout.LayoutParams(0,-2,1));box.addView(dates);
         box.addView(TvUi.label(activity,"4 October = day 4, month 10. Renaming preserves this person's settings.",12,TvUi.MUTED,false));
+        android.widget.Button choosePhoto=null,removePhoto=null;
+        if(!adding){
+            choosePhoto=TvUi.button(activity,FamilyTheme.hasPhoto(activity,birthday.key)?"Change birthday photo":"Choose birthday photo",false);
+            box.addView(choosePhoto,new LinearLayout.LayoutParams(-1,TvUi.dp(activity,38)));
+            if(FamilyTheme.hasPhoto(activity,birthday.key)){
+                removePhoto=TvUi.button(activity,"Remove selected photo",false);
+                box.addView(removePhoto,new LinearLayout.LayoutParams(-1,TvUi.dp(activity,38)));
+            }
+        } else box.addView(TvUi.label(activity,"Save the person first, then reopen them to choose a private photo from this TV.",12,TvUi.MUTED,false));
         if(!adding){
             android.widget.Button reset=TvUi.button(activity,"Reset saved date",false);
             reset.setOnClickListener(v->{FamilyTheme.resetDate(activity,birthday.key);
@@ -56,15 +65,20 @@ public final class FamilyDatesEditor {
             .setView(box).setPositiveButton("Save",null).setNegativeButton("Cancel",(d,w)->show(activity));
         if(!adding)builder.setNeutralButton("Remove person",(d,w)->confirmRemove(activity,birthday));
         AlertDialog dialog=builder.create();
-        dialog.setOnShowListener(ignored->dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener(v->{
-            try{
-                MonthDay date=MonthDay.of(Integer.parseInt(month.getText().toString().trim()),Integer.parseInt(day.getText().toString().trim()));
-                FamilyTheme.saveMember(activity,adding?null:birthday.key,name.getText().toString(),date);
-                dialog.dismiss();show(activity);
-            }catch(java.time.DateTimeException|NumberFormatException error){
-                Toast.makeText(activity,"Enter a valid day and month. No change has been saved.",Toast.LENGTH_LONG).show();
-            }catch(IllegalArgumentException|IllegalStateException error){Toast.makeText(activity,error.getMessage(),Toast.LENGTH_LONG).show();}
-        }));
+        android.widget.Button finalChoosePhoto=choosePhoto,finalRemovePhoto=removePhoto;
+        dialog.setOnShowListener(ignored->{
+            dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener(v->{
+                try{
+                    MonthDay date=MonthDay.of(Integer.parseInt(month.getText().toString().trim()),Integer.parseInt(day.getText().toString().trim()));
+                    FamilyTheme.saveMember(activity,adding?null:birthday.key,name.getText().toString(),date);
+                    dialog.dismiss();show(activity);
+                }catch(java.time.DateTimeException|NumberFormatException error){
+                    Toast.makeText(activity,"Enter a valid day and month. No change has been saved.",Toast.LENGTH_LONG).show();
+                }catch(IllegalArgumentException|IllegalStateException error){Toast.makeText(activity,error.getMessage(),Toast.LENGTH_LONG).show();}
+            });
+            if(finalChoosePhoto!=null)finalChoosePhoto.setOnClickListener(v->{dialog.dismiss();FamilyTheme.choosePhoto(activity,birthday.key);});
+            if(finalRemovePhoto!=null)finalRemovePhoto.setOnClickListener(v->{FamilyTheme.removePhoto(activity,birthday.key);dialog.dismiss();edit(activity,birthday);});
+        });
         dialog.show();
     }
     private static void confirmRemove(Activity activity,FamilyTheme.Birthday birthday){
