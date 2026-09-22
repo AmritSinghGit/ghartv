@@ -16,11 +16,11 @@ print('TV_EXPERIENCE_CONTRACT=PASS_9_RULES_SOURCE_CHECKED')
 
 assert 'pointerTarget(view, true)' in tv and 'TYPE_HAND' in tv and 'ACTION_HOVER_ENTER' in tv
 assert 'playerView.setOnClickListener(view -> showGuide(true, nextButton))' in player
-assert 'ACTION_OPEN_DOCUMENT' in family and 'takePersistableUriPermission' in family
+assert 'MediaStore.ACTION_PICK_IMAGES' in family and 'ACTION_GET_CONTENT' in family and 'takePersistableUriPermission' in family
 assert 'takePlaybackHandoff' in api and 'PLAYBACK_HANDOFF_MS = 20_000L' in api
 gradle=(R/'android-tv/app/build.gradle.kts').read_text()
-assert 'versionCode = 31' in gradle and '0.6.0-rc10.4-pointer-family-fast-open' in gradle
-print('CODE31_POINTER_PHOTO_AND_FAST_OPEN=PASS')
+assert 'versionCode = 32' in gradle and '0.6.0-rc10.5-tv-photo-picker' in gradle
+print('CODE32_POINTER_PHOTO_PICKER_AND_FAST_OPEN=PASS')
 
 launcher=(R/'tools/owner_review.command.in').read_text()
 assert "version_code=30" in launcher and "manifest.get('version_code')!=30" in launcher

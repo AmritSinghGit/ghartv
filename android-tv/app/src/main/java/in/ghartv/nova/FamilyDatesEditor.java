@@ -44,7 +44,7 @@ public final class FamilyDatesEditor {
         if(!adding){day.setText(String.valueOf(birthday.date.getDayOfMonth()));month.setText(String.valueOf(birthday.date.getMonthValue()));}
         box.addView(name);
         LinearLayout dates=new LinearLayout(activity);dates.addView(day,new LinearLayout.LayoutParams(0,-2,1));dates.addView(month,new LinearLayout.LayoutParams(0,-2,1));box.addView(dates);
-        box.addView(TvUi.label(activity,"4 October = day 4, month 10. Renaming preserves this person's settings.",12,TvUi.MUTED,false));
+        box.addView(TvUi.label(activity,"Enter day first, then month. Renaming preserves this person's settings.",12,TvUi.MUTED,false));
         android.widget.Button choosePhoto=null,removePhoto=null;
         if(!adding){
             choosePhoto=TvUi.button(activity,FamilyTheme.hasPhoto(activity,birthday.key)?"Change birthday photo":"Choose birthday photo",false);

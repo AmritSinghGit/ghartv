@@ -7,6 +7,8 @@ import android.content.Intent;
 import android.content.SharedPreferences;
 import android.graphics.Color;
 import android.net.Uri;
+import android.os.Build;
+import android.provider.MediaStore;
 import android.view.Gravity;
 import android.view.View;
 import android.widget.LinearLayout;
@@ -176,10 +178,17 @@ public final class FamilyTheme {
         for (Birthday birthday : allBirthdays(activity)) if (birthday.key.equals(key)) exists = true;
         if (!exists) throw new IllegalArgumentException("Save this person before choosing a photo.");
         prefs(activity).edit().putString(KEY_PENDING_PHOTO, key).apply();
-        Intent picker = new Intent(Intent.ACTION_OPEN_DOCUMENT)
-                .addCategory(Intent.CATEGORY_OPENABLE)
-                .setType("image/*")
-                .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION | Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION);
+        Intent picker;
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            // Google TV images can resolve ACTION_OPEN_DOCUMENT only to a no-UI framework stub.
+            // The platform photo picker is the real, permission-scoped image surface on those TVs.
+            picker = new Intent(MediaStore.ACTION_PICK_IMAGES).setType("image/*");
+        } else {
+            picker = new Intent(Intent.ACTION_GET_CONTENT)
+                    .addCategory(Intent.CATEGORY_OPENABLE)
+                    .setType("image/*");
+        }
+        picker.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION | Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION);
         activity.startActivityForResult(picker, PHOTO_REQUEST);
     }
 

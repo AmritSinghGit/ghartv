@@ -21,8 +21,8 @@ android {
         applicationId = "in.ghartv.nova"
         minSdk = 26
         targetSdk = 35
-        versionCode = 31
-        versionName = "0.6.0-rc10.4-pointer-family-fast-open"
+        versionCode = 32
+        versionName = "0.6.0-rc10.5-tv-photo-picker"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
