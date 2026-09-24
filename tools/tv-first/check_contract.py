@@ -13,22 +13,24 @@ assert 'PreviewSession' not in m
 contract=json.loads((R/'TV_EXPERIENCE_CONTRACT.json').read_text());assert len(contract['rules'])==9
 assert 'emulator-5580' in contract['canonical_serial']
 print('TV_EXPERIENCE_CONTRACT=PASS_9_RULES_SOURCE_CHECKED')
-
 assert 'pointerTarget(view, true)' in tv and 'TYPE_HAND' in tv and 'ACTION_HOVER_ENTER' in tv
 assert 'playerView.setOnClickListener(view -> showGuide(true, nextButton))' in player
 assert 'MediaStore.ACTION_PICK_IMAGES' in family and 'ACTION_GET_CONTENT' in family and 'takePersistableUriPermission' in family
 assert 'takePlaybackHandoff' in api and 'PLAYBACK_HANDOFF_MS = 20_000L' in api
 gradle=(R/'android-tv/app/build.gradle.kts').read_text()
-assert 'versionCode = 32' in gradle and '0.6.0-rc10.5-tv-photo-picker' in gradle
-print('CODE32_POINTER_PHOTO_PICKER_AND_FAST_OPEN=PASS')
-
+assert 'versionCode = 33' in gradle and '0.6.0-rc10.6-remote-cursor' in gradle
+films=(J/'FlixMomoActivity.java').read_text();cursor=(J/'RemoteWebCursor.java').read_text()
+assert 'cursor.handle(event)' in films and 'onRenderProcessGone' in films and 'handler.cancel()' in films
+assert 'onPageFinished' in films and 'if(mainFrameError)' in films
+assert 'postOnAnimation(frame)' in cursor and 'ACTION_CANCEL' in cursor and 'removeCallbacks(frame)' in cursor
+assert 'evaluateJavascript' not in films and 'addJavascriptInterface' not in films
+print('CODE33_REMOTE_CURSOR_AND_CODE32_BEHAVIOR_RETAINED=PASS')
 launcher=(R/'tools/owner_review.command.in').read_text()
 assert "version_code=30" in launcher and "manifest.get('version_code')!=30" in launcher
 assert "int(codes[0])==30" in launcher and "int(codes[0])<30" in launcher
 assert 'transport.attach_or_start(sdk,RUN)' in launcher and "sock.bind(('127.0.0.1',port))" not in launcher
 assert 'TV_EXPERIENCE_CONTRACT.json' in (R/'tools/package_owner_review.py').read_text()
-print('HISTORICAL_CODE30_OPENER_PRESERVED=PASS')
-
+print('HISTORICAL_CODE30_OPENER_PRESERVED_NOT_USED_FOR_NEW_INSTALL=PASS')
 assert 'GHARTV_CYAN_REVIEW_17_HANDOFF' in launcher and 'GHARTV_CYAN_REVIEW_16_HANDOFF' not in launcher
 assert 'java.util.Objects.equals(selectedChannel.id,candidate.id)' in m
 assert 'channel.number+":"+safe(channel.id)' not in c
