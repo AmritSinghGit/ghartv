@@ -8,6 +8,9 @@ on:
   workflow_dispatch:
 permissions:
   contents: read
+concurrency:
+  group: ghartv-tv-contract-${{ github.ref }}
+  cancel-in-progress: false
 jobs:
   contract:
     runs-on: ubuntu-latest
@@ -20,12 +23,120 @@ jobs:
         with:
           distribution: temurin
           java-version: '17'
-      - name: Check current TV experience and delivery identities
-        run: python tools/tv-first/check_contract.py
-      - name: Exercise the production preview ownership state machine
+      - run: python tools/tv-first/check_contract.py
+      - name: Exercise production preview ownership and cursor geometry
         run: |
           set -euo pipefail
-          mkdir -p "$RUNNER_TEMP/nova-preview-contract"
-          javac -d "$RUNNER_TEMP/nova-preview-contract" android-tv/app/src/main/java/in/ghartv/nova/PreviewGate.java tools/tv-first/PreviewGateSmoke.java
-          java -cp "$RUNNER_TEMP/nova-preview-contract" PreviewGateSmoke
-          echo 'FAST_CONTRACT_GATE_ONLY_NOT_AN_ANDROID_OR_PROVIDER_PLAYBACK_TEST'
+          mkdir -p "$RUNNER_TEMP/nova-contract"
+          javac -d "$RUNNER_TEMP/nova-contract" android-tv/app/src/main/java/in/ghartv/nova/PreviewGate.java tools/tv-first/PreviewGateSmoke.java android-tv/app/src/main/java/in/ghartv/nova/RemoteCursorState.java tools/tv-first/RemoteCursorSmoke.java
+          java -cp "$RUNNER_TEMP/nova-contract" PreviewGateSmoke
+          java -cp "$RUNNER_TEMP/nova-contract" RemoteCursorSmoke
+  candidate:
+    if: github.event_name != 'pull_request'
+    needs: contract
+    runs-on: ubuntu-latest
+    timeout-minutes: 18
+    permissions:
+      contents: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GRADLE_OPTS: '-Dorg.gradle.daemon=false -Dorg.gradle.jvmargs=-Xmx2g'
+      ANDROID_USER_HOME: /tmp/ghartv-cursor-test-android
+      ANDROID_EMULATOR_HOME: /tmp/ghartv-cursor-test-android
+      ANDROID_AVD_HOME: /tmp/ghartv-cursor-test-avd
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: android-actions/setup-android@v3
+        with:
+          packages: platform-tools
+          log-accepted-android-sdk-licenses: false
+      - name: Compile release and isolated instrumented test APKs
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/ghartv-candidate/proof
+          sdkmanager 'platforms;android-36' 'build-tools;36.0.0'
+          cd android-tv
+          chmod +x gradlew
+          ./gradlew --no-daemon --max-workers=2 assembleRelease assembleDebug assembleDebugAndroidTest
+          cp app/build/outputs/apk/release/app-release-unsigned.apk /tmp/ghartv-candidate/GharTV-code33-review-unsigned.apk
+      - name: Start isolated cloud Android test device, never the owner emulator
+        run: |
+          set -euo pipefail
+          test -e /dev/kvm
+          sudo chmod a+rw /dev/kvm
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq libpulse0 libasound2t64 libnss3 libxcomposite1 libxcursor1 libxi6 libxtst6 libxrandr2 libegl1 libglu1-mesa
+          sdkmanager 'emulator' 'system-images;android-36;google_apis;x86_64'
+          mkdir -p "$ANDROID_USER_HOME" "$ANDROID_AVD_HOME"
+          python - <<'PY'
+          from pathlib import Path
+          import os,subprocess,time,re
+          out=Path('/tmp/ghartv-candidate/proof');sdk=Path(os.environ['ANDROID_HOME']);avd=Path(os.environ['ANDROID_AVD_HOME'])/'GHARTV_CLOUD_CURSOR_ONLY.avd'
+          create=subprocess.run(['avdmanager','create','avd','--name','GHARTV_CLOUD_CURSOR_ONLY','--package','system-images;android-36;google_apis;x86_64','--path',str(avd)],input='no\n',capture_output=True,text=True,timeout=45)
+          assert create.returncode==0,create.stdout+create.stderr
+          config=avd/'config.ini';s=config.read_text();s=re.sub(r'^disk.dataPartition.size=.*$','disk.dataPartition.size=1G',s,flags=re.M)
+          if 'disk.dataPartition.size=' not in s:s+='\ndisk.dataPartition.size=1G\n'
+          config.write_text(s)
+          with (out/'test-emulator.log').open('w') as log:
+            p=subprocess.Popen([str(sdk/'emulator/emulator'),'-avd','GHARTV_CLOUD_CURSOR_ONLY','-port','5580','-no-window','-no-audio','-no-snapshot','-no-boot-anim','-gpu','swiftshader','-feature','-Vulkan','-memory','2048'],stdin=subprocess.DEVNULL,stdout=log,stderr=log,start_new_session=True)
+          end=time.monotonic()+180
+          while time.monotonic()<end:
+            if p.poll() is not None:raise RuntimeError('CLOUD_DEVICE_EXITED '+(out/'test-emulator.log').read_text()[-3000:])
+            try:r=subprocess.run(['adb','-s','emulator-5580','shell','getprop','sys.boot_completed'],capture_output=True,text=True,timeout=5)
+            except subprocess.TimeoutExpired:time.sleep(1);continue
+            if r.returncode==0 and r.stdout.strip()=='1':break
+            time.sleep(2)
+          else:raise RuntimeError('CLOUD_DEVICE_TIMEOUT')
+          subprocess.run(['adb','-s','emulator-5580','shell','input','keyevent','KEYCODE_WAKEUP'],check=True)
+          subprocess.run(['adb','-s','emulator-5580','shell','wm','dismiss-keyguard'],check=True)
+          PY
+      - name: Test actual cursor clicks, scroll, movement and cancellation in WebView
+        run: |
+          set -euo pipefail
+          adb -s emulator-5580 install -r android-tv/app/build/outputs/apk/debug/app-debug.apk
+          adb -s emulator-5580 install -r android-tv/app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk
+          adb -s emulator-5580 shell am instrument -w -r -e class in.ghartv.nova.RemoteWebCursorTest in.ghartv.nova.test/androidx.test.runner.AndroidJUnitRunner | tee /tmp/ghartv-candidate/proof/remote-cursor-android.txt
+          grep -q 'OK (6 tests)' /tmp/ghartv-candidate/proof/remote-cursor-android.txt
+      - name: Measure the whole tracked tree and shared Git history, not owner-Mac usage
+        run: |
+          python - <<'PY'
+          import hashlib,json,os,subprocess,zipfile
+          from pathlib import Path
+          root=Path('/tmp/ghartv-candidate');source=subprocess.check_output(['git','rev-parse','HEAD'],text=True).strip()
+          files={}
+          for row in subprocess.check_output(['git','ls-tree','-rl','HEAD'],text=True).splitlines():
+            meta,path=row.split('\t',1);parts=meta.split()
+            if parts[1]=='blob':files[path]=int(parts[3])
+          groups={}
+          for p,n in files.items():groups[p.split('/')[0]]=groups.get(p.split('/')[0],0)+n
+          gitdir=Path(subprocess.check_output(['git','rev-parse','--git-common-dir'],text=True).strip());gitbytes=sum(p.stat().st_size for p in gitdir.rglob('*') if p.is_file() and not p.is_symlink())
+          apk=root/'GharTV-code33-review-unsigned.apk';apk_hash=hashlib.sha256(apk.read_bytes()).hexdigest()
+          zpath=root/'GHARTV_CODE33_SOURCE.zip'
+          with zipfile.ZipFile(zpath,'w',zipfile.ZIP_DEFLATED) as z:
+            for p in files:
+              if Path(p).suffix.lower() not in ('.woff','.woff2','.ttf','.otf'):z.writestr(p,subprocess.check_output(['git','show','HEAD:'+p]))
+          footprint={'schema':'ghartv.footprint.v1','source':source,'tracked_files_bytes':sum(files.values()),'tracked_file_count':len(files),'tracked_groups_bytes':groups,'fresh_all_remote_branches_git_dir_bytes':gitbytes,'source_and_git_bytes':sum(files.values())+gitbytes,'source_archive_bytes':zpath.stat().st_size,'release_apk_bytes':apk.stat().st_size,'remote_refs':subprocess.check_output(['git','for-each-ref','--format=%(refname) %(objectname)','refs/remotes/origin'],text=True).splitlines(),'owner_mac_measured':False,'owner_local_unpushed_branches_verified':False,'sdk_avd_dependencies_logs_release_history_included':False}
+          (root/'FOOTPRINT.json').write_text(json.dumps(footprint,indent=2)+'\n')
+          manifest={'schema':'ghartv.android-review.v1','repository':'AmritSinghGit/ghartv','branch':'codex/ghartv-remove-auto-preview','pr':1,'source':source,'version':'0.6.0-rc10.6-remote-cursor','version_code':33,'apk':apk.name,'apk_sha256':apk_hash,'apk_bytes':apk.stat().st_size,'signing':'UNSIGNED_REQUIRES_EXISTING_OWNER_KEY','required_certificate_sha256':'40a9d8bf6b1c557b3d6fd02acef075368dd13e28691f207a297202d0d5ec233c','work_base':'3373bcca7ec8d6589fc7cdb634b0eea00b6426e7','production_changed':False,'owner_installation':False}
+          (root/'CANDIDATE.json').write_text(json.dumps(manifest,indent=2)+'\n')
+          v={'schema':'ghartv.code33-validation.v1','source':source,'android_release':'COMPILED_UNSIGNED','real_android_webview_tests':6,'cursor_geometry_assertions':15,'preview_gate_assertions':29,'tv_contract_rules':9,'test_device':'ISOLATED_CLOUD_ANDROID36','test_content':'LOCAL_SYNTHETIC_HTML','actual_owner_mac_or_tv_tested':False,'live_flixmomo_search_or_video_verified':False,'provider_network_settings_changed':False,'owner_branches_all_synced':False,'owner_cleanup_performed':False,'obsidian_readback':False,'workflow_run':os.environ['GITHUB_RUN_ID']}
+          (root/'VALIDATION.json').write_text(json.dumps(v,indent=2)+'\n')
+          (root/'README.md').write_bytes(Path('REVIEW_060_RC10_6.md').read_bytes())
+          (root/'SHA256SUMS').write_text(''.join(hashlib.sha256(p.read_bytes()).hexdigest()+'  '+p.name+'\n' for p in sorted(root.iterdir()) if p.is_file() and p.name!='SHA256SUMS'))
+          print(json.dumps(manifest));print(json.dumps(footprint));print(json.dumps(v))
+          PY
+      - name: Publish exact review only; leave household feed and installed candidate alone
+        run: |
+          gh release create v0.6.0-rc10.6-remote-cursor /tmp/ghartv-candidate/GharTV-code33-review-unsigned.apk /tmp/ghartv-candidate/GHARTV_CODE33_SOURCE.zip /tmp/ghartv-candidate/CANDIDATE.json /tmp/ghartv-candidate/FOOTPRINT.json /tmp/ghartv-candidate/VALIDATION.json /tmp/ghartv-candidate/SHA256SUMS --repo AmritSinghGit/ghartv --target "$GITHUB_SHA" --prerelease --latest=false --title 'GharTV code33 — remote cursor and provider-view recovery' --notes-file REVIEW_060_RC10_6.md
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: ghartv-code33-review
+          path: /tmp/ghartv-candidate/
+          retention-days: 7
