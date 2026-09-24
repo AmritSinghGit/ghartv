@@ -10,10 +10,30 @@ jobs:
     timeout-minutes: 3
     steps:
       - uses: actions/checkout@v5
-      # RC10 successor: archive this exact existing implementation, never main or One Guide.
-      - run: git archive --format=zip HEAD -o /tmp/ghartv-smooth-source.zip
+        with:
+          fetch-depth: 0
+      - name: Preserve exact continuation and remote branch inventory
+        run: |
+          mkdir -p /tmp/ghartv-snapshot
+          git archive --format=zip HEAD -o /tmp/ghartv-snapshot/ghartv-smooth-source.zip
+          python - <<'PY'
+          import json,subprocess,os
+          from pathlib import Path
+          def git(*args):return subprocess.check_output(['git',*args],text=True).strip()
+          files={}
+          for row in git('ls-tree','-rl','HEAD').splitlines():
+            meta,path=row.split('\t',1);parts=meta.split()
+            if parts[1]=='blob':files[path]=int(parts[3])
+          groups={}
+          for path,size in files.items():groups[path.split('/')[0]]=groups.get(path.split('/')[0],0)+size
+          gitdir=Path(git('rev-parse','--git-common-dir'))
+          history_bytes=sum(p.stat().st_size for p in gitdir.rglob('*') if p.is_file() and not p.is_symlink())
+          refs=git('for-each-ref','--format=%(refname) %(objectname)','refs/remotes/origin').splitlines()
+          data={'schema':'ghartv.repository-footprint.v1','source':git('rev-parse','HEAD'),'tracked_file_count':len(files),'tracked_files_bytes':sum(files.values()),'tracked_groups_bytes':groups,'source_zip_bytes':Path('/tmp/ghartv-snapshot/ghartv-smooth-source.zip').stat().st_size,'fresh_all_branches_git_dir_bytes':history_bytes,'remote_refs':refs,'measurement_location':'GitHub runner','owner_mac_measured':False,'local_unpushed_branches_verified':False,'release_assets_or_ci_caches_included':False,'workflow_run':os.environ['GITHUB_RUN_ID']}
+          Path('/tmp/ghartv-snapshot/FOOTPRINT.json').write_text(json.dumps(data,indent=2)+'\n');print(json.dumps(data))
+          PY
       - uses: actions/upload-artifact@v4
         with:
           name: ghartv-smooth-source
-          path: /tmp/ghartv-smooth-source.zip
+          path: /tmp/ghartv-snapshot/
           retention-days: 3
