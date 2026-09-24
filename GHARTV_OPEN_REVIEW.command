@@ -155,16 +155,24 @@ def payload(p):
     return result
 
 def apk_identity(p,tools,env,expected_code=None):
-    out=call([tools/'apksigner','verify','--print-certs',p],60,env=env).stdout
-    certs=re.findall(r'^Signer #\d+ certificate SHA-256 digest:\s*([a-fA-F0-9:]+)\s*$',out,re.M)
-    if [c.lower().replace(':','') for c in certs]!=[CERT]:raise Hold('ORIGINAL_CERTIFICATE_MISMATCH_NO_INSTALL')
+    archive=artifact('GHARTV_CODE33_SOURCE.zip',ZIP_SHA)
+    with zipfile.ZipFile(archive) as z:verifier_data=z.read('tools/GharTVApkVerifier.java')
+    verifier=RUN/'GharTVApkVerifier.java'
+    if verifier.is_file():
+        safe(verifier)
+        if verifier.read_bytes()!=verifier_data:raise Hold('EXISTING_APK_VERIFIER_CHANGED')
+    else:atomic(verifier,verifier_data)
+    java=Path(env['JAVA_HOME'])/'bin/java'
+    checked=json.loads(call([java,'-Xmx256m','-cp',tools/'lib/apksigner.jar',verifier,p],60,env=env).stdout)
+    if checked.get('ok') is not True or checked.get('certificate_sha256')!=[CERT]:raise Hold('ORIGINAL_CERTIFICATE_MISMATCH_NO_INSTALL')
     badging=call([tools/'aapt','dump','badging',p],30,env=env).stdout
-    row=next((s for s in badging.splitlines() if s.startswith('package:')), '')
+    row=next((line for line in badging.splitlines() if line.startswith('package:')), '')
     match=re.search(r"name='([^']+)'\s+versionCode='(\d+)'",row)
     if not match or match[1]!=PACKAGE:raise Hold('APK_PACKAGE_MISMATCH')
     code=int(match[2])
     if expected_code is not None and code!=expected_code:raise Hold('APK_VERSION_MISMATCH')
     return code
+
 
 def prepare_signed(unsigned,tools,env):
     folder=mkdir(STATE/'verified-review-apks'/SOURCE)
@@ -339,7 +347,7 @@ def analytics_target():
 
 BROWSER_SCRIPT=r'''
 function run(argv) {
-  var targets=JSON.parse(argv[0]), names=['Safari','Brave Browser','Google Chrome'];
+  var targets=JSON.parse(argv[0]), names=JSON.parse(argv[1] || '["Safari"]');
   var inventory=[], denied=[], result=[], running=[];
   function origin(u){var m=/^https?:\/\/[^/]+/i.exec(u||'');return m?m[0].toLowerCase():'';}
   function matches(u,t){
@@ -349,13 +357,15 @@ function run(argv) {
     return false;
   }
   for(var n=0;n<names.length;n++){
-    var app=Application(names[n]);if(!app.running())continue;running.push(names[n]);
+    console.log('GHARTV_TAB_STAGE_INSPECT_'+names[n]);
+    var app;try{app=Application(names[n]);if(!app.running())continue;}catch(uninstalled){continue;}running.push(names[n]);
     try{var wins=app.windows();for(var w=0;w<wins.length;w++){var tabs=wins[w].tabs();for(var t=0;t<tabs.length;t++){
       inventory.push({name:names[n],app:app,win:wins[w],tab:tabs[t],index:t+1,url:names[n]==='Safari'?tabs[t].url():tabs[t].url()});
     }}}catch(e){denied.push(names[n]);}
   }
   // If an active browser could not be inspected, do not risk opening duplicates elsewhere.
   if(denied.length)return JSON.stringify({status:'BROWSER_AUTOMATION_PERMISSION_NEEDED_NO_TABS_CREATED',denied:denied,results:[]});
+  console.log('GHARTV_TAB_STAGE_INVENTORY_COMPLETE');
   var chosen=running.indexOf('Safari')>=0?'Safari':running.length?running[0]:'Safari';
   var app=Application(chosen);
   for(var i=0;i<targets.length;i++){
@@ -368,7 +378,8 @@ function run(argv) {
       found.win.index=1;found.app.activate();result.push({surface:target.id,status:'REUSED_EXISTING_TAB',browser:found.name});continue;
     }
     if(!target.url){result.push({surface:target.id,status:'REGISTERED_URL_NOT_AVAILABLE_NO_TAB_CREATED'});continue;}
-    if(!app.running()){app.launch();delay(.5);}
+    console.log('GHARTV_TAB_STAGE_CREATE_'+target.id);
+    if(!app.running()){app.launch();delay(1);}
     var wins=app.windows(),win;
     if(!wins.length){
       if(chosen==='Safari'){app.Document().make();win=app.windows()[0];win.currentTab.url=target.url;}
@@ -381,6 +392,7 @@ function run(argv) {
     }
     win.index=1;app.activate();result.push({surface:target.id,status:'OPENED_ONE_TAB',browser:chosen});
   }
+  console.log('GHARTV_TAB_STAGE_DONE');
   return JSON.stringify({status:'BROWSER_TABS_RECONCILED',results:result});
 }
 '''
@@ -388,7 +400,16 @@ function run(argv) {
 def reuse_tabs(targets):
     script=RUN/'reuse-tabs.js';atomic(script,BROWSER_SCRIPT)
     # Deliberately no `open URL` fallback; an Automation denial must not spawn duplicates.
-    p=call(['/usr/bin/osascript','-l','JavaScript',script,json.dumps(targets)],75,False)
+    names=['Safari']
+    for name in ('Brave Browser','Google Chrome'):
+        if any((base/(name+'.app')).is_dir() for base in (Path('/Applications'),HOME/'Applications')):names.append(name)
+    print('macOS may ask to let Terminal control your browser. Allow it to reuse tabs; no security settings are changed automatically.',flush=True)
+    try:p=call(['/usr/bin/osascript','-l','JavaScript',script,json.dumps(targets),json.dumps(names)],75,False)
+    except Hold:
+        return {'status':'BROWSER_AUTOMATION_TIMED_OUT_NO_FALLBACK_TABS','results':[]}
+    stages=[line for line in p.stderr.splitlines() if line.startswith('GHARTV_TAB_STAGE_')]
+    error_numbers=re.findall(r'\((-?[0-9]+)\)',p.stderr)[-2:]
+    atomic(RUN/'browser-stages.json',{'stages':stages,'exit_code':p.returncode,'error_numbers':error_numbers})
     if p.returncode:return {'status':'BROWSER_AUTOMATION_PERMISSION_NEEDED_NO_FALLBACK_TABS','results':[]}
     try:return json.loads(p.stdout)
     except ValueError:return {'status':'BROWSER_RESULT_UNCONFIRMED_NO_FALLBACK_TABS','results':[]}
@@ -469,6 +490,12 @@ def main():
             if analytics:targets.append({'id':'analytics','url':analytics})
             print('4/4  Finding your existing browser tabs before opening anything…',flush=True)
             R['browser_tabs']=reuse_tabs(targets)
+            if R.get('mac_window_observed'):
+                try:
+                    final_window=observe_window(z,transport)
+                    R['normal_tv_after_browser']=final_window.get('status','NOT_CONFIRMED')
+                    R['mac_window_frontmost']=final_window.get('app_active',False)
+                except Exception:R['normal_tv_after_browser']='ACTIVATION_NOT_CONFIRMED_EXISTING_WINDOW_PRESERVED'
             good=R.get('mac_window_observed') is True and R.get('web_player','').startswith('HEALTH_AND_SOURCE_VERIFIED')
             R['status']='REVIEW_READY' if good and R['browser_tabs'].get('status')=='BROWSER_TABS_RECONCILED' and analytics else 'ACTION_REQUIRED'
             if good and not analytics:R['blocker']='PRIVATE_ANALYTICS_ROUTE_NOT_REGISTERED_TV_AND_WEB_READY'
