@@ -28,7 +28,43 @@
   "physical_tv_playback": "NOT_VERIFIED",
   "live_provider_playback": "NOT_VERIFIED",
   "native_writer_lease": "NOT_ACQUIRED_BY_REMOTE_SOURCE_BUILD",
-  "next_action": "ADOPT_IN_EXISTING_NATIVE_TASK_SIGN_WITH_ORIGINAL_KEY_REVIEW_NORMAL_EMULATOR_OR_TV",
+  "next_action": "RUN_EXISTING_GHARTV_OPEN_REVIEW_COMMAND_SIGN_AND_REOPEN",
+  "review_entry": {
+    "file": "GHARTV_OPEN_REVIEW.command",
+    "source": "1166760b94b32dfb38104b1db17bd3a0b3d5f53a",
+    "sha256": "3c2d4d6809958c45f65b6b868f6da274c5c182b5343cf9b1c8e2630acc102c2b",
+    "bytes": 33233,
+    "path": "https://raw.githubusercontent.com/AmritSinghGit/ghartv/1166760b94b32dfb38104b1db17bd3a0b3d5f53a/GHARTV_OPEN_REVIEW.command",
+    "existing_entry_replaced_not_new_controller": true,
+    "signing": "EXISTING_PRIVATE_SIGNING_ENV_AND_GHARTV_RELEASE_JKS_NO_NEW_KEY",
+    "signing_secret_handling": "LOCAL_ONLY_PASSWORDS_VIA_CHILD_ENV_NOT_ARGV_OR_UPLOAD",
+    "certificate_and_payload": "ANDROID_APKSIG_LIBRARY_ORIGINAL_CERT_AND_CODE33_PAYLOAD_VERIFIED_BEFORE_INSTALL",
+    "signed_cache": "REUSE_EXACT_VERIFIED_CODE33_ON_REPEAT",
+    "android": "REUSE_OR_REOPEN_SAME_NOVA5580_NORMAL_WINDOW_NO_SCRCPY",
+    "android_data": "IN_PLACE_UPDATE_NO_UNINSTALL_OR_CLEAR_DATA_NO_DOWNGRADE",
+    "headless_existing_avd": "GRACEFUL_SAME_AVD_REOPEN_ONLY_AFTER_IDENTITY_AND_RESOURCE_CHECKS",
+    "web": "REOPEN_OR_REUSE_EXISTING_MANAGED_SERVER_ON8790_PRESERVE_CHANGED_WORK_SOURCE",
+    "browser_tabs": "INSPECT_EXISTING_SAFARI_BRAVE_CHROME_REUSE_MATCHING_TAB_OR_OPEN_ONE_MISSING_SURFACE",
+    "browser_permission": "NORMAL_MACOS_AUTOMATION_CONSENT_REQUIRED_NO_BYPASS_NO_OPEN_URL_FALLBACK",
+    "analytics": "EXACT_EXISTING_REGISTERED_PRIVATE_WORKSPACE_ONLY_AUTH_NOT_PROBED_NO_VIEWER_OWNER_PAGE",
+    "analytics_missing": "EXPLICIT_HOLD_NO_INVENTED_ANALYTICS_URL_OR_NEW_SERVICE",
+    "continuity": "SAVE_ACTUAL_LOCAL_RECEIPT_AND_EXISTING_OBSIDIAN_NOTE_ATTEMPT_SAME_SAFE_GITHUB_MIRROR",
+    "tests": {
+      "workflow_run": 35989624831,
+      "source_checks": "PASS",
+      "actual_mac_signing_fixture": "PASS_USING_DISPOSABLE_CI_KEY_NOT_OWNER_KEY",
+      "negative_signing_and_cache": "WRONG_CERT_REJECTED_AND_REPEAT_WITHOUT_CONFIG_REUSED_SIGNED_APK",
+      "local_unit_tests": 13,
+      "same_tab_model_tests": 7,
+      "actual_web_reopen_reuse": "PASS_ISOLATED_LINUX_EXISTING_NODE_SERVER_SAME_PID",
+      "native_safari_reuse": "NOT_VERIFIED_MACOS_CONTROL_SAFARI_CONSENT_SHEET_OBSERVED",
+      "owner_mac_execution": false,
+      "private_analytics_authenticated": false,
+      "live_provider_playback": false
+    },
+    "household_feed_changed": false,
+    "old_candidates_deleted": false
+  },
   "previous_code30_recovery_wrappers": "HISTORICAL_DO_NOT_USE_FOR_CODE33",
   "validation": {
     "workflow_run": 35983331379,
@@ -69,7 +105,7 @@
   "analytics_returned_to_viewer": false,
   "scrcpy_or_new_recovery_installer": false,
   "history": {
-    "previous_manifest_blob": "3ac65d88b1bd8456b6308fe16dc6b24e5c6e47c9",
+    "previous_manifest_blob": "87a24da7c19d9597f57082d2209eafb13895dd0a",
     "prior_candidate_and_signing_evidence_preserved_in_git_and_releases": true,
     "old_candidate_decision": "CHANGES_REQUIRED_NOT_OVERWRITTEN_BY_CLOUD_TESTS"
   }
