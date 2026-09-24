@@ -1,60 +1,51 @@
-# GharTV — current handoff, 24 September 2026
+# GharTV — reviewed code33 approved for household update
 
-STATUS=CODE33_COMPILED_AND_CURSOR_DEVICE_TESTED_ORIGINAL_SIGNING_AND_NATIVE_REVIEW_PENDING
-OWNER_DECISION=REVIEW_PENDING_NEW_CODE33_CHANGES_REQUIRED_PRIOR_RUNTIME
+STATUS=ANDROID_CODE33_SIGNED_INSTALLED_REVIEWED_PUBLICATION_PENDING
+OWNER_DECISION=APPROVED_CURRENT_ANDROID_DISTRIBUTION_BROWSER_FOLLOWUPS_OPEN
+APPROVAL_COMMENT=5822359467
 APPLICATION_SOURCE=39363ee529e9f8f3c00dcab8fdd69b88aa5e175c
-EVIDENCE=CODE33_REVIEW_EVIDENCE.json
+APPROVED_SIGNED_SHA256=7e9f088ad3443dfbb7c557656ec795031c029e975bbcc4316d0add3140991fbe
 
-## Same project and source authority
+## First read and existing authority
 
-Continue existing lane ghartv, repository AmritSinghGit/ghartv, branch codex/ghartv-remove-auto-preview, draft PR1, package in.ghartv.nova. Existing Nova AVD is GharTV_Nova_Manual_google_tv_API36 / emulator-5580; existing web port8790. Operon Owner OSPR39, FabricPR56 and AnalyticsPR61 remain separately owned integrations, not new GharTV projects. No new Mac worktree, runtime controller, database, signer or emulator was created in this delivery.
+Read the live managed receipt PR1/comment5687119492, release assets, update/latest.json, and approval comment5822359467 separately. Continue the same ghartv lane, repository AmritSinghGit/ghartv, implementation branch codex/ghartv-remove-auto-preview, PR1 and package in.ghartv.nova. Original existing Nova AVD: GharTV_Nova_Manual_google_tv_API36, emulator-5580. Existing web8790. Owner OS PR39, Local Fabric PR56 and Analytics PR61 remain separate existing owners. No duplicate branch, worktree, runtime, emulator, database, signing key or approval registry.
 
-First read the actual managed receipt at PR1 comment5687119492, its timestamp, then this current handoff and live branch heads. The shared runtime receipt and previous main handoff still describe September21/code30 and must not be represented as the final Work report or current Mac state. A source commit, test runner and historical receipt are distinct from installed runtime, user review and production approval.
+## Actual owner execution now succeeded
 
-## Recovered Work continuation
+Native receipt GHARTV-CYAN-33-20260924T130031Z-15860, updated2026-09-24T13:01:37Z, reports code33/version0.6.0-rc10.6-remote-cursor signed, installed and Android foreground, normal Mac window MAC_WINDOW_FRONTMOST_OBSERVED, web ready, and Obsidian readback true. Web source remains ae4c84578e26e707d1a11c5ff078f6395cf36dde, distinct from Android source. Memory bridge and physical-TV playback remain unverified. No cleanup was reported.
 
-The accepted Work continuation's published code advances are verified: a5ca4163d0f3794d9fbea1c32f3f03fd701c6d24 introduced native pointer focus, family photo management and faster preview-to-playback reuse; 3373bcca7ec8d6589fc7cdb634b0eea00b6426e7 added the platform Android photo picker, code32/version0.6.0-rc10.5-tv-photo-picker. The later shared final native task report was not available through current connectors/library retrieval. Do not invent an installed32 signature, current DNS outcome, all-branch synchronization, cleanup, Obsidian replication or private diagnostics based on these source changes.
+The owner's latest screenshot corroborates the normal emulator and provider page/episode player inside the app. A still image does not prove sustained playback. The owner praised the TV candidate and explicitly requested publishing this CURRENT build for household updating despite remaining browser bugs. Do not repeat old claims that code33 is still unsigned or the owner cannot see the normal emulator.
 
-The owner now reports that the provider website inside the Android TV app has no movable cursor and has intermittent errors. The existing code32 FlixMomoActivity had no D-pad pointer even though ordinary native buttons had pointer focus. Code33 extends that EXACT source rather than returning to old code30 or creating another lane.
+Exact approved signed APK:7e9f088ad3443dfbb7c557656ec795031c029e975bbcc4316d0add3140991fbe. Original certificate:40a9d8bf6b1c557b3d6fd02acef075368dd13e28691f207a297202d0d5ec233c. The already-signed file is in the existing verified-review-apks cache for source39363ee. No need to rebuild, resign, reinstall or reopen anything to publish it.
 
-## New published Android candidate
+## Publication approval is not completed publication
 
-Release v0.6.0-rc10.6-remote-cursor. Exact source39363ee529e9f8f3c00dcab8fdd69b88aa5e175c, version0.6.0-rc10.6-remote-cursor, code33.
+Approval is recorded and read back in comment5822359467, marked GHARTV_CODE33_PUBLICATION_APPROVAL_V1. It covers only the exact signed current APK and existing Android update/download channel. It does not approve future rebuilt bytes, PR merging, web deployment, new native-player integration or silent installation.
 
-Artifact GharTV-code33-review-unsigned.apk is6094774bytes; SHA2569913212502cf72bf7a5823e283d57acfcb7076f7e07804059d98299ef1430d81. It is COMPILED UNSIGNED, not an in-place install until the original local signing identity signs it. Required certificate40a9d8bf6b1c557b3d6fd02acef075368dd13e28691f207a297202d0d5ec233c. No key was requested, extracted, generated or uploaded. No signed33 or owner installation is claimed. The old code30 review/recovery launchers are historical and must not install these new bytes under old metadata.
+At the last direct read the public feed remains code24/source59c130abc1283e66607315db916973553164064d and signed digestb4f682c7b118c580b7f66e50555f23b58d4549ae194dfe55db57a836cc4b5467. The code33 release v0.6.0-rc10.6-remote-cursor contains the unsigned APK and source/evidence, not the approved signed APK. No signed asset has been uploaded or update feed advanced in this chat.
 
-Source/archive, manifest, exact byte measurements and validation are release assets. The existing TV experience workflow now compiles and tests this cursor candidate and publishes a prerelease only; no new workflow/lane, scrcpy, mirror or recovery installer was introduced. Stable feed and approved public homepage are unchanged.
+A write attempting to store the publication command was blocked by this session's tool safety checks. That blocked operation was not rerouted. No approved publication command was committed or dispatched. The existing authorized native release task must resume from the approval and exact signed file, not an uncommitted draft. Do not request a new key or substitute the unsigned APK. Do not change the feed to a missing or unverified download.
 
-## Cursor and reliability behavior
+Required release evidence: original-certificate and exact-APK validation; upload the existing signed bytes to the existing release; publicly download and hash-check them; conditionally advance the existing update/latest.json using its freshly read file identity; read back the feed and latest-release download alias. Preserve newer/conflicting publications. Report completed app publication separately from metadata mirrors or physical-TV installation. No new browser tabs or emulator restart is needed.
 
-Inside Android FlixMomo, choose Use page. D-pad arrows move the visible high-contrast circular pointer; holding accelerates; OK/Enter taps the page. Scroll:on makes arrows scroll; PageUp/PageDown and edge scrolling are available. Back/Menu returns to toolbar. Cursor:off restores ordinary native link focus. Pointer targets the provider's custom fullscreen view when present. Native guide, language/category filters, automatic bounded previews, family personalization, code31 fast handoff and code32 photo picker are retained.
+## Browser feedback, kept separate from approved release bytes
 
-Search/Browse dismiss the keyboard and preserve the query. Browse stays with the already-validated provider origin after its advertised migration. Retry retains the requested address and can recreate a WebView after its renderer stops; there is no retry loop. DNS/TLS/HTTP failures stay errors when WebView finishes its own error document. Slow loading gets one bounded notice. Cursor callbacks run only while held and are removed on pause/focus loss/detach.
+The screenshot shows expanded GharTV toolbar plus the provider's own video/season/episode controls. Focus is on Use page; Cursor:on does not itself show that the page owns remote focus. The external-navigation message persists without identifying whether it represents a legitimate redirect, an ad, or a required provider route. Capture only a safe blocked-host/reason observation through existing diagnostics before changing navigation allowlists; do not allow all destinations to suppress errors.
 
-The pointer dispatches events only to the activity's own view. No Accessibility service, system-wide input injection, provider DOM script, browser-detection change, DRM/entitlement bypass, security-header removal, provider-IP hardcoding or DNS-setting change. Direct connection remains direct; this is not Tor implementation. Actual owner-device network failure is not repaired by changing the error message.
+Native search cards and a native video experience are requested as the next direction. Catalogue access and actual playable source/session/DRM requirements need verification separately; the current WebView URL is not itself an ExoPlayer media URI. Retain provider attribution without treating it as content permission. No live native-provider stream extraction or playback has been implemented or verified here.
 
-## Actual validation
+The background analytics screen shows VCNow PostgreSQL despite a GharTV analytics label. The launcher previously allowed a sole available analytics URL as fallback; a generic/VCNow workspace is not verified GharTV tenant reporting. Fix through existing Analytics PR61 and require actual GharTV scope/authentication rather than relabeling an unrelated route. Keep owner analytics out of the public viewer.
 
-Workflow35983331379 SUCCESS. Code33 release, debug and instrumentation APKs compiled. The actual production RemoteWebCursor passed6 tests in a real Android36 WebView using local synthetic HTML: center click activates a DOM button, movement changes click target, PageDown scrolls, incomplete press cancels, disabled cursor leaves native focus, leaving hides cursor and text keys are not consumed. All6 passed in29.817seconds. Separate15 geometry assertions,29 retained preview assertions and9 source-contract rules passed.
+These follow-ups remain open and must not change the already-approved release bytes. The next modified Android build needs a higher versionCode and separate review/approval.
 
-These tests do not establish a live FlixMomo search/playback session, a provider fullscreen player, physical-TV compatibility across models or responsiveness on the owner's currently loaded Mac. Fullscreen routing and renderer recovery are implemented but not proven by those6 cursor tests. Every published artifact checksum was verified again after connector download; source archive excludes font files. The source33 release is not a signing/installation/owner-acceptance receipt.
+## Retained code and evidence
 
-## Project footprint, not a misleading worktree-only number
+Code33 follows Work code31 a5ca4163d0f3794d9fbea1c32f3f03fd701c6d24 and code32 3373bcca7ec8d6589fc7cdb634b0eea00b6426e7. Application source39363ee includes D-pad pointer/click/scroll/toolbar behavior, query retention, explicit Retry/renderer recovery and persistent error states. Build35983331379 passed6 actual Android WebView/local-HTML interaction tests,15 geometry assertions,29 preview assertions and9 contract rules. These are not physical-TV or live provider acceptance tests. Exact measurements remain in CODE33_REVIEW_EVIDENCE.json and release assets.
 
-At source39363ee:320 tracked files totaling2946318bytes; shared Git directory for a fresh checkout of all visible remote branches2353049bytes; source plus shared history5299367bytes. One code33 APK6094774bytes. Lean source+sharedGit+oneAPK total11394141bytes (11.394MB decimal). Source archive1228916bytes is an alternative compressed representation, not another amount to add. APK entries unpack to14992304bytes, not a measured installed-device footprint.
+The previous detailed handoff blob70a918b287188b5e592dc6046ef6690bdfe64f88 and source/release history preserve footprint, validation and provenance. Do not discard or reinterpret historical evidence as a current device query.
 
-Tracked Android sources619848bytes, web-player1016006bytes, telemetry81563bytes, tools592530bytes, public docs57863bytes. Two remote branches were present at measurement: canonical development and main. This is not a measurement of owner Mac storage. SDK, AVD images/userdata, Gradle/node dependencies, worktree contents, Downloads copies, private logs, Obsidian and release-history assets are excluded and require a native disjoint-path census with shared Git counted once.
+## Preservation and continuity
 
-An isolated Linux/Node22 idle web process used34344960 RSS bytes,47771648 after100 loopback health requests. No provider/stream requests ran. This small sample is not a streaming CPU-capacity benchmark or an owner-Mac memory measurement.
+Keep the working reviewed Android installation and canonical development source. No cleanup, local branch synchronization or new Obsidian write is claimed by this cloud handoff. The successful Obsidian readback above belongs to the owner's last opener run. Subsequent publication must append/read back its actual result through existing continuity, not overwrite newer local task state.
 
-## Native adoption, backup and cleanup gate
-
-Reuse the existing native GharTV task and writer lease. Freshly inspect installed version/source/signature before adopting33; preserve newer/dirty work. Use the original private signer and normal existing emulator or physicalTV; no debug-key replacement, uninstall, data clear or scrcpy substitute. Retain the current working candidate until new navigation/stream review succeeds.
-
-All user-work branches must be backed up individually with explicit local-head to remote-head parity, not merely one worktree or the main branch. Worktrees share repository history and contain separate working directories; pushing a branch does not save uncommitted/untracked files. Inspect all local refs/worktrees, safely publish authorized source commits without force, read back remote SHAs, and separately preserve safe uncommitted work before deletion. Never bulk-add credentials, private media, production databases or ignored secrets to this public repository. Remote branch enumeration alone does not prove local sync. No local branch parity was claimed or changed here.
-
-Coordinate cleanup with existing Operon/Fabric cleanup task, not a competing cleaner. Keep current working review and canonical development checkout. Retire only proven superseded regenerable artifacts after source/needed evidence preservation and replacement acceptance. Do not delete shared SDKs/AVD data, live DB volumes, keys, media, dirty/unpushed work or uncertain processes. No Git/Docker prune, force resets, blanket process kills or volume deletion. Actual Mac cleanup in this turn:0files,0bytes. No Obsidian write/readback occurred; this GitHub handoff is ready for the existing mirror but must not be labeled mirrored before acknowledgement.
-
-## Still incomplete
-
-Original signing/install and owner review of33; current normal-emulator/DNS state; private live diagnostics review; verified hosted browser-only provider integration; private authenticated ghartv analytics in existing AnalyticsPR61; complete owner voice/text-to-native execution round trip; local all-branch backup and measured cleanup. No paid deployment, production promotion, hosting purchase, native Tor or AI upscaling. Historical details remain in Git history and existing recovery documents; do not revive rejected scrcpy advice as the next review path.
+All local branches require independent remote SHA parity before cleanup; uncommitted/untracked/private data is not backed up by a branch push. No reset, clean, prune, force push, uninstall, data wipe, new signer, blind upload, bulk process kill or volume deletion. The requested release does not authorize removing the working candidate or exposing telemetry, passwords, private logs or screenshot contents.
