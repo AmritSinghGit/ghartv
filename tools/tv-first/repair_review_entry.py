@@ -21,12 +21,22 @@ s=s.replace('console.error(', 'console.log(')
 s=s.replace("    p=call(['/usr/bin/osascript','-l','JavaScript',script,json.dumps(targets)],75,False)","""    names=['Safari']
     for name in ('Brave Browser','Google Chrome'):
         if any((base/(name+'.app')).is_dir() for base in (Path('/Applications'),HOME/'Applications')):names.append(name)
-    try:p=call(['/usr/bin/osascript','-l','JavaScript',script,json.dumps(targets),json.dumps(names)],40,False)
+    print('macOS may ask to let Terminal control your browser. Allow it to reuse tabs; no security settings are changed automatically.',flush=True)
+    try:p=call(['/usr/bin/osascript','-l','JavaScript',script,json.dumps(targets),json.dumps(names)],75,False)
     except Hold:
         return {'status':'BROWSER_AUTOMATION_TIMED_OUT_NO_FALLBACK_TABS','results':[]}
     stages=[line for line in p.stderr.splitlines() if line.startswith('GHARTV_TAB_STAGE_')]
     error_numbers=re.findall(r'\\((-?[0-9]+)\\)',p.stderr)[-2:]
     atomic(RUN/'browser-stages.json',{'stages':stages,'exit_code':p.returncode,'error_numbers':error_numbers})""")
+if "R['normal_tv_after_browser']" not in s:
+    s=s.replace("            R['browser_tabs']=reuse_tabs(targets)\n            good=", """            R['browser_tabs']=reuse_tabs(targets)
+            if R.get('mac_window_observed'):
+                try:
+                    final_window=observe_window(z,transport)
+                    R['normal_tv_after_browser']=final_window.get('status','NOT_CONFIRMED')
+                    R['mac_window_frontmost']=final_window.get('app_active',False)
+                except Exception:R['normal_tv_after_browser']='ACTIVATION_NOT_CONFIRMED_EXISTING_WINDOW_PRESERVED'
+            good=""")
 a=s.index('def apk_identity(');b=s.index('\ndef prepare_signed(',a)
 s=s[:a]+'''def apk_identity(p,tools,env,expected_code=None):
     archive=artifact('GHARTV_CODE33_SOURCE.zip',ZIP_SHA)
