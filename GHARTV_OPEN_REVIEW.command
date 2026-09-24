@@ -71,7 +71,7 @@ def load_json(p):
 
 def environment():
     env={k:v for k,v in os.environ.items() if not k.startswith(('GHARTV_SIGNING_','_GHARTV_')) and k not in ('JAVA_TOOL_OPTIONS','JDK_JAVA_OPTIONS','_JAVA_OPTIONS','NODE_OPTIONS','PYTHONPATH','PYTHONSTARTUP')}
-    env.update(HOME=str(HOME),PATH='/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin',GH_PROMPT_DISABLED='1')
+    env.update(HOME=str(HOME),PATH=os.environ.get('PATH','')+':/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin',GH_PROMPT_DISABLED='1')
     return env
 
 def call(args,timeout=15,check=True,env=None):
