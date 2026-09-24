@@ -7,7 +7,11 @@ new="    var app;try{app=Application(names[n]);if(!app.running())continue;}catch
 if old in s:
     assert s.count(old)==1;s=s.replace(old,new)
 else:assert new in s
-s=s.replace("PATH='/opt/homebrew/bin:/usr/local/bin:/usr/bin:/usr/sbin:/sbin',GH_PROMPT_DISABLED", "PATH=os.environ.get('PATH','')+':/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin',GH_PROMPT_DISABLED")
+# Keep the already-working Node/NVM path; do not reinstall dependencies or Node.
+path_old="PATH='/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin',GH_PROMPT_DISABLED"
+path_new="PATH=os.environ.get('PATH','')+':/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin',GH_PROMPT_DISABLED"
+if path_old in s:s=s.replace(path_old,path_new)
+else:assert path_new in s
 s=s.replace("var targets=JSON.parse(argv[0]), names=['Safari','Brave Browser','Google Chrome'];", "var targets=JSON.parse(argv[0]), names=JSON.parse(argv[1] || '[\"Safari\"]');")
 if 'GHARTV_TAB_STAGE_INSPECT_' not in s:
     s=s.replace("  for(var n=0;n<names.length;n++){", "  for(var n=0;n<names.length;n++){\n    console.log('GHARTV_TAB_STAGE_INSPECT_'+names[n]);")
