@@ -6,10 +6,13 @@ on:
 permissions:
   contents: write
   actions: read
+concurrency:
+  group: ghartv-existing-review-entry
+  cancel-in-progress: false
 jobs:
   review_entry:
     runs-on: macos-14
-    timeout-minutes: 5
+    timeout-minutes: 4
     env:
       PYTHONDONTWRITEBYTECODE: '1'
       GH_TOKEN: ${{ github.token }}
@@ -17,64 +20,74 @@ jobs:
       - uses: actions/checkout@v5
         with:
           fetch-depth: 0
-      - name: Preserve exact tested signing mechanism and inspect native browser stage
+      - name: Retain actual signing evidence and the observed macOS consent boundary
         run: |
           mkdir -p /tmp/ghartv-entry-proof
-          gh run download 35988440720 --repo AmritSinghGit/ghartv --name ghartv-review-entry-proof --dir /tmp/ghartv-prior-entry
+          gh run download 35988834803 --repo AmritSinghGit/ghartv --name ghartv-review-entry-proof --dir /tmp/ghartv-prior-entry
           python3 tools/tv-first/repair_review_entry.py
           bash -n GHARTV_OPEN_REVIEW.command
-          cp GHARTV_OPEN_REVIEW.command /tmp/ghartv-entry-proof/
           python3 - <<'PY'
           from pathlib import Path
-          import ast,hashlib,http.server,json,threading,tempfile,types,subprocess,shutil
+          import ast,hashlib,json,types
           def embedded(path):return Path(path).read_text().split("<<'PY'\n",1)[1].rsplit('\nPY\n',1)[0]
           source=embedded('GHARTV_OPEN_REVIEW.command');prior=embedded('/tmp/ghartv-prior-entry/GHARTV_OPEN_REVIEW.command')
           def funcs(text):return {n.name:ast.dump(n,include_attributes=False) for n in ast.parse(text).body if isinstance(n,ast.FunctionDef)}
           a,b=funcs(source),funcs(prior)
-          for name in ('signing_values','signing_tools','prepare_signed','apk_identity','payload','artifact'):assert a[name]==b[name],name
-          sig=json.loads(Path('/tmp/ghartv-prior-entry/SIGNING_VALIDATION.json').read_text());assert sig['status']=='PASS';sig['reused_from_verified_run']=35988440720
+          for name in ('signing_values','signing_tools','prepare_signed','apk_identity','payload','artifact','web_review','android_review'):assert a[name]==b[name],name
+          sig=json.loads(Path('/tmp/ghartv-prior-entry/SIGNING_VALIDATION.json').read_text());assert sig['status']=='PASS'
           Path('/tmp/ghartv-entry-proof/SIGNING_VALIDATION.json').write_text(json.dumps(sig,indent=2))
-          m=types.ModuleType('browser_test');exec(compile(source,'entry','exec'),m.__dict__)
-          class H(http.server.BaseHTTPRequestHandler):
-            def do_GET(self):self.send_response(200);self.send_header('Content-Type','text/html');self.end_headers();self.wfile.write(b'<title>Local GharTV test</title>Local test')
-            def log_message(self,*args):pass
-          servers=[];out={'status':'FAIL','owner_browser':False,'provider_calls':0}
-          try:
-            for port in (8790,4371):
-              srv=http.server.ThreadingHTTPServer(('127.0.0.1',port),H);threading.Thread(target=srv.serve_forever,daemon=True).start();servers.append(srv)
-            with tempfile.TemporaryDirectory(prefix='ghartv-tabs-test-') as d:
-              m.RUN=Path(d).resolve();targets=[{'id':'viewer','url':'http://127.0.0.1:8790/'},{'id':'analytics','url':'http://127.0.0.1:4371/'}]
-              # Cloud test only: retain bounded stderr to locate Apple Event failures.
-              base=m.call
-              def observed(args,*pos,**kw):
-                if str(args[0])!='/usr/bin/osascript':return base(args,*pos,**kw)
-                try:
-                  p=subprocess.run(list(map(str,args)),stdin=subprocess.DEVNULL,capture_output=True,text=True,timeout=30,env=m.environment())
-                  out.setdefault('calls',[]).append({'exit':p.returncode,'stderr':p.stderr[-4000:]});return p
-                except subprocess.TimeoutExpired as e:
-                  out.setdefault('calls',[]).append({'timeout':True,'stderr':str(e.stderr or b'')[-4000:]});raise m.Hold('TEST_APPLE_EVENT_TIMEOUT')
-              m.call=observed
-              out['first']=m.reuse_tabs(targets);out['second']=m.reuse_tabs(targets)
-              if out['first'].get('status')=='BROWSER_TABS_RECONCILED' and out['second'].get('status')=='BROWSER_TABS_RECONCILED' and len(out['second'].get('results',[]))==2 and all(r['status']=='REUSED_EXISTING_TAB' for r in out['second']['results']):out['status']='PASS'
-          finally:
-            for srv in servers:srv.shutdown();srv.server_close()
-            Path('/tmp/ghartv-entry-proof/BROWSER_VALIDATION.json').write_text(json.dumps(out,indent=2));print(json.dumps(out))
-            if out['status']!='PASS':subprocess.run(['/usr/sbin/screencapture','-x','/tmp/ghartv-entry-proof/cloud-browser-state.png'],timeout=5,check=False)
-          assert out['status']=='PASS'
+          browser=json.loads(Path('/tmp/ghartv-prior-entry/BROWSER_VALIDATION.json').read_text());assert browser['status']=='FAIL'
+          # Native probe reached the normal macOS "control Safari" consent sheet.
+          # Its screenshot was inspected; no TCC modification or auto-approval.
+          browser['interpretation']='MACOS_AUTOMATION_CONSENT_REQUIRED_NATIVE_TAB_REUSE_NOT_VERIFIED'
+          browser['permission_bypassed']=False
+          Path('/tmp/ghartv-entry-proof/BROWSER_NATIVE_BOUNDARY.json').write_text(json.dumps(browser,indent=2))
+          m=types.ModuleType('entry');exec(compile(source,'entry','exec'),m.__dict__)
+          Path('/tmp/ghartv-entry-proof/browser.js').write_text(m.BROWSER_SCRIPT)
+          assert m.CODE==33 and m.CERT=='40a9d8bf6b1c557b3d6fd02acef075368dd13e28691f207a297202d0d5ec233c'
+          assert 'scrcpy' not in m.android_review.__code__.co_names
           PY
-      - name: Publish verified entry and immutable handoff
+          node --check /tmp/ghartv-entry-proof/browser.js
+      - name: Verify seven same-tab selection cases without bypassing native browser consent
+        run: |
+          cat > /tmp/ghartv-entry-proof/browser-model-test.cjs <<'JS'
+          const fs=require('fs'),vm=require('vm'),assert=require('assert');
+          const script=fs.readFileSync('/tmp/ghartv-entry-proof/browser.js','utf8');
+          function setup(initial,denied){
+           const apps={},actions=[];
+           function tab(url){const o={value:url};Object.defineProperty(o,'url',{get(){return ()=>o.value;},set(v){o.value=v;actions.push(['navigate',v]);}});return o;}
+           function win(urls){const ts=urls.map(tab);function tabs(){return ts;}tabs.push=v=>{ts.push(tab(v.url));actions.push(['tab',v.url]);};const w={tabs,index:1};Object.defineProperty(w,'currentTab',{get(){return w.ct||ts[0];},set(t){w.ct=t;}});return w;}
+           for(const name of ['Safari','Brave Browser','Google Chrome']){
+            let wins=(initial[name]||[]).map(win),running=name in initial;
+            apps[name]={running:()=>running,launch:()=>{running=true;},activate:()=>{},windows:()=>{if(name===denied)throw Error('denied');return wins;},Tab:o=>o,Document:()=>({make:()=>{const w=win(['about:blank']);wins.push(w);actions.push(['window']);return w;}})};
+           }
+           const ctx={Application:name=>apps[name],delay:()=>{},JSON,console:{log:()=>{}}};vm.createContext(ctx);vm.runInContext(script,ctx);
+           return {apps,actions,run:t=>JSON.parse(ctx.run([JSON.stringify(t),JSON.stringify(['Safari','Brave Browser','Google Chrome'])])),count:()=>Object.values(apps).reduce((n,a)=>n+(a.running()?a.windows().reduce((n,w)=>n+w.tabs().length,0):0),0)};
+          }
+          const t=[{id:'public',url:'https://amritsinghgit.github.io/ghartv/'},{id:'viewer',url:'http://127.0.0.1:8790/'},{id:'analytics',url:'http://127.0.0.1:4371/#/engineering'}];let tests=0;
+          let x=setup({Safari:[[t[0].url,'http://127.0.0.1:8790/flixmomo.html',t[2].url]]});let r=x.run(t);assert.equal(x.count(),3);assert(r.results.every(x=>x.status==='REUSED_EXISTING_TAB'));tests++;
+          x=setup({Safari:[['about:blank']]});x.run(t);assert.equal(x.count(),3);x.run(t);assert.equal(x.count(),3);tests++;
+          x=setup({Safari:[[t[0].url]],'Brave Browser':[[t[1].url,t[2].url]]});x.run(t);assert.equal(x.count(),3);assert(!x.actions.some(x=>x[0]==='tab'));tests++;
+          x=setup({Safari:[]});x.run(t);x.run(t);assert.equal(x.count(),3);assert.equal(x.actions.filter(x=>x[0]==='window').length,1);tests++;
+          x=setup({Safari:[[t[0].url,t[1].url,'http://127.0.0.1:8790/owner.html']]});x.run(t);assert.equal(x.count(),3);assert.equal(x.apps.Safari.windows()[0].tabs()[2].value,t[2].url);tests++;
+          x=setup({Safari:[[t[0].url]]},'Safari');assert.equal(x.run(t).status,'BROWSER_AUTOMATION_PERMISSION_NEEDED_NO_TABS_CREATED');assert.equal(x.actions.length,0);tests++;
+          x=setup({Safari:[['https://example.com']]});x.run([{id:'analytics',url:null}]);assert.equal(x.count(),1);assert.equal(x.actions.length,0);tests++;
+          fs.writeFileSync('/tmp/ghartv-entry-proof/BROWSER_MODEL_VALIDATION.json',JSON.stringify({status:'PASS',tests,native_browser:false,native_permission:'REQUIRED_NOT_BYPASSED'},null,2));console.log('BROWSER_MODEL_TESTS='+tests+'_PASS');
+          JS
+          node /tmp/ghartv-entry-proof/browser-model-test.cjs
+      - name: Publish existing opener with exact scope, not a claim of native owner execution
         run: |
           set -euo pipefail
           test "$(git ls-remote origin refs/heads/codex/ghartv-remove-auto-preview | cut -f1)" = "$GITHUB_SHA"
           git config user.name 'GharTV review-entry validation'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git add GHARTV_OPEN_REVIEW.command
-          if ! git diff --cached --quiet; then git commit -m 'fix(review): original-key signing and native tab reuse verified';git push origin HEAD:refs/heads/codex/ghartv-remove-auto-preview;fi
+          if ! git diff --cached --quiet; then git commit -m 'fix(review): sign code33 and reuse existing review surfaces with normal consent';git push origin HEAD:refs/heads/codex/ghartv-remove-auto-preview;fi
           python3 - <<'PY'
           from pathlib import Path
           import hashlib,json,subprocess
           p=Path('GHARTV_OPEN_REVIEW.command');out=Path('/tmp/ghartv-entry-proof');(out/p.name).write_bytes(p.read_bytes())
-          data={'schema':'ghartv.review-entry-validation.v1','source':subprocess.check_output(['git','rev-parse','HEAD'],text=True).strip(),'entry_sha256':hashlib.sha256(p.read_bytes()).hexdigest(),'apk_source_unchanged':'39363ee529e9f8f3c00dcab8fdd69b88aa5e175c','native_mac_signing_fixture':'PASS_UNCHANGED_MECHANISM_REUSED','native_safari_reuse':'PASS','owner_mac_execution':False,'owner_analytics_authenticated':False,'household_feed_changed':False}
+          data={'schema':'ghartv.review-entry-validation.v1','source':subprocess.check_output(['git','rev-parse','HEAD'],text=True).strip(),'entry_sha256':hashlib.sha256(p.read_bytes()).hexdigest(),'apk_source_unchanged':'39363ee529e9f8f3c00dcab8fdd69b88aa5e175c','native_mac_signing_fixture':'PASS_UNCHANGED_MECHANISM_REUSED_FROM_35988440720','tab_selection_model_tests':7,'native_safari_reuse':'NOT_VERIFIED_MACOS_AUTOMATION_CONSENT_REQUIRED','permission_bypass':False,'owner_mac_execution':False,'owner_analytics_authenticated':False,'household_feed_changed':False}
           (out/'VALIDATION.json').write_text(json.dumps(data,indent=2));print(json.dumps(data))
           PY
       - uses: actions/upload-artifact@v4
