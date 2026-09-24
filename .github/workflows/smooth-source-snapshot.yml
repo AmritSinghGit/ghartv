@@ -23,20 +23,11 @@ jobs:
         with:
           packages: 'build-tools;36.0.0'
           log-accepted-android-sdk-licenses: false
-      - name: Preserve browser-optional behavior before the exact test
+      - name: Reuse existing cryptographic verifier and optional browsers
         run: |
-          python3 - <<'PY'
-          from pathlib import Path
-          p=Path('GHARTV_OPEN_REVIEW.command');s=p.read_text()
-          old="    var app=Application(names[n]);if(!app.running())continue;running.push(names[n]);"
-          new="    var app;try{app=Application(names[n]);if(!app.running())continue;}catch(uninstalled){continue;}running.push(names[n]);"
-          if old in s:
-            assert s.count(old)==1;s=s.replace(old,new);p.write_text(s)
-          else:assert new in s
-          compile(s.split("<<'PY'\n",1)[1].rsplit('\nPY\n',1)[0],'GHARTV_OPEN_REVIEW.command','exec')
-          PY
+          python3 tools/tv-first/repair_review_entry.py
           bash -n GHARTV_OPEN_REVIEW.command
-      - name: Exercise actual APK signing and verify repeat-run cache with a disposable key
+      - name: Exercise actual APK signing and repeat-run cache using disposable identity only
         run: |
           mkdir -p /tmp/ghartv-entry-proof
           curl --proto '=https' --proto-redir '=https' -fLsS --connect-timeout 15 --max-time 90 https://github.com/AmritSinghGit/ghartv/releases/download/v0.6.0-rc10.6-remote-cursor/GharTV-code33-review-unsigned.apk -o /tmp/ghartv-code33.apk
@@ -61,7 +52,7 @@ jobs:
             m.CERT='0'*64
             try:m.apk_identity(first,tools,signenv,33);raise AssertionError('wrong certificate accepted')
             except m.Hold as e:assert str(e)=='ORIGINAL_CERTIFICATE_MISMATCH_NO_INSTALL'
-          out={'status':'PASS','actual_macos':True,'actual_apksigner_and_zipalign':True,'actual_code33_unsigned_payload':True,'signed_payload_preserved':True,'wrong_certificate_rejected':True,'repeat_without_config_reused_signed_bytes':True,'signer':'DISPOSABLE_CI_KEY_NOT_OWNER_KEY','owner_mac_execution':False,'owner_key_accessed':False,'fixture_key_or_signed_apk_uploaded':False}
+          out={'status':'PASS','actual_macos':True,'actual_apksigner_and_zipalign':True,'verification':'EXISTING_ANDROID_APKSIG_LIBRARY','actual_code33_unsigned_payload':True,'signed_payload_preserved':True,'wrong_certificate_rejected':True,'repeat_without_config_reused_signed_bytes':True,'signer':'DISPOSABLE_CI_KEY_NOT_OWNER_KEY','owner_mac_execution':False,'owner_key_accessed':False,'fixture_key_or_signed_apk_uploaded':False}
           Path('/tmp/ghartv-entry-proof/SIGNING_VALIDATION.json').write_text(json.dumps(out,indent=2)+'\n');print(json.dumps(out))
           PY
       - name: Exercise actual Safari tab create and reuse with only local test pages
@@ -94,7 +85,7 @@ jobs:
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git add GHARTV_OPEN_REVIEW.command
           if ! git diff --cached --quiet; then
-            git commit -m 'fix(review-entry): skip uninstalled browsers without spawning duplicate tabs'
+            git commit -m 'fix(review-entry): use actual signature library and reuse native Safari tabs'
             git push origin HEAD:refs/heads/codex/ghartv-remove-auto-preview
           fi
           python3 - <<'PY'
