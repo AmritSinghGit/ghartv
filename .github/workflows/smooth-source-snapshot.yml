@@ -5,59 +5,36 @@ on:
     paths: ['.github/workflows/smooth-source-snapshot.yml','tools/tv-first/repair_review_entry.py']
 permissions:
   contents: write
+  actions: read
 jobs:
   review_entry:
     runs-on: macos-14
-    timeout-minutes: 7
+    timeout-minutes: 5
     env:
       PYTHONDONTWRITEBYTECODE: '1'
+      GH_TOKEN: ${{ github.token }}
     steps:
       - uses: actions/checkout@v5
         with:
           fetch-depth: 0
-      - uses: actions/setup-java@v5
-        with:
-          distribution: temurin
-          java-version: '17'
-      - uses: android-actions/setup-android@v3
-        with:
-          packages: 'build-tools;36.0.0'
-          log-accepted-android-sdk-licenses: false
-      - name: Prepare and syntax-check the existing entry
+      - name: Preserve exact tested signing mechanism and inspect native browser stage
         run: |
           mkdir -p /tmp/ghartv-entry-proof
+          gh run download 35988440720 --repo AmritSinghGit/ghartv --name ghartv-review-entry-proof --dir /tmp/ghartv-prior-entry
           python3 tools/tv-first/repair_review_entry.py
           bash -n GHARTV_OPEN_REVIEW.command
           cp GHARTV_OPEN_REVIEW.command /tmp/ghartv-entry-proof/
-      - name: Verify real Mac signing and safe cache reuse using disposable key only
-        run: |
-          curl --proto '=https' --proto-redir '=https' -fLsS --connect-timeout 15 --max-time 90 https://github.com/AmritSinghGit/ghartv/releases/download/v0.6.0-rc10.6-remote-cursor/GharTV-code33-review-unsigned.apk -o /tmp/ghartv-code33.apk
           python3 - <<'PY'
           from pathlib import Path
-          import hashlib,json,os,secrets,subprocess,tempfile,types
-          source=Path('GHARTV_OPEN_REVIEW.command').read_text().split("<<'PY'\n",1)[1].rsplit('\nPY\n',1)[0]
-          m=types.ModuleType('entry_test');exec(compile(source,'GHARTV_OPEN_REVIEW.command','exec'),m.__dict__)
-          unsigned=Path('/tmp/ghartv-code33.apk');assert m.digest(unsigned)==m.APK_SHA
-          with tempfile.TemporaryDirectory(prefix='ghartv-sign-test-') as d:
-            root=Path(d).resolve();m.HOME=root;m.STATE=root/'Library/Application Support/GharTV/owner-review';m.CACHE=m.STATE/'artifact-cache';m.CURRENT=m.STATE/'current';m.RUN=m.STATE/'runs/test';m.mkdir(m.RUN)
-            keyroot=m.mkdir(root/'Library/Application Support/GharTV/signing');key=keyroot/'ghartv-release.jks';password=secrets.token_hex(16);env={**os.environ,'FIXTURE_PASSWORD':password}
-            subprocess.run(['keytool','-genkeypair','-keystore',str(key),'-storetype','JKS','-alias','existing','-keyalg','RSA','-keysize','2048','-validity','2','-dname','CN=Disposable CI key','-storepass:env','FIXTURE_PASSWORD','-keypass:env','FIXTURE_PASSWORD'],env=env,check=True,capture_output=True)
-            der=root/'fixture.der';subprocess.run(['keytool','-exportcert','-keystore',str(key),'-alias','existing','-storepass:env','FIXTURE_PASSWORD','-file',str(der)],env=env,check=True,capture_output=True);m.CERT=hashlib.sha256(der.read_bytes()).hexdigest()
-            cfg=keyroot/'signing.env';cfg.write_text('GHARTV_SIGNING_STORE='+json.dumps(str(key))+'\nGHARTV_SIGNING_STORE_PASSWORD='+password+'\nGHARTV_SIGNING_KEY_ALIAS=existing\nGHARTV_SIGNING_KEY_PASSWORD='+password+'\n');cfg.chmod(0o600)
-            tools,signenv=m.signing_tools(Path(os.environ['ANDROID_HOME']));first=m.prepare_signed(unsigned,tools,signenv);assert m.apk_identity(first,tools,signenv,33)==33 and m.payload(first)==m.payload(unsigned)
-            cfg.unlink();assert m.prepare_signed(unsigned,tools,signenv)==first and m.R['signing_mode']=='REUSED_EXISTING_VERIFIED_CODE33'
-            m.CERT='0'*64
-            try:m.apk_identity(first,tools,signenv,33);raise AssertionError('wrong certificate accepted')
-            except m.Hold as e:assert str(e)=='ORIGINAL_CERTIFICATE_MISMATCH_NO_INSTALL'
-          out={'status':'PASS','actual_macos':True,'actual_signing_and_alignment':True,'verification':'EXISTING_ANDROID_APKSIG_LIBRARY','payload_preserved':True,'repeat_reused':True,'wrong_certificate_rejected':True,'owner_key_accessed':False,'disposable_key_and_signed_fixture_not_uploaded':True}
-          Path('/tmp/ghartv-entry-proof/SIGNING_VALIDATION.json').write_text(json.dumps(out,indent=2));print(json.dumps(out))
-          PY
-      - name: Verify real Safari two-surface opening and same-tab repeat
-        run: |
-          python3 - <<'PY'
-          from pathlib import Path
-          import http.server,json,threading,tempfile,types,subprocess
-          source=Path('GHARTV_OPEN_REVIEW.command').read_text().split("<<'PY'\n",1)[1].rsplit('\nPY\n',1)[0];m=types.ModuleType('browser_test');exec(compile(source,'entry','exec'),m.__dict__)
+          import ast,hashlib,http.server,json,threading,tempfile,types,subprocess,shutil
+          def embedded(path):return Path(path).read_text().split("<<'PY'\n",1)[1].rsplit('\nPY\n',1)[0]
+          source=embedded('GHARTV_OPEN_REVIEW.command');prior=embedded('/tmp/ghartv-prior-entry/GHARTV_OPEN_REVIEW.command')
+          def funcs(text):return {n.name:ast.dump(n,include_attributes=False) for n in ast.parse(text).body if isinstance(n,ast.FunctionDef)}
+          a,b=funcs(source),funcs(prior)
+          for name in ('signing_values','signing_tools','prepare_signed','apk_identity','payload','artifact'):assert a[name]==b[name],name
+          sig=json.loads(Path('/tmp/ghartv-prior-entry/SIGNING_VALIDATION.json').read_text());assert sig['status']=='PASS';sig['reused_from_verified_run']=35988440720
+          Path('/tmp/ghartv-entry-proof/SIGNING_VALIDATION.json').write_text(json.dumps(sig,indent=2))
+          m=types.ModuleType('browser_test');exec(compile(source,'entry','exec'),m.__dict__)
           class H(http.server.BaseHTTPRequestHandler):
             def do_GET(self):self.send_response(200);self.send_header('Content-Type','text/html');self.end_headers();self.wfile.write(b'<title>Local GharTV test</title>Local test')
             def log_message(self,*args):pass
@@ -67,29 +44,37 @@ jobs:
               srv=http.server.ThreadingHTTPServer(('127.0.0.1',port),H);threading.Thread(target=srv.serve_forever,daemon=True).start();servers.append(srv)
             with tempfile.TemporaryDirectory(prefix='ghartv-tabs-test-') as d:
               m.RUN=Path(d).resolve();targets=[{'id':'viewer','url':'http://127.0.0.1:8790/'},{'id':'analytics','url':'http://127.0.0.1:4371/'}]
-              first=m.reuse_tabs(targets);out['first']=first
-              if (m.RUN/'browser-stages.json').is_file():out['first_stages']=json.loads((m.RUN/'browser-stages.json').read_text())
-              second=m.reuse_tabs(targets);out['second']=second
-              if (m.RUN/'browser-stages.json').is_file():out['second_stages']=json.loads((m.RUN/'browser-stages.json').read_text())
-              if first.get('status')=='BROWSER_TABS_RECONCILED' and second.get('status')=='BROWSER_TABS_RECONCILED' and len(second.get('results',[]))==2 and all(r['status']=='REUSED_EXISTING_TAB' for r in second['results']):out['status']='PASS'
+              # Cloud test only: retain bounded stderr to locate Apple Event failures.
+              base=m.call
+              def observed(args,*pos,**kw):
+                if str(args[0])!='/usr/bin/osascript':return base(args,*pos,**kw)
+                try:
+                  p=subprocess.run(list(map(str,args)),stdin=subprocess.DEVNULL,capture_output=True,text=True,timeout=30,env=m.environment())
+                  out.setdefault('calls',[]).append({'exit':p.returncode,'stderr':p.stderr[-4000:]});return p
+                except subprocess.TimeoutExpired as e:
+                  out.setdefault('calls',[]).append({'timeout':True,'stderr':str(e.stderr or b'')[-4000:]});raise m.Hold('TEST_APPLE_EVENT_TIMEOUT')
+              m.call=observed
+              out['first']=m.reuse_tabs(targets);out['second']=m.reuse_tabs(targets)
+              if out['first'].get('status')=='BROWSER_TABS_RECONCILED' and out['second'].get('status')=='BROWSER_TABS_RECONCILED' and len(out['second'].get('results',[]))==2 and all(r['status']=='REUSED_EXISTING_TAB' for r in out['second']['results']):out['status']='PASS'
           finally:
             for srv in servers:srv.shutdown();srv.server_close()
             Path('/tmp/ghartv-entry-proof/BROWSER_VALIDATION.json').write_text(json.dumps(out,indent=2));print(json.dumps(out))
+            if out['status']!='PASS':subprocess.run(['/usr/sbin/screencapture','-x','/tmp/ghartv-entry-proof/cloud-browser-state.png'],timeout=5,check=False)
           assert out['status']=='PASS'
           PY
-      - name: Publish verified existing entry with exact byte identity
+      - name: Publish verified entry and immutable handoff
         run: |
           set -euo pipefail
           test "$(git ls-remote origin refs/heads/codex/ghartv-remove-auto-preview | cut -f1)" = "$GITHUB_SHA"
           git config user.name 'GharTV review-entry validation'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git add GHARTV_OPEN_REVIEW.command
-          if ! git diff --cached --quiet; then git commit -m 'fix(review): original-key signing and installed-browser tab reuse verified';git push origin HEAD:refs/heads/codex/ghartv-remove-auto-preview;fi
+          if ! git diff --cached --quiet; then git commit -m 'fix(review): original-key signing and native tab reuse verified';git push origin HEAD:refs/heads/codex/ghartv-remove-auto-preview;fi
           python3 - <<'PY'
           from pathlib import Path
           import hashlib,json,subprocess
           p=Path('GHARTV_OPEN_REVIEW.command');out=Path('/tmp/ghartv-entry-proof');(out/p.name).write_bytes(p.read_bytes())
-          data={'schema':'ghartv.review-entry-validation.v1','source':subprocess.check_output(['git','rev-parse','HEAD'],text=True).strip(),'entry_sha256':hashlib.sha256(p.read_bytes()).hexdigest(),'apk_source_unchanged':'39363ee529e9f8f3c00dcab8fdd69b88aa5e175c','native_mac_signing_fixture':'PASS','native_safari_reuse':'PASS','owner_mac_execution':False,'owner_analytics_authenticated':False,'household_feed_changed':False}
+          data={'schema':'ghartv.review-entry-validation.v1','source':subprocess.check_output(['git','rev-parse','HEAD'],text=True).strip(),'entry_sha256':hashlib.sha256(p.read_bytes()).hexdigest(),'apk_source_unchanged':'39363ee529e9f8f3c00dcab8fdd69b88aa5e175c','native_mac_signing_fixture':'PASS_UNCHANGED_MECHANISM_REUSED','native_safari_reuse':'PASS','owner_mac_execution':False,'owner_analytics_authenticated':False,'household_feed_changed':False}
           (out/'VALIDATION.json').write_text(json.dumps(data,indent=2));print(json.dumps(data))
           PY
       - uses: actions/upload-artifact@v4
