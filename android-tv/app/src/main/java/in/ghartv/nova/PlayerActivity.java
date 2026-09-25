@@ -1180,7 +1180,16 @@ public final class PlayerActivity extends Activity implements ChannelNavigator.L
     }
 
     @Override public void onUserInteraction(){super.onUserInteraction();if(comfort!=null)comfort.touch();}
+    @Override protected void onActivityResult(int request,int result,Intent data){
+        super.onActivityResult(request,result,data);
+        if(request==UnifiedSearch.VOICE){String q=UnifiedSearch.voiceText(request,result,data);if(!q.isEmpty())UnifiedSearch.open(this,q);}
+    }
+
     @Override public boolean dispatchKeyEvent(KeyEvent event) {
+        if(event.getAction()==KeyEvent.ACTION_DOWN&&event.getRepeatCount()==0){
+            if(event.getKeyCode()==KeyEvent.KEYCODE_SEARCH){UnifiedSearch.dialog(this);return true;}
+            if(event.getKeyCode()==KeyEvent.KEYCODE_VOICE_ASSIST){UnifiedSearch.voice(this);return true;}
+        }
         if(event.isCtrlPressed()||event.isAltPressed()||event.isMetaPressed())return super.dispatchKeyEvent(event);
         if(event.getAction()==KeyEvent.ACTION_DOWN){
             if(comfort!=null&&comfort.resting())return super.dispatchKeyEvent(event);

@@ -1,0 +1,17 @@
+{
+  "schema": "ghartv.release-decision.v1",
+  "owner_decision": "PUBLIC_RELEASE_HOLD",
+  "effective_date": "2026-09-25",
+  "supersedes_immediate_code33_publication": true,
+  "review_code": 37,
+  "public_feed_write": false,
+  "marketing_ready": false,
+  "tor_in_this_build": false,
+  "required_before_public_release": [
+    "owner end-to-end acceptance on actual TV",
+    "provider/rights and branding review",
+    "monitored privacy/rights contact and procedure",
+    "verified signed distribution and rollback",
+    "diagnostics consent and tenant isolation review"
+  ]
+}

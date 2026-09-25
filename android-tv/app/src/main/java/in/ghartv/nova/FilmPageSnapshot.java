@@ -44,7 +44,11 @@ final class FilmPageSnapshot {
           const img=a.querySelector('img'),h=a.querySelector('h1,h2,h3,h4');
           const label=clean(h?.textContent||a.getAttribute('title')||a.getAttribute('aria-label')||img?.alt||a.innerText);
           if(label.length<2||label.length>180)return;
-          seen.add(u.href);results.push({title:label,url:u.href});
+          let image='';
+          try {const v=new URL(img?.currentSrc||img?.src||'',here);if(v.protocol==='https:'&&!v.username&&!v.password&&!v.port&&(permitted(v)||v.hostname==='image.tmdb.org'))image=v.href;}catch(e){}
+          const card=a.closest('article')||a.parentElement;
+          const metadata=clean(a.innerText||card?.innerText||'').slice(0,180);
+          seen.add(u.href);results.push({title:label,url:u.href,image,metadata});
         });
         const offered=players().map((p,i)=>({index:i,label:p.label,selected:p.selected}));
         const media=Array.from(document.querySelectorAll('video')).filter(visible);

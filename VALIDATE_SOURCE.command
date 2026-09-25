@@ -8,7 +8,7 @@ root=Path(sys.argv[1]).resolve(); app=root/'android-tv/app'; java=app/'src/main/
 required=[
  'MainActivity.java','PlayerActivity.java','Channel.java','ChannelRepository.java','ChannelIndex.java',
  'WatchHistoryStore.java','Telemetry.java','UpdateManager.java','JioApiClient.java','Program.java',
- 'HeroPreviewController.java','MovieHubActivity.java','PictureShape.java','RemoteControl.java'
+ 'HeroPreviewController.java','PictureShape.java','RemoteControl.java'
 ]
 missing=[name for name in required if not (java/name).is_file()]
 if missing: raise SystemExit('Missing required source: '+', '.join(missing))

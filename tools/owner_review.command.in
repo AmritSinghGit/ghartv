@@ -561,7 +561,7 @@ def review():
     activities=call([adb,'-s',serial,'shell','dumpsys','activity','activities'],check=False).stdout
     lines=[line for line in activities.splitlines() if ('topResumedActivity' in line or 'mResumedActivity' in line) and PACKAGE+'/' in line]
     if pid and lines:
-     match=re.search(r'in\.ghartv\.nova/(?:in\.ghartv\.nova\.)?\.?(MainActivity|LoginActivity|PlayerActivity|MovieHubActivity|SplashActivity)',lines[0])
+     match=re.search(r'in\.ghartv\.nova/(?:in\.ghartv\.nova\.)?\.?(MainActivity|LoginActivity|PlayerActivity|SplashActivity)',lines[0])
      r['review_screen']=match.group(1) if match else 'GHARTV_FOREGROUND';foreground=True;break
    if not foreground:raise Stop('RC10_INSTALLED_FOREGROUND_NOT_CONFIRMED: launch did not settle in GharTV; installed identity retained in this receipt')
    c.chmod(0o600);os.replace(c,target)

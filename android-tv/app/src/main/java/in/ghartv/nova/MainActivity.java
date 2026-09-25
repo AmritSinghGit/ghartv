@@ -161,6 +161,7 @@ public final class MainActivity extends Activity implements ChannelNavigator.Lis
 
     @Override protected void onActivityResult(int requestCode, int resultCode, Intent data) {
         super.onActivityResult(requestCode, resultCode, data);
+        if(requestCode==UnifiedSearch.VOICE){String q=UnifiedSearch.voiceText(requestCode,resultCode,data);if(!q.isEmpty()){searchQuery=q;UnifiedSearch.open(this,q);}return;}
         if (FamilyTheme.handlePhotoResult(this, requestCode, resultCode, data)) recreate();
     }
 
@@ -235,15 +236,15 @@ public final class MainActivity extends Activity implements ChannelNavigator.Lis
         Button search = actionButton("Find");
         search.setOnClickListener(view -> showSearch());
         header.addView(search, headerButtonParams());
+        Button voice = actionButton("Voice");
+        voice.setOnClickListener(view -> UnifiedSearch.voice(this));
+        header.addView(voice, headerButtonParams());
 
         Button refresh = actionButton("Update guide");
         refresh.setOnClickListener(view -> refreshCatalogue(true));
         header.addView(refresh, headerButtonParams());
 
-        Button movies = actionButton("Punjabi +");
-        movies.setOnClickListener(view -> startActivity(new Intent(this, MovieHubActivity.class)));
-        header.addView(movies, headerButtonParams());
-        Button films = actionButton("FlixMomo");
+        Button films = actionButton("Discover");
         films.setOnClickListener(view -> startActivity(new Intent(this, FlixMomoActivity.class)));
         LinearLayout.LayoutParams filmParams = new LinearLayout.LayoutParams(TvUi.dp(this, 94), TvUi.dp(this, 40));
         filmParams.leftMargin = TvUi.dp(this, 6);
@@ -712,16 +713,18 @@ public final class MainActivity extends Activity implements ChannelNavigator.Lis
         EditText input = new EditText(this);
         input.setSingleLine(true);
         input.setText(searchQuery);
-        input.setHint("Channel name, number, language, or category");
+        input.setHint("Live channel, film or series");
         input.setInputType(InputType.TYPE_CLASS_TEXT);
         input.setSelectAllOnFocus(true);
         new AlertDialog.Builder(this)
-                .setTitle("Find a live channel")
+                .setTitle("Search GharTV · live + films")
+                .setMessage("Search the cached live guide and FlixMomo. Your film query goes to the provider.")
                 .setView(input)
                 .setPositiveButton("Search", (dialog, which) -> {
                     searchQuery = input.getText().toString().trim();
                     Telemetry.event(this, "guide_search", Telemetry.data("active", !searchQuery.isEmpty()));
                     renderGuide(true);
+                    if(UnifiedSearch.valid(searchQuery)) UnifiedSearch.open(this,searchQuery);
                 })
                 .setNeutralButton("Clear", (dialog, which) -> {
                     searchQuery = "";
@@ -835,6 +838,9 @@ public final class MainActivity extends Activity implements ChannelNavigator.Lis
                 return true;
             case KeyEvent.KEYCODE_CHANNEL_DOWN:
                 changeChannel(-1);
+                return true;
+            case KeyEvent.KEYCODE_VOICE_ASSIST:
+                UnifiedSearch.voice(this);
                 return true;
             case KeyEvent.KEYCODE_SEARCH:
                 showSearch();

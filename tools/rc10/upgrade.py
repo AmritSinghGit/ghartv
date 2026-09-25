@@ -12,7 +12,6 @@ def once(s,old,new):
  if s.count(old)!=1:raise RuntimeError('ANCHOR_CHANGED: '+old[:100])
  return s.replace(old,new)
 edit('android-tv/app/build.gradle.kts',lambda s:once(once(s,'versionCode = 26','versionCode = 27'),'0.6.0-rc9-tv-first','0.6.0-rc10-web-films'))
-edit('android-tv/app/src/main/AndroidManifest.xml',lambda s:once(s,'<activity\n            android:name=".MovieHubActivity"','<activity android:name=".FlixMomoActivity" android:exported="false" android:screenOrientation="landscape" />\n        <activity\n            android:name=".MovieHubActivity"'))
 edit('android-tv/app/src/main/java/in/ghartv/nova/MainActivity.java',lambda s:once(s,'header.addView(movies, headerButtonParams());','''header.addView(movies, headerButtonParams());
         Button films = actionButton("FlixMomo");
         films.setOnClickListener(view -> startActivity(new Intent(this, FlixMomoActivity.class)));

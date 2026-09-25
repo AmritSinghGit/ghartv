@@ -34,10 +34,16 @@ import java.io.ByteArrayInputStream;
  * No result replacement, stream extraction, security weakening or private-log upload. */
 public final class FlixMomoActivity extends Activity {
     private static final String HOME="https://flixmomo.app/";
-    private static final int VOICE_REQUEST=410;
+    
     private WebView browser;
     private RemoteWebCursor cursor;
     private FilmNativeControls nativeControls;
+    private FilmHomeView homePanel;
+    private boolean homeRequested=true;
+    private android.widget.HorizontalScrollView liveResults;
+    private LinearLayout liveRow;
+    private final java.util.concurrent.ExecutorService liveExecutor=java.util.concurrent.Executors.newSingleThreadExecutor();
+    private int liveGeneration;
     private EditText query;
     private TextView status,help;
     private Button pageButton,modeButton,scrollButton,retryButton;
@@ -48,26 +54,29 @@ public final class FlixMomoActivity extends Activity {
     private boolean mainFrameError,pageReady,loading;
     private String lastRequested=HOME;
     private final Handler handler=new Handler(Looper.getMainLooper());
-    private final Runnable slowLoad=()->{if(loading&&!mainFrameError)status.setText("Still connecting. Retry is available; playback is not verified.");};
+    private final Runnable slowLoad=()->{if(loading&&!mainFrameError){status.setText("Still connecting. Retry is available; playback is not verified.");if(homeRequested&&homePanel!=null)homePanel.unavailable("The provider is taking longer than expected.");}};
 
     @Override public void onCreate(Bundle saved){
         super.onCreate(saved);getWindow().getDecorView().setSystemUiVisibility(5894);
         LinearLayout root=new LinearLayout(this);root.setOrientation(LinearLayout.VERTICAL);root.setBackgroundColor(TvUi.BG);
         root.setPadding(TvUi.dp(this,18),TvUi.dp(this,10),TvUi.dp(this,18),TvUi.dp(this,10));
         chrome=new LinearLayout(this);chrome.setOrientation(LinearLayout.VERTICAL);
-        chrome.addView(TvUi.label(this,"GharTV / FlixMomo · Review "+BuildConfig.VERSION_CODE,18,TvUi.TEXT,true));
+        chrome.addView(TvUi.label(this,"GharTV Discover · Review "+BuildConfig.VERSION_CODE,18,TvUi.TEXT,true));
         LinearLayout row=new LinearLayout(this);
         query=new EditText(this);query.setSingleLine(true);query.setTextColor(TvUi.TEXT);query.setHintTextColor(TvUi.MUTED);
-        query.setHint("Find a film or series");query.setImeOptions(android.view.inputmethod.EditorInfo.IME_ACTION_SEARCH);
+        query.setHint("Live channel, film or series");query.setImeOptions(android.view.inputmethod.EditorInfo.IME_ACTION_SEARCH);
         row.addView(query,new LinearLayout.LayoutParams(0,TvUi.dp(this,48),1));
-        Button search=TvUi.button(this,"Search",true),voice=TvUi.button(this,"Voice",false),browse=TvUi.button(this,"Browse",false),guide=TvUi.button(this,"TV guide",false);
+        Button search=TvUi.button(this,"Search",true),voice=TvUi.button(this,"Voice",false),browse=TvUi.button(this,"Discover",false),guide=TvUi.button(this,"TV guide",false);
         row.addView(search);row.addView(voice);row.addView(browse);row.addView(guide);chrome.addView(row);
         LinearLayout navigation=new LinearLayout(this);
         pageButton=TvUi.button(this,"Use page",true);modeButton=TvUi.button(this,"Cursor: off",false);scrollButton=TvUi.button(this,"Scroll: off",false);retryButton=TvUi.button(this,"Retry",false);
         navigation.addView(pageButton);navigation.addView(modeButton);navigation.addView(scrollButton);navigation.addView(retryButton);chrome.addView(navigation);
         help=TvUi.label(this,"Original posters · arrows browse · OK opens · Menu shows controls · Cursor is optional",12,TvUi.MUTED,false);chrome.addView(help);
         status=TvUi.label(this,"Provider pages stay in GharTV · direct connection",12,TvUi.MUTED,false);chrome.addView(status);
-        root.addView(chrome);stage=new FrameLayout(this);root.addView(stage,new LinearLayout.LayoutParams(-1,0,1));setContentView(root);
+        root.addView(chrome);
+        liveResults=new android.widget.HorizontalScrollView(this);liveResults.setHorizontalScrollBarEnabled(false);liveResults.setVisibility(View.GONE);
+        liveRow=new LinearLayout(this);liveResults.addView(liveRow);root.addView(liveResults,new LinearLayout.LayoutParams(-1,TvUi.dp(this,48)));
+        stage=new FrameLayout(this);root.addView(stage,new LinearLayout.LayoutParams(-1,0,1));setContentView(root);
         cursor=new RemoteWebCursor(this);stage.addView(cursor,new FrameLayout.LayoutParams(-1,-1));cursor.enable(false);
         nativeControls=new FilmNativeControls(this,stage,chrome,new FilmNativeControls.Host(){
             public void navigate(String url){FlixMomoActivity.this.navigate(url,false);}
@@ -75,16 +84,34 @@ public final class FlixMomoActivity extends Activity {
             public void nativeMode(){cursor.enable(false);modeButton.setText("Cursor: off");}
             public void navigationHint(String text){help.setText(text);}
             public void searchToolbar(){toolbar();query.requestFocus();}
+            public void pageObserved(org.json.JSONObject data){if(homeRequested&&homePanel!=null)homePanel.render(data);else if(!data.optBoolean("search"))liveResults.setVisibility(View.GONE);}
+            public void pageAction(String action){nativeControls.pageAction(action);}
+            public void verificationRequired(){if(homeRequested&&homePanel!=null)homePanel.unavailable("Provider verification is required.");else toolbar();}
         });
+        homePanel=new FilmHomeView(this,new FilmHomeView.Host(){
+            public void open(String url){homeRequested=false;homePanel.setVisibility(View.GONE);liveResults.setVisibility(View.GONE);navigate(url,true);}
+            public void refresh(){showHome(true);}
+            public void provider(){homeRequested=false;homePanel.setVisibility(View.GONE);usePage();}
+            public void privacy(){ReviewNotice.show(FlixMomoActivity.this,()->{
+                if(browser!=null){browser.stopLoading();browser.loadUrl("about:blank");browser.clearCache(true);browser.clearHistory();browser.clearFormData();}
+                com.bumptech.glide.Glide.get(FlixMomoActivity.this).clearMemory();
+                nativeControls.failure();homeRequested=true;liveGeneration++;liveResults.setVisibility(View.GONE);homePanel.discardSuggestions();homePanel.setVisibility(View.VISIBLE);homePanel.bringToFront();chrome.setVisibility(View.VISIBLE);
+                homePanel.unavailable("Film site data cleared. Suggestions will reload only when you choose Refresh.");
+            });}
+        });
+        stage.addView(homePanel,new FrameLayout.LayoutParams(-1,-1));
         query.setOnFocusChangeListener((v,focused)->{if(focused)cursor.leave();});
-        search.setOnClickListener(v->search());voice.setOnClickListener(v->voiceSearch());browse.setOnClickListener(v->navigate(providerOrigin()+"/",true));guide.setOnClickListener(v->finish());
+        search.setOnClickListener(v->search());voice.setOnClickListener(v->voiceSearch());browse.setOnClickListener(v->showHome(false));guide.setOnClickListener(v->finish());
         query.setOnEditorActionListener((v,action,event)->{if(action==android.view.inputmethod.EditorInfo.IME_ACTION_SEARCH||event!=null&&event.getKeyCode()==KeyEvent.KEYCODE_ENTER&&event.getAction()==KeyEvent.ACTION_UP){search();return true;}return false;});
         pageButton.setOnClickListener(v->usePage());
         modeButton.setOnClickListener(v->{cursor.enable(!cursor.enabled());modeButton.setText(cursor.enabled()?"Cursor: on":"Cursor: off");help.setText(cursor.enabled()?"Arrows move cursor; OK clicks; Menu shows controls.":"Arrows browse original posters; OK opens; Menu shows controls.");usePage();});
         scrollButton.setOnClickListener(v->{if(!cursor.enabled()){cursor.enable(true);modeButton.setText("Cursor: on");}cursor.scrollMode(!cursor.scrolling());scrollButton.setText(cursor.scrolling()?"Scroll: on":"Scroll: off");usePage();});
         retryButton.setOnClickListener(v->{if(browser==null)createBrowser();navigate(lastRequested,true);});
         if(!createBrowser())return;
-        if(saved!=null){query.setText(saved.getString("query",""));String url=saved.getString("url",HOME);navigate(allowedTop(Uri.parse(url))?url:HOME,false);}else navigate(HOME,false);
+        String incoming=UnifiedSearch.clean(getIntent().getStringExtra(UnifiedSearch.QUERY));
+        if(UnifiedSearch.valid(incoming)){query.setText(incoming);search();}
+        else if(saved!=null&&!saved.getBoolean("home",true)){query.setText(saved.getString("query",""));homeRequested=false;homePanel.setVisibility(View.GONE);String url=saved.getString("url",HOME);navigate(allowedTop(Uri.parse(url))?url:HOME,false);}
+        else showHome(false);
         pageButton.requestFocus();
     }
     private boolean createBrowser(){
@@ -105,7 +132,7 @@ public final class FlixMomoActivity extends Activity {
                 Uri uri=request.getUrl();String host=uri.getHost();if(!"https".equals(uri.getScheme())||host==null||privateHost(host))return new WebResourceResponse("text/plain","UTF-8",new ByteArrayInputStream(new byte[0]));return null;
             }
             @Override public void onPageStarted(WebView view,String url,Bitmap icon){
-                cursor.cancel();nativeControls.started();mainFrameError=false;pageReady=false;loading=true;if(allowedTop(Uri.parse(url)))lastRequested=url;
+                cursor.cancel();nativeControls.started();if("about:blank".equals(url))return;mainFrameError=false;pageReady=false;loading=true;if(allowedTop(Uri.parse(url)))lastRequested=url;
                 status.setText("Opening FlixMomo…");handler.removeCallbacks(slowLoad);handler.postDelayed(slowLoad,20000);
             }
             @Override public void onPageFinished(WebView view,String url){
@@ -136,28 +163,54 @@ public final class FlixMomoActivity extends Activity {
             @Override public void onHideCustomView(){exitFullScreen();}
         });return true;
     }
-    private void fail(String message){if(nativeControls!=null)nativeControls.failure();mainFrameError=true;pageReady=false;loading=false;handler.removeCallbacks(slowLoad);status.setText(message);}
+
+    private void showHome(boolean force){
+        homeRequested=true;liveGeneration++;liveResults.setVisibility(View.GONE);query.setText("");chrome.setVisibility(View.VISIBLE);
+        cursor.enable(false);modeButton.setText("Cursor: off");nativeControls.hideAll();homePanel.setVisibility(View.VISIBLE);homePanel.bringToFront();
+        if(force)homePanel.discardSuggestions();homePanel.loading();
+        navigate(providerOrigin()+"/",false);query.requestFocus();
+    }
+    private void showLiveResults(String text){
+        final int token=++liveGeneration;liveRow.removeAllViews();liveResults.setVisibility(View.VISIBLE);
+        liveRow.addView(TvUi.label(this,"Searching cached live guide…",12,TvUi.MUTED,false));
+        liveExecutor.execute(()->{
+            try{ChannelRepository repo=new ChannelRepository(this);java.util.List<Channel> all=repo.loadAll();java.util.List<Channel> found=repo.filter(all,"All",text);
+                handler.post(()->{if(isFinishing()||token!=liveGeneration)return;liveRow.removeAllViews();
+                    TextView label=TvUi.label(this,all.isEmpty()?"Live guide not available locally":found.isEmpty()?"Live: no cached channel matches":"Live guide · "+found.size()+" matches",12,TvUi.MUTED,false);label.setPadding(TvUi.dp(this,10),0,TvUi.dp(this,12),0);liveRow.addView(label,new LinearLayout.LayoutParams(-2,-1));
+                    org.json.JSONArray scope=new org.json.JSONArray();for(Channel c:found)scope.put(c.number);
+                    for(Channel c:found.subList(0,Math.min(found.size(),16))){Button button=TvUi.button(this,c.name,false);button.setOnClickListener(v->{try{startActivity(new Intent(this,PlayerActivity.class).putExtra(PlayerActivity.EXTRA_CHANNEL_JSON,c.toJson().toString()).putExtra(PlayerActivity.EXTRA_SCOPE_NUMBERS,scope.toString()).putExtra(PlayerActivity.EXTRA_SCOPE_LABEL,"All · search"));}catch(Exception e){status.setText("Could not open that cached live channel.");}});liveRow.addView(button,new LinearLayout.LayoutParams(TvUi.dp(this,145),-1));}
+                });
+            }catch(Exception e){handler.post(()->{if(token==liveGeneration){liveRow.removeAllViews();liveRow.addView(TvUi.label(this,"Live guide could not be read; film search remains available",12,TvUi.MUTED,false));}});}
+        });
+    }
+
+    private void fail(String message){if(nativeControls!=null)nativeControls.failure();mainFrameError=true;pageReady=false;loading=false;handler.removeCallbacks(slowLoad);status.setText(message);if(homeRequested&&homePanel!=null)homePanel.unavailable(message);}
     static boolean providerHost(String host){return "flixmomo.app".equals(host)||"flixmomo.st".equals(host)||"www.flixmomo.st".equals(host)||"flixmomo.bet".equals(host)||"www.flixmomo.bet".equals(host);}
     static boolean allowedTop(Uri uri){return "https".equals(uri.getScheme())&&providerHost(uri.getHost())&&uri.getUserInfo()==null&&uri.getPort()==-1;}
     private static boolean privateHost(String host){String h=host.toLowerCase(java.util.Locale.ROOT);return h.equals("localhost")||h.endsWith(".localhost")||h.endsWith(".local")||h.endsWith(".internal")||h.contains(":")||h.matches("(?i)(127\\..*|10\\..*|192\\.168\\..*|169\\.254\\..*|172\\.(1[6-9]|2[0-9]|3[01])\\..*|0\\..*)");}
     private String providerOrigin(){String url=browser==null?lastRequested:browser.getUrl();Uri uri=Uri.parse(url==null?HOME:url);return allowedTop(uri)?"https://"+uri.getHost():"https://flixmomo.app";}
-    private void search(){String text=query.getText().toString().trim();if(text.length()<2||text.length()>120){status.setText("Enter 2–120 characters.");return;}navigate(providerOrigin()+"/search?q="+Uri.encode(text),true);}
+    private void search(){String text=UnifiedSearch.clean(query.getText().toString());if(!UnifiedSearch.valid(text)){status.setText("Enter 2–120 characters.");return;}homeRequested=false;homePanel.setVisibility(View.GONE);showLiveResults(text);navigate(providerOrigin()+"/search?q="+Uri.encode(text),true);}
     private void navigate(String url,boolean page){if(!allowedTop(Uri.parse(url))){fail("Only the registered provider can open here.");return;}hideKeyboard();lastRequested=url;if(browser==null){fail("Provider browser stopped. Press Retry to reopen it.");return;}browser.loadUrl(url);if(page)usePage();}
-    private void voiceSearch(){hideKeyboard();Intent intent=new Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH);intent.putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL,RecognizerIntent.LANGUAGE_MODEL_FREE_FORM);intent.putExtra(RecognizerIntent.EXTRA_MAX_RESULTS,1);intent.putExtra(RecognizerIntent.EXTRA_PROMPT,"Search FlixMomo — handled by your TV's recognition service");try{startActivityForResult(intent,VOICE_REQUEST);}catch(ActivityNotFoundException|SecurityException e){status.setText("Voice recognition unavailable. Type your search instead.");query.requestFocus();}}
-    @Override protected void onActivityResult(int request,int result,Intent data){super.onActivityResult(request,result,data);if(request!=VOICE_REQUEST||result!=RESULT_OK||data==null)return;java.util.ArrayList<String> words=data.getStringArrayListExtra(RecognizerIntent.EXTRA_RESULTS);if(words==null||words.isEmpty()||words.get(0)==null)return;String text=words.get(0).trim();if(text.length()<2||text.length()>120){status.setText("Voice text must be 2–120 characters. Edit the search.");return;}query.setText(text);search();}
+    private void voiceSearch(){hideKeyboard();UnifiedSearch.voice(this);}
+    @Override protected void onActivityResult(int request,int result,Intent data){super.onActivityResult(request,result,data);String text=UnifiedSearch.voiceText(request,result,data);if(!text.isEmpty()){query.setText(text);search();}}
+    @Override protected void onNewIntent(Intent intent){super.onNewIntent(intent);setIntent(intent);String text=UnifiedSearch.clean(intent.getStringExtra(UnifiedSearch.QUERY));if(UnifiedSearch.valid(text)){query.setText(text);search();}}
     private void hideKeyboard(){InputMethodManager keyboard=(InputMethodManager)getSystemService(INPUT_METHOD_SERVICE);if(keyboard!=null)keyboard.hideSoftInputFromWindow(query.getWindowToken(),0);query.clearFocus();}
-    private void usePage(){if(nativeControls!=null)nativeControls.hideAll();hideKeyboard();chrome.setVisibility(View.GONE);if(browser!=null){browser.requestFocus();cursor.enter();nativeControls.enterPosters();}}
+    private void usePage(){homeRequested=false;if(homePanel!=null)homePanel.setVisibility(View.GONE);if(nativeControls!=null)nativeControls.hideAll();hideKeyboard();chrome.setVisibility(View.GONE);if(browser!=null){browser.requestFocus();cursor.enter();nativeControls.enterPosters();}}
     private void toolbar(){chrome.setVisibility(View.VISIBLE);cursor.leave();if(custom!=null)exitFullScreen();pageButton.requestFocus();}
     @Override public boolean dispatchKeyEvent(KeyEvent event){
-        if(nativeControls!=null){if(event.getAction()==KeyEvent.ACTION_DOWN)nativeControls.userInput();if(event.getKeyCode()==KeyEvent.KEYCODE_MENU){if(event.getAction()==KeyEvent.ACTION_UP)nativeControls.menu();return true;}if(nativeControls.ownsFocus())return super.dispatchKeyEvent(event);if(!cursor.enabled()&&nativeControls.posterKey(event))return true;}
+        if(event.getAction()==KeyEvent.ACTION_DOWN&&event.getRepeatCount()==0){
+            if(event.getKeyCode()==KeyEvent.KEYCODE_VOICE_ASSIST){voiceSearch();return true;}
+            if(event.getKeyCode()==KeyEvent.KEYCODE_SEARCH){toolbar();query.requestFocus();return true;}
+        }
+        if(nativeControls!=null){if(event.getAction()==KeyEvent.ACTION_DOWN)nativeControls.userInput();if(event.getKeyCode()==KeyEvent.KEYCODE_MENU){if(event.getAction()==KeyEvent.ACTION_UP){if(homeRequested){chrome.setVisibility(View.VISIBLE);query.requestFocus();}else nativeControls.menu();}return true;}if(nativeControls.ownsFocus())return super.dispatchKeyEvent(event);if(homePanel!=null&&homePanel.getVisibility()==View.VISIBLE)return super.dispatchKeyEvent(event);if(!cursor.enabled()&&(nativeControls.posterKey(event)||nativeControls.pageKey(event)))return true;}
         if(cursor!=null&&(custom!=null||browser!=null&&browser.hasFocus())&&cursor.handle(event))return true;
         return super.dispatchKeyEvent(event);
     }
     private void exitFullScreen(){if(custom==null)return;cursor.cancel();stage.removeView(custom);custom=null;chrome.setVisibility(View.VISIBLE);if(browser!=null){browser.setVisibility(View.VISIBLE);cursor.target(browser);}WebChromeClient.CustomViewCallback callback=customCallback;customCallback=null;if(callback!=null)callback.onCustomViewHidden();}
-    @Override public void onBackPressed(){if(nativeControls!=null&&nativeControls.back())return;if(custom!=null){exitFullScreen();usePage();return;}if(browser!=null&&browser.canGoBack()){browser.goBack();usePage();return;}if(browser!=null&&browser.hasFocus()){toolbar();return;}super.onBackPressed();}
+    @Override public void onBackPressed(){if(homeRequested){finish();return;}if(nativeControls!=null&&nativeControls.back())return;if(custom!=null){exitFullScreen();usePage();return;}if(browser!=null&&browser.canGoBack()){browser.goBack();usePage();return;}if(browser!=null&&browser.hasFocus()){toolbar();return;}super.onBackPressed();}
     @Override public void onWindowFocusChanged(boolean focused){super.onWindowFocusChanged(focused);if(!focused&&cursor!=null)cursor.cancel();}
-    @Override protected void onSaveInstanceState(Bundle state){state.putString("query",query.getText().toString());state.putString("url",lastRequested);super.onSaveInstanceState(state);}
+    @Override protected void onSaveInstanceState(Bundle state){state.putBoolean("home",homeRequested);state.putString("query",query.getText().toString());state.putString("url",lastRequested);super.onSaveInstanceState(state);}
     @Override protected void onPause(){if(nativeControls!=null)nativeControls.pause();if(cursor!=null)cursor.cancel();handler.removeCallbacks(slowLoad);if(browser!=null)browser.onPause();super.onPause();}
     @Override protected void onResume(){super.onResume();if(nativeControls!=null)nativeControls.resume();if(browser!=null)browser.onResume();}
-    @Override protected void onDestroy(){if(nativeControls!=null)nativeControls.destroy();handler.removeCallbacksAndMessages(null);if(cursor!=null)cursor.leave();exitFullScreen();if(browser!=null){browser.stopLoading();stage.removeView(browser);browser.destroy();browser=null;}super.onDestroy();}
+    @Override protected void onDestroy(){liveGeneration++;liveExecutor.shutdownNow();if(nativeControls!=null)nativeControls.destroy();handler.removeCallbacksAndMessages(null);if(cursor!=null)cursor.leave();exitFullScreen();if(browser!=null){browser.stopLoading();stage.removeView(browser);browser.destroy();browser=null;}super.onDestroy();}
 }

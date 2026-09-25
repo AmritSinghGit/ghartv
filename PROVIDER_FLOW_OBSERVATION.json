@@ -1,0 +1,43 @@
+{
+  "schema": "ghartv.public-provider-flow-observation.v1",
+  "time": "2026-09-25T13:41:40.307Z",
+  "scope": "PUBLIC_HOME_SEARCH_DETAILS_AND_WATCH_CONTROL_NO_SIGNIN",
+  "protections_changed": false,
+  "playback_proven": false,
+  "pages": [
+    {
+      "url": "https://flixmomo.st/",
+      "title": "Just a moment...",
+      "headings": [
+        "flixmomo.st",
+        "Performing security verification",
+        "Verification successful. Waiting for flixmomo.st to respond"
+      ],
+      "controls": [
+        {
+          "tag": "A",
+          "role": null,
+          "type": null,
+          "text": "Cloudflare",
+          "path": "/",
+          "classes": "",
+          "options": null
+        },
+        {
+          "tag": "A",
+          "role": null,
+          "type": null,
+          "text": "Privacy",
+          "path": "/privacypolicy/",
+          "classes": "footer-text",
+          "options": null
+        }
+      ],
+      "cards": [],
+      "iframe_count": 0,
+      "video_count": 0,
+      "stage": "home"
+    }
+  ],
+  "stop": "PROVIDER_VERIFICATION_OR_UNREGISTERED_ORIGIN"
+}

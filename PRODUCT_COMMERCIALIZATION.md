@@ -1,3 +1,7 @@
+# Review 37 status
+
+Public release and marketing are on hold by owner decision. The former Punjabi Plus provider-launch feature is removed from executable code. The historical provider research below is retained as research, not active app capability or licensing approval. See RELEASE_HOLD.json and PRIVACY.md.
+
 # GharTV — commercial product direction
 
 Owner direction, 12 September 2026. Continue the existing independent `ghartv` project and its existing Operon Analytics tenant. This document records decisions and proposed work; it does not certify a commercial launch, content licence, customer-isolation implementation or installed release.
