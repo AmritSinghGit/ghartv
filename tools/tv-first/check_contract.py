@@ -18,13 +18,13 @@ assert 'playerView.setOnClickListener(view -> showGuide(true, nextButton))' in p
 assert 'MediaStore.ACTION_PICK_IMAGES' in family and 'ACTION_GET_CONTENT' in family and 'takePersistableUriPermission' in family
 assert 'takePlaybackHandoff' in api and 'PLAYBACK_HANDOFF_MS = 20_000L' in api
 gradle=(R/'android-tv/app/build.gradle.kts').read_text()
-assert 'versionCode = 33' in gradle and '0.6.0-rc10.6-remote-cursor' in gradle
+assert 'versionCode = 34' in gradle and '0.6.0-rc10.7-native-navigation' in gradle
 films=(J/'FlixMomoActivity.java').read_text();cursor=(J/'RemoteWebCursor.java').read_text()
 assert 'cursor.handle(event)' in films and 'onRenderProcessGone' in films and 'handler.cancel()' in films
 assert 'onPageFinished' in films and 'if(mainFrameError)' in films
 assert 'postOnAnimation(frame)' in cursor and 'ACTION_CANCEL' in cursor and 'removeCallbacks(frame)' in cursor
 assert 'evaluateJavascript' not in films and 'addJavascriptInterface' not in films
-print('CODE33_REMOTE_CURSOR_AND_CODE32_BEHAVIOR_RETAINED=PASS')
+print('CODE34_NATIVE_NAVIGATION_AND_CURSOR_RETAINED=PASS')
 launcher=(R/'tools/owner_review.command.in').read_text()
 assert "version_code=30" in launcher and "manifest.get('version_code')!=30" in launcher
 assert "int(codes[0])==30" in launcher and "int(codes[0])<30" in launcher
@@ -35,3 +35,7 @@ assert 'GHARTV_CYAN_REVIEW_17_HANDOFF' in launcher and 'GHARTV_CYAN_REVIEW_16_HA
 assert 'java.util.Objects.equals(selectedChannel.id,candidate.id)' in m
 assert 'channel.number+":"+safe(channel.id)' not in c
 print('STABLE_CHANNEL_ID_AND_REVIEW17_LABEL=PASS')
+assert "RecognizerIntent.ACTION_RECOGNIZE_SPEECH" in films
+assert "nativeControls" in films
+assert (J/"FilmNativeControls.java").is_file() and (J/"FilmPageSnapshot.java").is_file()
+print("NATIVE_RESULT_PLAYER_AND_VOICE_SOURCE=PASS")

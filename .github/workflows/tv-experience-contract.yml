@@ -64,7 +64,7 @@ jobs:
           cd android-tv
           chmod +x gradlew
           ./gradlew --no-daemon --max-workers=2 assembleRelease assembleDebug assembleDebugAndroidTest
-          cp app/build/outputs/apk/release/app-release-unsigned.apk /tmp/ghartv-candidate/GharTV-code33-review-unsigned.apk
+          cp app/build/outputs/apk/release/app-release-unsigned.apk /tmp/ghartv-candidate/GharTV-code34-review-unsigned.apk
       - name: Start isolated cloud Android test device, never the owner emulator
         run: |
           set -euo pipefail
@@ -96,47 +96,40 @@ jobs:
           subprocess.run(['adb','-s','emulator-5580','shell','input','keyevent','KEYCODE_WAKEUP'],check=True)
           subprocess.run(['adb','-s','emulator-5580','shell','wm','dismiss-keyguard'],check=True)
           PY
-      - name: Test actual cursor clicks, scroll, movement and cancellation in WebView
+      - name: Test actual cursor and native-result player selection boundaries in WebView
         run: |
           set -euo pipefail
           adb -s emulator-5580 install -r android-tv/app/build/outputs/apk/debug/app-debug.apk
           adb -s emulator-5580 install -r android-tv/app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk
-          adb -s emulator-5580 shell am instrument -w -r -e class in.ghartv.nova.RemoteWebCursorTest in.ghartv.nova.test/androidx.test.runner.AndroidJUnitRunner | tee /tmp/ghartv-candidate/proof/remote-cursor-android.txt
-          grep -q 'OK (6 tests)' /tmp/ghartv-candidate/proof/remote-cursor-android.txt
-      - name: Measure the whole tracked tree and shared Git history, not owner-Mac usage
+          adb -s emulator-5580 shell am instrument -w -r -e class in.ghartv.nova.RemoteWebCursorTest,in.ghartv.nova.FilmNativeControlsTest in.ghartv.nova.test/androidx.test.runner.AndroidJUnitRunner | tee /tmp/ghartv-candidate/proof/remote-cursor-android.txt
+          grep -q 'OK (12 tests)' /tmp/ghartv-candidate/proof/remote-cursor-android.txt
+      - name: Package exact source and validation, without changing the approved code33
         run: |
           python - <<'PY'
           import hashlib,json,os,subprocess,zipfile
           from pathlib import Path
           root=Path('/tmp/ghartv-candidate');source=subprocess.check_output(['git','rev-parse','HEAD'],text=True).strip()
-          files={}
-          for row in subprocess.check_output(['git','ls-tree','-rl','HEAD'],text=True).splitlines():
-            meta,path=row.split('\t',1);parts=meta.split()
-            if parts[1]=='blob':files[path]=int(parts[3])
-          groups={}
-          for p,n in files.items():groups[p.split('/')[0]]=groups.get(p.split('/')[0],0)+n
-          gitdir=Path(subprocess.check_output(['git','rev-parse','--git-common-dir'],text=True).strip());gitbytes=sum(p.stat().st_size for p in gitdir.rglob('*') if p.is_file() and not p.is_symlink())
-          apk=root/'GharTV-code33-review-unsigned.apk';apk_hash=hashlib.sha256(apk.read_bytes()).hexdigest()
-          zpath=root/'GHARTV_CODE33_SOURCE.zip'
-          with zipfile.ZipFile(zpath,'w',zipfile.ZIP_DEFLATED) as z:
-            for p in files:
+          apk=root/'GharTV-code34-review-unsigned.apk';apk_hash=hashlib.sha256(apk.read_bytes()).hexdigest()
+          paths=subprocess.check_output(['git','ls-files','-z']).split(b'\0')
+          with zipfile.ZipFile(root/'GHARTV_CODE34_SOURCE.zip','w',zipfile.ZIP_DEFLATED) as z:
+            for raw in paths:
+              if not raw:continue
+              p=raw.decode()
               if Path(p).suffix.lower() not in ('.woff','.woff2','.ttf','.otf'):z.writestr(p,subprocess.check_output(['git','show','HEAD:'+p]))
-          footprint={'schema':'ghartv.footprint.v1','source':source,'tracked_files_bytes':sum(files.values()),'tracked_file_count':len(files),'tracked_groups_bytes':groups,'fresh_all_remote_branches_git_dir_bytes':gitbytes,'source_and_git_bytes':sum(files.values())+gitbytes,'source_archive_bytes':zpath.stat().st_size,'release_apk_bytes':apk.stat().st_size,'remote_refs':subprocess.check_output(['git','for-each-ref','--format=%(refname) %(objectname)','refs/remotes/origin'],text=True).splitlines(),'owner_mac_measured':False,'owner_local_unpushed_branches_verified':False,'sdk_avd_dependencies_logs_release_history_included':False}
-          (root/'FOOTPRINT.json').write_text(json.dumps(footprint,indent=2)+'\n')
-          manifest={'schema':'ghartv.android-review.v1','repository':'AmritSinghGit/ghartv','branch':'codex/ghartv-remove-auto-preview','pr':1,'source':source,'version':'0.6.0-rc10.6-remote-cursor','version_code':33,'apk':apk.name,'apk_sha256':apk_hash,'apk_bytes':apk.stat().st_size,'signing':'UNSIGNED_REQUIRES_EXISTING_OWNER_KEY','required_certificate_sha256':'40a9d8bf6b1c557b3d6fd02acef075368dd13e28691f207a297202d0d5ec233c','work_base':'3373bcca7ec8d6589fc7cdb634b0eea00b6426e7','production_changed':False,'owner_installation':False}
+          manifest={'schema':'ghartv.android-review.v1','repository':'AmritSinghGit/ghartv','branch':'codex/ghartv-remove-auto-preview','pr':1,'source':source,'version':'0.6.0-rc10.7-native-navigation','version_code':34,'apk':apk.name,'apk_sha256':apk_hash,'apk_bytes':apk.stat().st_size,'signing':'UNSIGNED_REQUIRES_EXISTING_OWNER_KEY','required_certificate_sha256':'40a9d8bf6b1c557b3d6fd02acef075368dd13e28691f207a297202d0d5ec233c','application_base':'39363ee529e9f8f3c00dcab8fdd69b88aa5e175c','production_changed':False,'owner_installation':False}
           (root/'CANDIDATE.json').write_text(json.dumps(manifest,indent=2)+'\n')
-          v={'schema':'ghartv.code33-validation.v1','source':source,'android_release':'COMPILED_UNSIGNED','real_android_webview_tests':6,'cursor_geometry_assertions':15,'preview_gate_assertions':29,'tv_contract_rules':9,'test_device':'ISOLATED_CLOUD_ANDROID36','test_content':'LOCAL_SYNTHETIC_HTML','actual_owner_mac_or_tv_tested':False,'live_flixmomo_search_or_video_verified':False,'provider_network_settings_changed':False,'owner_branches_all_synced':False,'owner_cleanup_performed':False,'obsidian_readback':False,'workflow_run':os.environ['GITHUB_RUN_ID']}
+          v={'schema':'ghartv.code34-validation.v1','source':source,'android_release':'COMPILED_UNSIGNED','real_android_webview_tests':12,'cursor_geometry_assertions':15,'preview_gate_assertions':29,'tv_contract_rules':9,'test_device':'ISOLATED_CLOUD_ANDROID36','test_content':'LOCAL_SYNTHETIC_HTML','voice_service_tested':False,'live_provider_selector_compatibility_verified':False,'full_native_result_ui_tested':False,'actual_owner_mac_or_tv_tested':False,'live_flixmomo_search_or_video_verified':False,'provider_network_settings_changed':False,'owner_cleanup_performed':False,'obsidian_readback':False,'approved_code33_promoted_by_this_build':False,'workflow_run':os.environ['GITHUB_RUN_ID']}
           (root/'VALIDATION.json').write_text(json.dumps(v,indent=2)+'\n')
-          (root/'README.md').write_bytes(Path('REVIEW_060_RC10_6.md').read_bytes())
+          (root/'README.md').write_bytes(Path('REVIEW_060_RC10_7.md').read_bytes())
           (root/'SHA256SUMS').write_text(''.join(hashlib.sha256(p.read_bytes()).hexdigest()+'  '+p.name+'\n' for p in sorted(root.iterdir()) if p.is_file() and p.name!='SHA256SUMS'))
-          print(json.dumps(manifest));print(json.dumps(footprint));print(json.dumps(v))
+          print(json.dumps(manifest));print(json.dumps(v))
           PY
-      - name: Publish exact review only; leave household feed and installed candidate alone
+      - name: Publish unapproved review only, never the household update
         run: |
-          gh release create v0.6.0-rc10.6-remote-cursor /tmp/ghartv-candidate/GharTV-code33-review-unsigned.apk /tmp/ghartv-candidate/GHARTV_CODE33_SOURCE.zip /tmp/ghartv-candidate/CANDIDATE.json /tmp/ghartv-candidate/FOOTPRINT.json /tmp/ghartv-candidate/VALIDATION.json /tmp/ghartv-candidate/SHA256SUMS --repo AmritSinghGit/ghartv --target "$GITHUB_SHA" --prerelease --latest=false --title 'GharTV code33 — remote cursor and provider-view recovery' --notes-file REVIEW_060_RC10_6.md
+          gh release create v0.6.0-rc10.7-native-navigation /tmp/ghartv-candidate/GharTV-code34-review-unsigned.apk /tmp/ghartv-candidate/GHARTV_CODE34_SOURCE.zip /tmp/ghartv-candidate/CANDIDATE.json /tmp/ghartv-candidate/VALIDATION.json /tmp/ghartv-candidate/SHA256SUMS --repo AmritSinghGit/ghartv --target "$GITHUB_SHA" --prerelease --latest=false --title 'GharTV code34 — native search navigation and player tray review' --notes-file REVIEW_060_RC10_7.md
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: ghartv-code33-review
+          name: ghartv-code34-review
           path: /tmp/ghartv-candidate/
           retention-days: 7

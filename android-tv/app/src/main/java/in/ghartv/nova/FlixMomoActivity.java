@@ -1,6 +1,9 @@
 package in.ghartv.nova;
 
 import android.app.Activity;
+import android.content.Intent;
+import android.content.ActivityNotFoundException;
+import android.speech.RecognizerIntent;
 import android.graphics.Bitmap;
 import android.net.Uri;
 import android.net.http.SslError;
@@ -34,6 +37,8 @@ public final class FlixMomoActivity extends Activity {
     private static final String HOME="https://flixmomo.app/";
     private WebView browser;
     private RemoteWebCursor cursor;
+    private FilmNativeControls nativeControls;
+    private static final int VOICE_REQUEST=410;
     private EditText query;
     private TextView status,help;
     private Button pageButton,modeButton,scrollButton,retryButton;
@@ -59,7 +64,8 @@ public final class FlixMomoActivity extends Activity {
         query.setHint("Find a film or series");query.setImeOptions(android.view.inputmethod.EditorInfo.IME_ACTION_SEARCH);
         row.addView(query,new LinearLayout.LayoutParams(0,TvUi.dp(this,48),1));
         Button search=TvUi.button(this,"Search",true),browse=TvUi.button(this,"Browse",false),guide=TvUi.button(this,"TV guide",false);
-        row.addView(search);row.addView(browse);row.addView(guide);chrome.addView(row);
+        Button voice=TvUi.button(this,"Voice",false);voice.setOnClickListener(v->voiceSearch());
+        row.addView(search);row.addView(voice);row.addView(browse);row.addView(guide);chrome.addView(row);
         LinearLayout navigation=new LinearLayout(this);
         pageButton=TvUi.button(this,"Use page",true);modeButton=TvUi.button(this,"Cursor: on",false);
         scrollButton=TvUi.button(this,"Scroll: off",false);retryButton=TvUi.button(this,"Retry",false);
@@ -68,6 +74,12 @@ public final class FlixMomoActivity extends Activity {
         status=TvUi.label(this,"Provider pages stay in GharTV · direct connection",12,TvUi.MUTED,false);chrome.addView(status);
         root.addView(chrome);stage=new FrameLayout(this);root.addView(stage,new LinearLayout.LayoutParams(-1,0,1));setContentView(root);
         cursor=new RemoteWebCursor(this);stage.addView(cursor,new FrameLayout.LayoutParams(-1,-1));
+        nativeControls=new FilmNativeControls(this,stage,chrome,new FilmNativeControls.Host(){
+            public void navigate(String url){FlixMomoActivity.this.navigate(url,false);}
+            public void usePage(){cursor.enable(true);modeButton.setText("Cursor: on");FlixMomoActivity.this.usePage();}
+            public void nativeMode(){cursor.enable(false);modeButton.setText("Cursor: off");}
+            public void searchToolbar(){chrome.setVisibility(View.VISIBLE);toolbar();query.requestFocus();}
+        });
         query.setOnFocusChangeListener((v,focused)->{if(focused)cursor.leave();});
         search.setOnClickListener(v->search());browse.setOnClickListener(v->navigate(providerOrigin()+"/",true));guide.setOnClickListener(v->finish());
         query.setOnEditorActionListener((v,action,event)->{
@@ -87,7 +99,7 @@ public final class FlixMomoActivity extends Activity {
     private boolean createBrowser(){
         if(browser!=null)return true;
         try{browser=new WebView(this);}catch(RuntimeException e){fail("Android System WebView is unavailable. Update that system component; live TV is unchanged.");return false;}
-        stage.addView(browser,0,new FrameLayout.LayoutParams(-1,-1));cursor.target(browser);
+        stage.addView(browser,0,new FrameLayout.LayoutParams(-1,-1));cursor.target(browser);nativeControls.attach(browser);
         WebSettings settings=browser.getSettings();settings.setJavaScriptEnabled(true);settings.setDomStorageEnabled(true);
         settings.setAllowFileAccess(false);settings.setAllowContentAccess(false);settings.setMixedContentMode(WebSettings.MIXED_CONTENT_NEVER_ALLOW);
         settings.setMediaPlaybackRequiresUserGesture(true);settings.setSupportMultipleWindows(false);settings.setJavaScriptCanOpenWindowsAutomatically(false);settings.setSafeBrowsingEnabled(true);
@@ -106,7 +118,7 @@ public final class FlixMomoActivity extends Activity {
                 return null;
             }
             @Override public void onPageStarted(WebView view,String url,Bitmap icon){
-                cursor.cancel();mainFrameError=false;pageReady=false;loading=true;
+                cursor.cancel();nativeControls.started();mainFrameError=false;pageReady=false;loading=true;
                 if(allowedTop(Uri.parse(url)))lastRequested=url;
                 status.setText("Opening FlixMomo…");handler.removeCallbacks(slowLoad);handler.postDelayed(slowLoad,20000);
             }
@@ -115,7 +127,7 @@ public final class FlixMomoActivity extends Activity {
                 if(mainFrameError){pageReady=false;return;}
                 if("/dummy".equals(Uri.parse(url).getPath())){fail("FlixMomo declined this session. No provider protection has been changed.");return;}
                 pageReady=allowedTop(Uri.parse(url));
-                if(pageReady)status.setText("Page loaded · Use page for cursor controls · video playback not checked");
+                if(pageReady){status.setText("FlixMomo page loaded · native results/player controls are being read");nativeControls.finished();}
             }
             @Override public void onReceivedHttpError(WebView view,WebResourceRequest request,WebResourceResponse response){
                 if(request.isForMainFrame())fail("Provider returned HTTP "+response.getStatusCode()+". Your search is kept. Use Retry or Browse.");
@@ -131,7 +143,7 @@ public final class FlixMomoActivity extends Activity {
                 }
             }
             @Override public boolean onRenderProcessGone(WebView view,RenderProcessGoneDetail detail){
-                cursor.leave();exitFullScreen();stage.removeView(view);view.destroy();if(browser==view)browser=null;cursor.target(null);
+                nativeControls.failure();cursor.leave();exitFullScreen();stage.removeView(view);view.destroy();if(browser==view)browser=null;cursor.target(null);
                 fail("The provider browser stopped. Press Retry to reopen it; live TV and your query are preserved.");retryButton.requestFocus();return true;
             }
         });
@@ -146,7 +158,7 @@ public final class FlixMomoActivity extends Activity {
             @Override public void onHideCustomView(){exitFullScreen();}
         });return true;
     }
-    private void fail(String message){mainFrameError=true;pageReady=false;loading=false;handler.removeCallbacks(slowLoad);status.setText(message);}
+    private void fail(String message){if(nativeControls!=null)nativeControls.failure();mainFrameError=true;pageReady=false;loading=false;handler.removeCallbacks(slowLoad);status.setText(message);}
     static boolean providerHost(String host){return "flixmomo.app".equals(host)||"flixmomo.st".equals(host)||"www.flixmomo.st".equals(host);}
     static boolean allowedTop(Uri uri){return "https".equals(uri.getScheme())&&providerHost(uri.getHost())&&uri.getUserInfo()==null&&uri.getPort()==-1;}
     private static boolean privateHost(String host){
@@ -159,10 +171,31 @@ public final class FlixMomoActivity extends Activity {
         if(!allowedTop(Uri.parse(url))){fail("Only the registered provider can open in this view.");return;}
         hideKeyboard();lastRequested=url;if(browser==null){fail("Provider browser is not running. Press Retry to reopen it.");return;}browser.loadUrl(url);if(page)usePage();
     }
+    private void voiceSearch(){
+        hideKeyboard();Intent intent=new Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH);
+        intent.putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL,RecognizerIntent.LANGUAGE_MODEL_FREE_FORM);
+        intent.putExtra(RecognizerIntent.EXTRA_MAX_RESULTS,1);
+        intent.putExtra(RecognizerIntent.EXTRA_PROMPT,"Search FlixMomo — speech handled by your TV's recognition service");
+        try{startActivityForResult(intent,VOICE_REQUEST);}
+        catch(ActivityNotFoundException|SecurityException e){status.setText("Voice recognition is unavailable on this TV. Type your search instead.");query.requestFocus();}
+    }
+    @Override protected void onActivityResult(int request,int result,Intent data){
+        super.onActivityResult(request,result,data);
+        if(request!=VOICE_REQUEST||result!=RESULT_OK||data==null)return;
+        java.util.ArrayList<String> words=data.getStringArrayListExtra(RecognizerIntent.EXTRA_RESULTS);
+        if(words==null||words.isEmpty()||words.get(0)==null)return;
+        String text=words.get(0).trim();if(text.length()<2||text.length()>120){status.setText("Voice text must be 2–120 characters. You can edit the search.");return;}
+        query.setText(text);search();
+    }
     private void hideKeyboard(){InputMethodManager keyboard=(InputMethodManager)getSystemService(INPUT_METHOD_SERVICE);if(keyboard!=null)keyboard.hideSoftInputFromWindow(query.getWindowToken(),0);query.clearFocus();}
-    private void usePage(){hideKeyboard();if(browser!=null){browser.requestFocus();cursor.enter();}}
-    private void toolbar(){cursor.leave();if(custom!=null)exitFullScreen();pageButton.requestFocus();}
+    private void usePage(){if(nativeControls!=null)nativeControls.hideAll();hideKeyboard();if(browser!=null){browser.requestFocus();cursor.enter();}}
+    private void toolbar(){chrome.setVisibility(View.VISIBLE);cursor.leave();if(custom!=null)exitFullScreen();pageButton.requestFocus();}
     @Override public boolean dispatchKeyEvent(KeyEvent event){
+        if(nativeControls!=null){
+            if(event.getAction()==KeyEvent.ACTION_DOWN)nativeControls.userInput();
+            if(event.getKeyCode()==KeyEvent.KEYCODE_MENU){if(event.getAction()==KeyEvent.ACTION_UP)nativeControls.menu();return true;}
+            if(nativeControls.ownsFocus())return super.dispatchKeyEvent(event);
+        }
         if(cursor!=null){
             boolean inPage=custom!=null||browser!=null&&browser.hasFocus();
             if(inPage&&event.getKeyCode()==KeyEvent.KEYCODE_MENU){if(event.getAction()==KeyEvent.ACTION_UP)toolbar();return true;}
@@ -175,10 +208,10 @@ public final class FlixMomoActivity extends Activity {
         if(browser!=null){browser.setVisibility(View.VISIBLE);cursor.target(browser);}
         WebChromeClient.CustomViewCallback callback=customCallback;customCallback=null;if(callback!=null)callback.onCustomViewHidden();
     }
-    @Override public void onBackPressed(){if(custom!=null){exitFullScreen();usePage();return;}if(browser!=null&&browser.hasFocus()){toolbar();return;}if(browser!=null&&browser.canGoBack()){browser.goBack();usePage();return;}super.onBackPressed();}
+    @Override public void onBackPressed(){if(nativeControls!=null&&nativeControls.back())return;if(custom!=null){exitFullScreen();usePage();return;}if(browser!=null&&browser.hasFocus()){toolbar();return;}if(browser!=null&&browser.canGoBack()){browser.goBack();usePage();return;}super.onBackPressed();}
     @Override public void onWindowFocusChanged(boolean focused){super.onWindowFocusChanged(focused);if(!focused&&cursor!=null)cursor.cancel();}
     @Override protected void onSaveInstanceState(Bundle state){state.putString("query",query.getText().toString());state.putString("url",lastRequested);super.onSaveInstanceState(state);}
-    @Override protected void onPause(){if(cursor!=null)cursor.cancel();handler.removeCallbacks(slowLoad);if(browser!=null)browser.onPause();super.onPause();}
-    @Override protected void onResume(){super.onResume();if(browser!=null)browser.onResume();}
-    @Override protected void onDestroy(){handler.removeCallbacksAndMessages(null);if(cursor!=null)cursor.leave();exitFullScreen();if(browser!=null){browser.stopLoading();stage.removeView(browser);browser.destroy();browser=null;}super.onDestroy();}
+    @Override protected void onPause(){if(nativeControls!=null)nativeControls.pause();if(cursor!=null)cursor.cancel();handler.removeCallbacks(slowLoad);if(browser!=null)browser.onPause();super.onPause();}
+    @Override protected void onResume(){super.onResume();if(nativeControls!=null)nativeControls.resume();if(browser!=null)browser.onResume();}
+    @Override protected void onDestroy(){if(nativeControls!=null)nativeControls.destroy();handler.removeCallbacksAndMessages(null);if(cursor!=null)cursor.leave();exitFullScreen();if(browser!=null){browser.stopLoading();stage.removeView(browser);browser.destroy();browser=null;}super.onDestroy();}
 }
