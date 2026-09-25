@@ -45,7 +45,13 @@ final class FilmPageSnapshot {
           const label=clean(h?.textContent||a.getAttribute('title')||a.getAttribute('aria-label')||img?.alt||a.innerText);
           if(label.length<2||label.length>180)return;
           let image='';
-          try {const v=new URL(img?.currentSrc||img?.src||'',here);if(v.protocol==='https:'&&!v.username&&!v.password&&!v.port&&(permitted(v)||v.hostname==='image.tmdb.org'))image=v.href;}catch(e){}
+          // Missing artwork is missing, never new URL('', here), which fabricates
+          // the current page as an image. Read only nonempty image data actually exposed.
+          const rawImage=img?String(img.currentSrc||img.getAttribute('src')||img.getAttribute('data-src')||'').trim():'';
+          if(rawImage)try {
+            const v=new URL(rawImage,here);
+            if(v.protocol==='https:'&&!v.username&&!v.password&&!v.port&&(permitted(v)||v.hostname==='image.tmdb.org'))image=v.href;
+          }catch(e){}
           const card=a.closest('article')||a.parentElement;
           const metadata=clean(a.innerText||card?.innerText||'').slice(0,180);
           seen.add(u.href);results.push({title:label,url:u.href,image,metadata});
