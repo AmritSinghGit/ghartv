@@ -1,0 +1,15 @@
+{
+  "schema": "ghartv.owner-release-hold.v1",
+  "lane": "ghartv",
+  "repository": "AmritSinghGit/ghartv",
+  "owner_decision": "HOLD_PUBLIC_AND_HOUSEHOLD_RELEASE_PENDING_END_TO_END_REVIEW",
+  "decision_date": "2026-09-25",
+  "approval_comment": 5833335683,
+  "supersedes": "Earlier request to publish the signed code33 to Dad and the public update channel now",
+  "permitted_work": ["Continue the existing source branch and PR", "Compile and test the next owner-review candidate", "Supply a review bundle for original-key local signing and the same normal Nova emulator"],
+  "not_authorized": ["Advance the production update feed", "Promote a new signed family APK", "Launch public marketing or a commercial streaming service"],
+  "existing_production_and_signed_artifacts": "PRESERVE_UNCHANGED",
+  "tor_for_next_build": "DEFERRED_NOT_ENABLED",
+  "public_feed_changed_by_this_decision_record": false,
+  "required_before_promotion": "New explicit owner approval for the exact reviewed signed bytes"
+}
