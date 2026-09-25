@@ -1,35 +1,23 @@
 plugins {
     id("com.android.application")
 }
-
 val signingStore = System.getenv("GHARTV_SIGNING_STORE")
 val signingStorePassword = System.getenv("GHARTV_SIGNING_STORE_PASSWORD")
 val signingKeyAlias = System.getenv("GHARTV_SIGNING_KEY_ALIAS")
 val signingKeyPassword = System.getenv("GHARTV_SIGNING_KEY_PASSWORD")
-val hasReleaseSigning = listOf(
-    signingStore,
-    signingStorePassword,
-    signingKeyAlias,
-    signingKeyPassword
-).all { !it.isNullOrBlank() }
-
+val hasReleaseSigning = listOf(signingStore, signingStorePassword, signingKeyAlias, signingKeyPassword).all { !it.isNullOrBlank() }
 android {
     namespace = "in.ghartv.nova"
     compileSdk = 36
-
     defaultConfig {
         applicationId = "in.ghartv.nova"
         minSdk = 26
         targetSdk = 35
-        versionCode = 34
-        versionName = "0.6.0-rc10.7-native-navigation"
+        versionCode = 36
+        versionName = "0.6.0-rc10.9-poster-player-review"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
-
-    buildFeatures {
-        buildConfig = true
-    }
-
+    buildFeatures { buildConfig = true }
     signingConfigs {
         if (hasReleaseSigning) {
             create("ghartvRelease") {
@@ -44,28 +32,20 @@ android {
             }
         }
     }
-
     buildTypes {
-        debug {
-            applicationIdSuffix = ""
-            versionNameSuffix = "-debug"
-        }
+        debug { applicationIdSuffix = ""; versionNameSuffix = "-debug" }
         release {
             isMinifyEnabled = false
             isShrinkResources = false
-            if (hasReleaseSigning) {
-                signingConfig = signingConfigs.getByName("ghartvRelease")
-            }
+            if (hasReleaseSigning) { signingConfig = signingConfigs.getByName("ghartvRelease") }
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
         }
     }
-
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
     }
 }
-
 dependencies {
     androidTestImplementation("androidx.test:runner:1.6.2")
     androidTestImplementation("androidx.test.ext:junit:1.2.1")

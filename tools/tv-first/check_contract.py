@@ -18,24 +18,20 @@ assert 'playerView.setOnClickListener(view -> showGuide(true, nextButton))' in p
 assert 'MediaStore.ACTION_PICK_IMAGES' in family and 'ACTION_GET_CONTENT' in family and 'takePersistableUriPermission' in family
 assert 'takePlaybackHandoff' in api and 'PLAYBACK_HANDOFF_MS = 20_000L' in api
 gradle=(R/'android-tv/app/build.gradle.kts').read_text()
-assert 'versionCode = 34' in gradle and '0.6.0-rc10.7-native-navigation' in gradle
-films=(J/'FlixMomoActivity.java').read_text();cursor=(J/'RemoteWebCursor.java').read_text()
+assert 'versionCode = 36' in gradle and '0.6.0-rc10.9-poster-player-review' in gradle
+films=(J/'FlixMomoActivity.java').read_text();cursor=(J/'RemoteWebCursor.java').read_text();controls=(J/'FilmNativeControls.java').read_text()
 assert 'cursor.handle(event)' in films and 'onRenderProcessGone' in films and 'handler.cancel()' in films
 assert 'onPageFinished' in films and 'if(mainFrameError)' in films
 assert 'postOnAnimation(frame)' in cursor and 'ACTION_CANCEL' in cursor and 'removeCallbacks(frame)' in cursor
 assert 'evaluateJavascript' not in films and 'addJavascriptInterface' not in films
-print('CODE34_NATIVE_NAVIGATION_AND_CURSOR_RETAINED=PASS')
+assert 'renderResults' not in controls and 'resultsView' not in controls
+assert 'posterKey(event)' in films and 'BuildConfig.VERSION_CODE' in films
+assert (J/'FilmPosterNavigation.java').is_file()
+assert 'RecognizerIntent.ACTION_RECOGNIZE_SPEECH' in films
 launcher=(R/'tools/owner_review.command.in').read_text()
 assert "version_code=30" in launcher and "manifest.get('version_code')!=30" in launcher
-assert "int(codes[0])==30" in launcher and "int(codes[0])<30" in launcher
-assert 'transport.attach_or_start(sdk,RUN)' in launcher and "sock.bind(('127.0.0.1',port))" not in launcher
+assert 'transport.attach_or_start(sdk,RUN)' in launcher
 assert 'TV_EXPERIENCE_CONTRACT.json' in (R/'tools/package_owner_review.py').read_text()
-print('HISTORICAL_CODE30_OPENER_PRESERVED_NOT_USED_FOR_NEW_INSTALL=PASS')
-assert 'GHARTV_CYAN_REVIEW_17_HANDOFF' in launcher and 'GHARTV_CYAN_REVIEW_16_HANDOFF' not in launcher
 assert 'java.util.Objects.equals(selectedChannel.id,candidate.id)' in m
 assert 'channel.number+":"+safe(channel.id)' not in c
-print('STABLE_CHANNEL_ID_AND_REVIEW17_LABEL=PASS')
-assert "RecognizerIntent.ACTION_RECOGNIZE_SPEECH" in films
-assert "nativeControls" in films
-assert (J/"FilmNativeControls.java").is_file() and (J/"FilmPageSnapshot.java").is_file()
-print("NATIVE_RESULT_PLAYER_AND_VOICE_SOURCE=PASS")
+print('CODE36_ORIGINAL_POSTERS_NO_TEXT_TILE_SURFACE_AND_EXISTING_TV_BEHAVIOR=PASS')

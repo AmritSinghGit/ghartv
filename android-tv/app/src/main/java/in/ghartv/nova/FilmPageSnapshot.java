@@ -1,13 +1,11 @@
 package in.ghartv.nova;
-
 import org.json.JSONObject;
 
-/** Read a bounded, provider-owned top document, never cookies, scripts, video URLs
- * or cross-origin frames. Action code only clicks a revalidated visible control
- * which the viewer explicitly selected. No detection or access controls change. */
+/** Bounded top-document labels and permitted controls. No cookies, media URLs,
+ * scripts, player iframe contents, or access-control changes are returned. */
 final class FilmPageSnapshot {
-    static final String CORE = """
-        const hosts=['flixmomo.app','flixmomo.st','www.flixmomo.st'];
+    static final String CORE="""
+        const hosts=['flixmomo.app','flixmomo.st','www.flixmomo.st','flixmomo.bet','www.flixmomo.bet'];
         function permitted(u){return u.protocol==='https:'&&hosts.includes(u.hostname)&&!u.username&&!u.password&&!u.port;}
         const here=new URL(location.href);
         if(!permitted(here))return JSON.stringify({state:'ORIGIN_REJECTED'});
@@ -17,21 +15,24 @@ final class FilmPageSnapshot {
         if(here.pathname==='/dummy'||/just a moment|verify (that )?you are human|checking your browser|security verification|access denied/i.test(heading))return JSON.stringify({state:'PROVIDER_VERIFICATION_REQUIRED'});
         function players(){
           const choices=[],seen=new Set();
-          Array.from(document.querySelectorAll('button,[role="button"],input[type="button"]')).slice(0,600).forEach(e=>{
+          Array.from(document.querySelectorAll('button,[role="button"],[role="tab"],input[type="button"],a[href]')).slice(0,700).forEach(e=>{
             if(!visible(e)||e.disabled||e.getAttribute('aria-disabled')==='true')return;
+            if(e.tagName==='A'){
+              let u;try{u=new URL(e.getAttribute('href'),here);}catch(err){return;}
+              if(!permitted(u)||u.origin!==here.origin||u.pathname!==here.pathname||u.search!==here.search)return;
+            }
             const label=clean(e.innerText||e.value||e.getAttribute('aria-label'));
             if(!/^(player|server|source)\\s*#?\\s*\\d{1,2}$/i.test(label)||seen.has(label.toLowerCase()))return;
-            seen.add(label.toLowerCase());choices.push({kind:'button',label,element:e,selected:e.getAttribute('aria-pressed')==='true'||e.getAttribute('aria-selected')==='true'});
+            seen.add(label.toLowerCase());choices.push({kind:'button',label,element:e,selected:e.getAttribute('aria-pressed')==='true'||e.getAttribute('aria-selected')==='true'||e.getAttribute('data-state')==='active'});
           });
-          Array.from(document.querySelectorAll('select')).slice(0,20).forEach((select,si)=>{
+          Array.from(document.querySelectorAll('select')).slice(0,20).forEach(select=>{
             if(!visible(select)||select.disabled)return;
             Array.from(select.options).slice(0,20).forEach((option,oi)=>{
               const label=clean(option.textContent);
               if(option.disabled||!/^(player|server|source)\\s*#?\\s*\\d{1,2}$/i.test(label)||seen.has(label.toLowerCase()))return;
               seen.add(label.toLowerCase());choices.push({kind:'select',label,element:select,option:oi,selected:option.selected});
             });
-          });
-          return choices.slice(0,12);
+          });return choices.slice(0,12);
         }
         """;
     static String read(){return "(()=>{"+CORE+"""
@@ -41,15 +42,14 @@ final class FilmPageSnapshot {
           let u;try{u=new URL(a.getAttribute('href'),here);}catch(e){return;}
           if(!permitted(u)||!/^\\/(movie|tv|show|watch|title)\\/[a-z0-9]/i.test(u.pathname)||seen.has(u.href))return;
           const img=a.querySelector('img'),h=a.querySelector('h1,h2,h3,h4');
-          const label=clean(img?.alt||h?.textContent||a.getAttribute('aria-label')||a.innerText);
+          const label=clean(h?.textContent||a.getAttribute('title')||a.getAttribute('aria-label')||img?.alt||a.innerText);
           if(label.length<2||label.length>180)return;
           seen.add(u.href);results.push({title:label,url:u.href});
         });
         const offered=players().map((p,i)=>({index:i,label:p.label,selected:p.selected}));
         const media=Array.from(document.querySelectorAll('video')).filter(visible);
-        // Error only, never a playback-success or cross-origin iframe inference.
         const mediaError=media.length===1&&media[0].error?media[0].error.code:0;
-        return JSON.stringify({state:'SNAPSHOT',url:here.href,search:here.pathname==='/search',results,players:offered,mediaError,mediaObservable:media.length===1});
+        return JSON.stringify({state:'SNAPSHOT',url:here.href,search:here.pathname.replace(/\\/+$/,'')==='/search',results,players:offered,mediaError,mediaObservable:media.length===1});
         """+"})()";}
     static String select(String pageUrl,int index,String label){
         if(index<0||index>=12)throw new IllegalArgumentException("Invalid player index");

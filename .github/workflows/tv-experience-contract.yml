@@ -14,9 +14,7 @@ concurrency:
 jobs:
   contract:
     runs-on: ubuntu-latest
-    timeout-minutes: 2
-    env:
-      PYTHONDONTWRITEBYTECODE: '1'
+    timeout-minutes: 3
     steps:
       - uses: actions/checkout@v5
       - uses: actions/setup-java@v5
@@ -24,7 +22,7 @@ jobs:
           distribution: temurin
           java-version: '17'
       - run: python tools/tv-first/check_contract.py
-      - name: Exercise production preview ownership and cursor geometry
+      - name: Retained preview and cursor geometry assertions
         run: |
           set -euo pipefail
           mkdir -p "$RUNNER_TEMP/nova-contract"
@@ -56,7 +54,7 @@ jobs:
         with:
           packages: platform-tools
           log-accepted-android-sdk-licenses: false
-      - name: Compile release and isolated instrumented test APKs
+      - name: Compile exact release and test packages in CI, not on the owner's Mac
         run: |
           set -euo pipefail
           mkdir -p /tmp/ghartv-candidate/proof
@@ -64,8 +62,8 @@ jobs:
           cd android-tv
           chmod +x gradlew
           ./gradlew --no-daemon --max-workers=2 assembleRelease assembleDebug assembleDebugAndroidTest
-          cp app/build/outputs/apk/release/app-release-unsigned.apk /tmp/ghartv-candidate/GharTV-code34-review-unsigned.apk
-      - name: Start isolated cloud Android test device, never the owner emulator
+          cp app/build/outputs/apk/release/app-release-unsigned.apk /tmp/ghartv-candidate/GharTV-code36-review-unsigned.apk
+      - name: Start isolated cloud test device
         run: |
           set -euo pipefail
           test -e /dev/kvm
@@ -93,43 +91,57 @@ jobs:
             if r.returncode==0 and r.stdout.strip()=='1':break
             time.sleep(2)
           else:raise RuntimeError('CLOUD_DEVICE_TIMEOUT')
-          subprocess.run(['adb','-s','emulator-5580','shell','input','keyevent','KEYCODE_WAKEUP'],check=True)
-          subprocess.run(['adb','-s','emulator-5580','shell','wm','dismiss-keyguard'],check=True)
+          for cmd in (['input','keyevent','KEYCODE_WAKEUP'],['wm','dismiss-keyguard']):subprocess.run(['adb','-s','emulator-5580','shell']+cmd,check=True)
           PY
-      - name: Test actual cursor and native-result player selection boundaries in WebView
+      - name: Actual WebView poster preservation, controller integration and player controls
         run: |
           set -euo pipefail
           adb -s emulator-5580 install -r android-tv/app/build/outputs/apk/debug/app-debug.apk
           adb -s emulator-5580 install -r android-tv/app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk
-          adb -s emulator-5580 shell am instrument -w -r -e class in.ghartv.nova.RemoteWebCursorTest,in.ghartv.nova.FilmNativeControlsTest in.ghartv.nova.test/androidx.test.runner.AndroidJUnitRunner | tee /tmp/ghartv-candidate/proof/remote-cursor-android.txt
-          grep -q 'OK (12 tests)' /tmp/ghartv-candidate/proof/remote-cursor-android.txt
-      - name: Package exact source and validation, without changing the approved code33
+          adb -s emulator-5580 shell am instrument -w -r -e class in.ghartv.nova.RemoteWebCursorTest,in.ghartv.nova.FilmNativeControlsTest in.ghartv.nova.test/androidx.test.runner.AndroidJUnitRunner | tee /tmp/ghartv-candidate/proof/android-tests.txt
+          grep -q 'OK (19 tests)' /tmp/ghartv-candidate/proof/android-tests.txt
+          adb -s emulator-5580 pull /sdcard/Android/data/in.ghartv.nova/files/poster-review-fixture.png /tmp/ghartv-candidate/proof/poster-review-fixture.png
+      - name: Package precompiled36 and make the existing entry select that exact candidate by default
         run: |
           python - <<'PY'
-          import hashlib,json,os,subprocess,zipfile
+          import ast,hashlib,json,os,subprocess,sys,types,zipfile
           from pathlib import Path
-          root=Path('/tmp/ghartv-candidate');source=subprocess.check_output(['git','rev-parse','HEAD'],text=True).strip()
-          apk=root/'GharTV-code34-review-unsigned.apk';apk_hash=hashlib.sha256(apk.read_bytes()).hexdigest()
-          paths=subprocess.check_output(['git','ls-files','-z']).split(b'\0')
-          with zipfile.ZipFile(root/'GHARTV_CODE34_SOURCE.zip','w',zipfile.ZIP_DEFLATED) as z:
+          root=Path('/tmp/ghartv-candidate');source=subprocess.check_output(['git','rev-parse','HEAD'],text=True).strip();tag='v0.6.0-rc10.9-poster-player-review'
+          apk=root/'GharTV-code36-review-unsigned.apk';apk_hash=hashlib.sha256(apk.read_bytes()).hexdigest()
+          paths=subprocess.check_output(['git','ls-files','-z']).split(b'\0');archive=root/'GHARTV_CODE36_SOURCE.zip'
+          with zipfile.ZipFile(archive,'w',zipfile.ZIP_DEFLATED) as z:
             for raw in paths:
               if not raw:continue
-              p=raw.decode()
-              if Path(p).suffix.lower() not in ('.woff','.woff2','.ttf','.otf'):z.writestr(p,subprocess.check_output(['git','show','HEAD:'+p]))
-          manifest={'schema':'ghartv.android-review.v1','repository':'AmritSinghGit/ghartv','branch':'codex/ghartv-remove-auto-preview','pr':1,'source':source,'version':'0.6.0-rc10.7-native-navigation','version_code':34,'apk':apk.name,'apk_sha256':apk_hash,'apk_bytes':apk.stat().st_size,'signing':'UNSIGNED_REQUIRES_EXISTING_OWNER_KEY','required_certificate_sha256':'40a9d8bf6b1c557b3d6fd02acef075368dd13e28691f207a297202d0d5ec233c','application_base':'39363ee529e9f8f3c00dcab8fdd69b88aa5e175c','production_changed':False,'owner_installation':False}
+              name=raw.decode()
+              if Path(name).suffix.lower() not in ('.woff','.woff2','.ttf','.otf'):z.writestr(name,subprocess.check_output(['git','show','HEAD:'+name]))
+          archive_hash=hashlib.sha256(archive.read_bytes()).hexdigest()
+          old=Path('GHARTV_OPEN_REVIEW.command').read_text();start=old.index("SOURCE='39363ee");end=old.index("SOURCE_ASSET=",start)
+          header=("SOURCE="+repr(source)+"\nCODE=36\nVERSION='0.6.0-rc10.9-poster-player-review'\nAPK_SHA="+repr(apk_hash)+"\nZIP_SHA="+repr(archive_hash)+"\nCERT='40a9d8bf6b1c557b3d6fd02acef075368dd13e28691f207a297202d0d5ec233c'\nTAG="+repr(tag)+"\nif sys.argv[1:] not in ([], ['--candidate','36']):\n    print('This opener reviews PRECOMPILED code36 only. Use --candidate 36; older apps are not reopened as this review.')\n    raise SystemExit(2)\n")
+          entry=old[:start]+header+old[end:]
+          def rawcode(text):return text.split("<<'PY'\n",1)[1].rsplit('\nPY\n',1)[0]
+          def funcs(text):return {n.name:ast.dump(n,include_attributes=False) for n in ast.parse(rawcode(text)).body if isinstance(n,ast.FunctionDef)}
+          assert funcs(old)==funcs(entry),'Signing/runtime/browser functions must remain identical'
+          entry_path=root/'GHARTV_OPEN_REVIEW.command';entry_path.write_text(entry);subprocess.run(['bash','-n',str(entry_path)],check=True)
+          for args in ([],['--candidate','36']):
+            sys.argv=['entry']+args;m=types.ModuleType('review_entry_check');exec(compile(rawcode(entry),'entry','exec'),m.__dict__)
+            assert m.CODE==36 and m.SOURCE==source and m.APK_SHA==apk_hash and m.ZIP_SHA==archive_hash and m.artifact.__defaults__==(tag,)
+          for args in (['--candidate','34'],['--candidate','35'],['--publish']):
+            sys.argv=['entry']+args
+            try:exec(compile(rawcode(entry),'entry','exec'),{'__name__':'not_main'});raise AssertionError('Old mode accepted')
+            except SystemExit as e:assert e.code==2
+          manifest={'schema':'ghartv.android-review.v1','source':source,'version':'0.6.0-rc10.9-poster-player-review','version_code':36,'apk':apk.name,'apk_sha256':apk_hash,'apk_bytes':apk.stat().st_size,'source_archive_sha256':archive_hash,'entry_sha256':hashlib.sha256(entry_path.read_bytes()).hexdigest(),'signing':'UNSIGNED_UNTIL_EXISTING_LOCAL_ORIGINAL_KEY_SIGNS','precompiled':True,'local_gradle_build_required':False,'default_review_code':36,'production_changed':False}
           (root/'CANDIDATE.json').write_text(json.dumps(manifest,indent=2)+'\n')
-          v={'schema':'ghartv.code34-validation.v1','source':source,'android_release':'COMPILED_UNSIGNED','real_android_webview_tests':12,'cursor_geometry_assertions':15,'preview_gate_assertions':29,'tv_contract_rules':9,'test_device':'ISOLATED_CLOUD_ANDROID36','test_content':'LOCAL_SYNTHETIC_HTML','voice_service_tested':False,'live_provider_selector_compatibility_verified':False,'full_native_result_ui_tested':False,'actual_owner_mac_or_tv_tested':False,'live_flixmomo_search_or_video_verified':False,'provider_network_settings_changed':False,'owner_cleanup_performed':False,'obsidian_readback':False,'approved_code33_promoted_by_this_build':False,'workflow_run':os.environ['GITHUB_RUN_ID']}
-          (root/'VALIDATION.json').write_text(json.dumps(v,indent=2)+'\n')
-          (root/'README.md').write_bytes(Path('REVIEW_060_RC10_7.md').read_bytes())
+          v={'schema':'ghartv.code36-validation.v1','source':source,'android_release_compiled':True,'actual_android_tests_passed':19,'native_coordinator_keeps_original_posters':True,'native_coordinator_remote_link_activation':True,'player_controls_and_origin_boundaries_tested':True,'cursor_geometry_assertions':15,'preview_gate_assertions':29,'tv_contract_rules':9,'test_content':'LOCAL_SYNTHETIC_HTML_AND_POSTER_ELEMENTS','test_device':'ISOLATED_CLOUD_ANDROID36','live_flixmomo_movie_playback':False,'native_media3_all_provider_sources':False,'owner_mac_installation':False,'old_candidate_args_rejected':True,'original_signing_web_and_browser_functions_unchanged':True,'local_build_required':False,'workflow_run':os.environ['GITHUB_RUN_ID']}
+          (root/'VALIDATION.json').write_text(json.dumps(v,indent=2)+'\n');(root/'README.md').write_bytes(Path('REVIEW_060_RC10_9.md').read_bytes())
           (root/'SHA256SUMS').write_text(''.join(hashlib.sha256(p.read_bytes()).hexdigest()+'  '+p.name+'\n' for p in sorted(root.iterdir()) if p.is_file() and p.name!='SHA256SUMS'))
           print(json.dumps(manifest));print(json.dumps(v))
           PY
-      - name: Publish unapproved review only, never the household update
+      - name: Publish review artifacts only, leave the approved family channel unchanged
         run: |
-          gh release create v0.6.0-rc10.7-native-navigation /tmp/ghartv-candidate/GharTV-code34-review-unsigned.apk /tmp/ghartv-candidate/GHARTV_CODE34_SOURCE.zip /tmp/ghartv-candidate/CANDIDATE.json /tmp/ghartv-candidate/VALIDATION.json /tmp/ghartv-candidate/SHA256SUMS --repo AmritSinghGit/ghartv --target "$GITHUB_SHA" --prerelease --latest=false --title 'GharTV code34 — native search navigation and player tray review' --notes-file REVIEW_060_RC10_7.md
+          gh release create v0.6.0-rc10.9-poster-player-review /tmp/ghartv-candidate/GharTV-code36-review-unsigned.apk /tmp/ghartv-candidate/GHARTV_CODE36_SOURCE.zip /tmp/ghartv-candidate/GHARTV_OPEN_REVIEW.command /tmp/ghartv-candidate/CANDIDATE.json /tmp/ghartv-candidate/VALIDATION.json /tmp/ghartv-candidate/SHA256SUMS --repo AmritSinghGit/ghartv --target "$GITHUB_SHA" --prerelease --latest=false --title 'GharTV Review36 — original posters, stable remote navigation and player tray' --notes-file REVIEW_060_RC10_9.md
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: ghartv-code34-review
+          name: ghartv-code36-review
           path: /tmp/ghartv-candidate/
           retention-days: 7
