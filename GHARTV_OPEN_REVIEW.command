@@ -8,7 +8,7 @@ if ! command -v python3 >/dev/null 2>&1; then
 fi
 python3 - "$@" <<'PY'
 """GharTV's existing review entry: original-key signing, one runtime, reused tabs.
-Published script, immutable code33 artifact. No build, key generation or public rollout.
+Published script, explicitly selected immutable review artifact. No build, key generation or public rollout.
 """
 from __future__ import annotations
 import ast, datetime, fcntl, hashlib, importlib.util, io, json, os, re, shlex
@@ -23,13 +23,27 @@ APK_SHA='9913212502cf72bf7a5823e283d57acfcb7076f7e07804059d98299ef1430d81'
 ZIP_SHA='f6cf152804563f1a8f140b189c8d9166e1682c2fd667b70bc32dd9324181d349'
 CERT='40a9d8bf6b1c557b3d6fd02acef075368dd13e28691f207a297202d0d5ec233c'
 TAG='v0.6.0-rc10.6-remote-cursor'
+# EXPLICIT_REVIEW_CANDIDATE_33_OR_34
+# Approval of code33 is independent: this command never publishes either version.
+if sys.argv[1:] not in ([], ['--candidate','33'], ['--candidate','34']):
+    print('Usage: GHARTV_OPEN_REVIEW.command [--candidate 33|34]')
+    raise SystemExit(2)
+if sys.argv[1:]==['--candidate','34']:
+    SOURCE='7f1a9239fbf1a642e43a3bb17b7eea8354578086'
+    CODE=34
+    VERSION='0.6.0-rc10.7-native-navigation'
+    APK_SHA='ea2a1116afb744e7cdd9bf1b952b9d25019af396a2b666fd661a9354d9d3f37f'
+    ZIP_SHA='3addaabb7fdadcbce7a37aa9bee45e34970f35730dc651c555d5c99c8e309793'
+    TAG='v0.6.0-rc10.7-native-navigation'
+SOURCE_ASSET='GHARTV_CODE'+str(CODE)+'_SOURCE.zip'
+APK_ASSET='GharTV-code'+str(CODE)+'-review-unsigned.apk'
 PACKAGE='in.ghartv.nova'; SERIAL='emulator-5580'; AVD='GharTV_Nova_Manual_google_tv_API36'
 HOME=Path.home(); STATE=HOME/'Library/Application Support/GharTV/owner-review'
 CACHE=STATE/'artifact-cache'; CURRENT=STATE/'current'; WEBSTATE=HOME/'Library/Application Support/GharTV/web-player'
 PUBLIC_URL='https://amritsinghgit.github.io/ghartv/'
 WEB_URL='http://127.0.0.1:8790/'
 SIGN_KEYS=('GHARTV_SIGNING_STORE','GHARTV_SIGNING_STORE_PASSWORD','GHARTV_SIGNING_KEY_ALIAS','GHARTV_SIGNING_KEY_PASSWORD')
-RUN_ID='GHARTV-CYAN-33-'+datetime.datetime.now(datetime.timezone.utc).strftime('%Y%m%dT%H%M%SZ')+'-'+str(os.getpid())
+RUN_ID='GHARTV-CYAN-'+str(CODE)+'-'+datetime.datetime.now(datetime.timezone.utc).strftime('%Y%m%dT%H%M%SZ')+'-'+str(os.getpid())
 RUN=STATE/'runs'/RUN_ID
 R={'schema':'ghartv.single-review-launch.v1','run_id':RUN_ID,'lane_id':'ghartv','repository':REPO,
    'review_source':SOURCE,'version_code':CODE,'version':VERSION,'unsigned_apk_sha256':APK_SHA,
@@ -155,7 +169,7 @@ def payload(p):
     return result
 
 def apk_identity(p,tools,env,expected_code=None):
-    archive=artifact('GHARTV_CODE33_SOURCE.zip',ZIP_SHA)
+    archive=artifact(SOURCE_ASSET,ZIP_SHA)
     with zipfile.ZipFile(archive) as z:verifier_data=z.read('tools/GharTVApkVerifier.java')
     verifier=RUN/'GharTVApkVerifier.java'
     if verifier.is_file():
@@ -181,7 +195,7 @@ def prepare_signed(unsigned,tools,env):
         safe(p)
         if digest(p)!=p.stem:raise Hold('SIGNED_CACHE_CHANGED_PRESERVED')
         if payload(p)==payload(unsigned):
-            apk_identity(p,tools,env,CODE);R['signing_mode']='REUSED_EXISTING_VERIFIED_CODE33';return p
+            apk_identity(p,tools,env,CODE);R['signing_mode']='REUSED_EXISTING_VERIFIED_CODE'+str(CODE);return p
     values=signing_values();private=env.copy()
     private['_GHARTV_STORE_PASSWORD']=values['GHARTV_SIGNING_STORE_PASSWORD']
     private['_GHARTV_KEY_PASSWORD']=values['GHARTV_SIGNING_KEY_PASSWORD']
@@ -194,7 +208,7 @@ def prepare_signed(unsigned,tools,env):
               '--v1-signing-enabled','true','--v2-signing-enabled','true','--v3-signing-enabled','true','--v4-signing-enabled','false','--out',signed,aligned],60,False,private)
             if p.returncode:raise Hold('EXISTING_SIGNING_CONFIG_REJECTED_NO_KEY_REPLACEMENT')
             apk_identity(signed,tools,env,CODE)
-            if payload(signed)!=payload(unsigned):raise Hold('SIGNED_PAYLOAD_DIFFERS_FROM_CODE33')
+            if payload(signed)!=payload(unsigned):raise Hold('SIGNED_PAYLOAD_DIFFERS_FROM_CODE'+str(CODE))
             h=digest(signed);dest=folder/(h+'.apk');atomic(dest,signed.read_bytes());R['signing_mode']='EXISTING_LOCAL_KEY_NO_PASSWORD_PROMPT';return dest
         finally:values.clear();private.clear()
 
@@ -248,7 +262,7 @@ def android_review(z,transport,sdk,signed,tools,env):
         installed=RUN/'prior-installed.apk';call([adb,'-s',SERIAL,'pull',paths[0][8:],installed],60)
         code=apk_identity(installed,tools,env);installed_hash=digest(installed);R['prior_installed_code']=code
         if code>CODE:raise Hold('NEWER_ANDROID_CANDIDATE_PRESERVED_NO_DOWNGRADE')
-        if code==CODE and payload(installed)!=payload(signed):raise Hold('DIFFERENT_CODE33_PAYLOAD_PRESERVED')
+        if code==CODE and payload(installed)!=payload(signed):raise Hold('DIFFERENT_CODE'+str(CODE)+'_PAYLOAD_PRESERVED')
     if installed_hash!=digest(signed):
         transport.verify_target(adb);result=call([adb,'-s',SERIAL,'install','-r',signed],120)
         if 'Success' not in result.stdout:raise Hold('INSTALL_NOT_CONFIRMED')
@@ -263,10 +277,10 @@ def android_review(z,transport,sdk,signed,tools,env):
     call([adb,'-s',SERIAL,'shell','wm','dismiss-keyguard'],10,False)
     result=call([adb,'-s',SERIAL,'shell','am','start','-W','-n',PACKAGE+'/.MainActivity'],30)
     if 'Status: ok' not in result.stdout:raise Hold('ANDROID_ACTIVITY_OPEN_NOT_CONFIRMED')
-    R['emulator']='RC33_INSTALLED_BYTES_VERIFIED_AND_FOREGROUND'
+    R['emulator']='RC'+str(CODE)+'_INSTALLED_BYTES_VERIFIED_AND_FOREGROUND'
     view=observe_window(z,transport);R['mac_window']=view.get('status');R['mac_window_observed']=view.get('window_observed',False);R['mac_window_frontmost']=view.get('app_active',False)
     if not R['mac_window_observed']:raise Hold('NORMAL_NOVA_WINDOW_NOT_CONFIRMED_NO_MIRROR_STARTED')
-    return 'REUSED_NORMAL_NOVA_CODE33' if not started else 'OPENED_NORMAL_NOVA_CODE33'
+    return ('REUSED_NORMAL_NOVA_CODE' if not started else 'OPENED_NORMAL_NOVA_CODE')+str(CODE)
 
 class NoRedirect(urllib.request.HTTPRedirectHandler):
     def redirect_request(self,*args,**kwargs):return None
@@ -461,20 +475,20 @@ def main():
         prior=CURRENT/'receipt.json'
         if prior.is_file():
             old=load_json(prior)
-            if isinstance(old.get('version_code'),int) and old['version_code']>CODE:print('A newer review is recorded. Code33 will not replace it.');return 2
+            if isinstance(old.get('version_code'),int) and old['version_code']>CODE:print('A newer review is recorded. Code'+str(CODE)+' will not replace it.');return 2
             atomic(RUN/'previous-receipt.json',prior.read_bytes())
-        print('\nGharTV code33 · sign, reopen and reuse · no new project or tabs per rerun\n',flush=True)
+        print('\nGharTV code'+str(CODE)+' · sign, reopen and reuse · no new project or tabs per rerun\n',flush=True)
         z=None;targets=[{'id':'public','url':PUBLIC_URL}]
         try:
-            source=artifact('GHARTV_CODE33_SOURCE.zip',ZIP_SHA);z=zipfile.ZipFile(source)
+            source=artifact(SOURCE_ASSET,ZIP_SHA);z=zipfile.ZipFile(source)
             transport=source_module(z,'tools/tv_local.py')
             try:
                 print('1/4  Signing with your existing local GharTV key…',flush=True)
-                sdk=transport.sdk();tools,env=signing_tools(sdk);unsigned=artifact('GharTV-code33-review-unsigned.apk',APK_SHA)
+                sdk=transport.sdk();tools,env=signing_tools(sdk);unsigned=artifact(APK_ASSET,APK_SHA)
                 signed=prepare_signed(unsigned,tools,env);R['signed_apk_sha256']=digest(signed);R['prepared_signed_apk_path']=str(signed)
                 R['signing_certificate_sha256']=CERT;R['prepared_signed_apk']='PERSISTED_AND_HASH_VERIFIED_BEFORE_EMULATOR_SELECTION'
                 atomic(CURRENT/'prepared-review-artifact.json',{'source':SOURCE,'version_code':CODE,'sha256':digest(signed),'path':str(signed),'certificate_sha256':CERT})
-                print('Signed code33 verified. Key/passwords remain on this Mac.',flush=True)
+                print('Signed code'+str(CODE)+' verified. Key/passwords remain on this Mac.',flush=True)
                 print('2/4  Reusing or reopening the normal Nova emulator…',flush=True)
                 R['android_result']=android_review(z,transport,sdk,signed,tools,env)
             except Exception as e:
