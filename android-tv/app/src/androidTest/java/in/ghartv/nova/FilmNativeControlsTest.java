@@ -19,7 +19,7 @@ import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import static org.junit.Assert.*;
 
-/** Production page/controller on a real WebView; no external provider or media requests. */
+/** Production page/controller in Android WebView. Local PNG pixels, no provider requests. */
 @RunWith(AndroidJUnit4.class)
 public class FilmNativeControlsTest {
     private PreviewHarnessActivity activity;
@@ -29,7 +29,15 @@ public class FilmNativeControlsTest {
     private void ui(Runnable r){InstrumentationRegistry.getInstrumentation().runOnMainSync(r);}
     @Before public void open(){Intent i=new Intent(InstrumentationRegistry.getInstrumentation().getTargetContext(),PreviewHarnessActivity.class).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);activity=(PreviewHarnessActivity)InstrumentationRegistry.getInstrumentation().startActivitySync(i);ui(()->{browser=new WebView(activity);browser.getSettings().setJavaScriptEnabled(true);activity.setContentView(browser);});}
     @After public void close(){ui(()->{if(controls!=null)controls.destroy();browser.destroy();activity.finish();});}
-    private void document(String url,String html) throws Exception {CountDownLatch latch=new CountDownLatch(1);ui(()->{browser.setWebViewClient(new WebViewClient(){@Override public void onPageFinished(WebView w,String u){latch.countDown();}});browser.loadDataWithBaseURL(url,"<!doctype html><meta name='viewport' content='width=device-width,initial-scale=1'><title>Local provider layout fixture</title>"+html,"text/html","UTF-8",null);});assertTrue(latch.await(6,TimeUnit.SECONDS));SystemClock.sleep(150);}
+    private void document(String url,String html) throws Exception {
+        // A missing src is a broken-image icon, not a loaded poster: Chromium can
+        // ignore HTML width/height for that icon. Use actual local image bytes.
+        String pixels="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR4nGOQy8z+DwADjQHyoDTvrgAAAABJRU5ErkJggg==";
+        final String fixture=html.replace("<img ","<img src='"+pixels+"' ");
+        CountDownLatch latch=new CountDownLatch(1);
+        ui(()->{browser.setWebViewClient(new WebViewClient(){@Override public void onPageFinished(WebView w,String u){latch.countDown();}});browser.loadDataWithBaseURL(url,"<!doctype html><meta name='viewport' content='width=device-width,initial-scale=1'><title>Local provider layout fixture</title>"+fixture,"text/html","UTF-8",null);});
+        assertTrue(latch.await(6,TimeUnit.SECONDS));SystemClock.sleep(150);
+    }
     private JSONObject evaluate(String js) throws Exception {CountDownLatch done=new CountDownLatch(1);String[] value={null};ui(()->browser.evaluateJavascript(js,v->{value[0]=v;done.countDown();}));assertTrue(done.await(3,TimeUnit.SECONDS));Object unwrapped=new JSONTokener(value[0]).nextValue();return new JSONObject((String)unwrapped);}
     @Test public void returnsOnlyRealVisibleProviderTitleLinks() throws Exception {document("https://flixmomo.app/search?q=test","<a href='/movie/1'>Actual local title</a><a href='/movie/1'>Duplicate</a><a href='https://other.invalid/movie/1'>External</a><a style='display:none' href='/tv/2'>Hidden</a><a href='/login'>Login</a>");JSONObject r=evaluate(FilmPageSnapshot.read());assertEquals("SNAPSHOT",r.getString("state"));assertEquals(1,r.getJSONArray("results").length());assertEquals("Actual local title",r.getJSONArray("results").getJSONObject(0).getString("title"));assertEquals(0,r.getJSONArray("players").length());}
     @Test public void reportsOnlyActuallyOfferedPlayersNotFixedSix() throws Exception {document("https://flixmomo.st/movie/1","<button>Player 1</button><button>Player 2</button><button disabled>Player 3</button><button>Donate</button><button style='display:none'>Server 4</button>");JSONObject r=evaluate(FilmPageSnapshot.read());assertEquals(2,r.getJSONArray("players").length());assertEquals("Player 1",r.getJSONArray("players").getJSONObject(0).getString("label"));assertFalse(r.getBoolean("mediaObservable"));assertEquals(0,r.getInt("mediaError"));}
@@ -49,25 +57,14 @@ public class FilmNativeControlsTest {
             controls=new FilmNativeControls(activity,frame,chrome,new FilmNativeControls.Host(){public void navigate(String u){navigated=u;}public void usePage(){browser.requestFocus();}public void searchToolbar(){chrome.setVisibility(View.VISIBLE);}public void nativeMode(){}public void navigationHint(String t){}});
             controls.attach(browser);browser.setFocusableInTouchMode(true);browser.requestFocus();controls.finished();
         });
-        // WebView callbacks cross the renderer process. Wait for an observed result,
-        // never a fixed sleep or a forced field value that could mask a broken reader.
+        // Readiness crosses a renderer process. Await the actual observed result;
+        // no forcing private fields or fixed sleep in place of readiness.
         boolean[] ready={false};long end=SystemClock.elapsedRealtime()+6000;
         while(!ready[0]&&SystemClock.elapsedRealtime()<end){ui(()->ready[0]=coordinatorFlag("postersReady"));if(!ready[0])SystemClock.sleep(50);}
-        String[] context={""};ui(()->{context[0]="ready="+coordinatorFlag("postersReady")+",reading="+coordinatorFlag("reading")+",blocked="+coordinatorFlag("blocked")+",focus="+browser.hasFocus()+",url="+browser.getUrl();});
+        String[] context={""};ui(()->context[0]="ready="+coordinatorFlag("postersReady")+",reading="+coordinatorFlag("reading")+",blocked="+coordinatorFlag("blocked")+",focus="+browser.hasFocus()+",url="+browser.getUrl());
         assertTrue("Coordinator did not observe poster layout: "+context[0],ready[0]);ui(()->{browser.requestFocus();assertTrue("Native page focus must be active",browser.hasFocus());});
     }
-    @Test public void fullCoordinatorNeverReplacesPostersWithNativeTiles() throws Exception {
-        document("https://flixmomo.app/search?q=test",posters());evaluate("(()=>{window.savedImages=Array.from(document.images);return JSON.stringify({ok:true})})()");attachControls();ui(()->controls.finished());SystemClock.sleep(2200);ui(()->controls.finished());SystemClock.sleep(250);
-        JSONObject result=evaluate("JSON.stringify({same:savedImages.every((x,i)=>x===document.images[i]),metadata:document.querySelectorAll('small').length,buttons:document.querySelectorAll('button').length})");assertTrue(result.getBoolean("same"));assertEquals(2,result.getInt("metadata"));assertEquals(0,result.getInt("buttons"));ui(()->assertFalse(controls.visible()));
-        android.graphics.Bitmap shot=InstrumentationRegistry.getInstrumentation().getUiAutomation().takeScreenshot();if(shot!=null){try(java.io.FileOutputStream stream=new java.io.FileOutputStream(new java.io.File(activity.getExternalFilesDir(null),"poster-review-fixture.png"))){shot.compress(android.graphics.Bitmap.CompressFormat.PNG,100,stream);}shot.recycle();}
-    }
-    @Test public void actualCoordinatorRemoteActivatesSelectedOriginalPoster() throws Exception {
-        document("https://flixmomo.app/search?q=test",posters());attachControls();assertEquals(0,evaluate(FilmPosterNavigation.script("focus")).getInt("index"));
-        ui(()->assertTrue("Right key handled by poster coordinator",controls.posterKey(new KeyEvent(KeyEvent.ACTION_DOWN,KeyEvent.KEYCODE_DPAD_RIGHT))));
-        long end=SystemClock.elapsedRealtime()+3000;while(!"two".equals(evaluate("JSON.stringify({id:document.activeElement.id})").optString("id"))&&SystemClock.elapsedRealtime()<end)SystemClock.sleep(30);
-        assertEquals("two",evaluate("JSON.stringify({id:document.activeElement.id})").getString("id"));
-        ui(()->assertTrue("OK key handled by poster coordinator",controls.posterKey(new KeyEvent(KeyEvent.ACTION_DOWN,KeyEvent.KEYCODE_DPAD_CENTER))));
-        end=SystemClock.elapsedRealtime()+3000;while(navigated.isEmpty()&&SystemClock.elapsedRealtime()<end)SystemClock.sleep(30);assertEquals("https://flixmomo.app/movie/two",navigated);
-    }
+    @Test public void fullCoordinatorNeverReplacesPostersWithNativeTiles() throws Exception {document("https://flixmomo.app/search?q=test",posters());evaluate("(()=>{window.savedImages=Array.from(document.images);return JSON.stringify({ok:true})})()");attachControls();ui(()->controls.finished());SystemClock.sleep(2200);ui(()->controls.finished());SystemClock.sleep(250);JSONObject result=evaluate("JSON.stringify({same:savedImages.every((x,i)=>x===document.images[i]),metadata:document.querySelectorAll('small').length,buttons:document.querySelectorAll('button').length})");assertTrue(result.getBoolean("same"));assertEquals(2,result.getInt("metadata"));assertEquals(0,result.getInt("buttons"));ui(()->assertFalse(controls.visible()));android.graphics.Bitmap shot=InstrumentationRegistry.getInstrumentation().getUiAutomation().takeScreenshot();if(shot!=null){try(java.io.FileOutputStream stream=new java.io.FileOutputStream(new java.io.File(activity.getExternalFilesDir(null),"poster-review-fixture.png"))){shot.compress(android.graphics.Bitmap.CompressFormat.PNG,100,stream);}shot.recycle();}}
+    @Test public void actualCoordinatorRemoteActivatesSelectedOriginalPoster() throws Exception {document("https://flixmomo.app/search?q=test",posters());attachControls();assertEquals(0,evaluate(FilmPosterNavigation.script("focus")).getInt("index"));ui(()->assertTrue("Right key handled by poster coordinator",controls.posterKey(new KeyEvent(KeyEvent.ACTION_DOWN,KeyEvent.KEYCODE_DPAD_RIGHT))));long end=SystemClock.elapsedRealtime()+3000;while(!"two".equals(evaluate("JSON.stringify({id:document.activeElement.id})").optString("id"))&&SystemClock.elapsedRealtime()<end)SystemClock.sleep(30);assertEquals("two",evaluate("JSON.stringify({id:document.activeElement.id})").getString("id"));ui(()->assertTrue("OK key handled by poster coordinator",controls.posterKey(new KeyEvent(KeyEvent.ACTION_DOWN,KeyEvent.KEYCODE_DPAD_CENTER))));end=SystemClock.elapsedRealtime()+3000;while(navigated.isEmpty()&&SystemClock.elapsedRealtime()<end)SystemClock.sleep(30);assertEquals("https://flixmomo.app/movie/two",navigated);}
     @Test public void advertisedProviderOriginAndTabControlsAreRecognized() throws Exception {String url="https://flixmomo.bet/movie/one";document(url,"<a href='#one' onclick=\"document.title='player1'\">Player 1</a><div role='tab' tabindex='0'>Player 2</div><a href='https://unrelated.invalid/'>Player 6</a>");assertTrue(FlixMomoActivity.allowedTop(android.net.Uri.parse(url)));JSONObject p=evaluate(FilmPageSnapshot.read());assertEquals(2,p.getJSONArray("players").length());assertEquals("SELECTION_REQUESTED",evaluate(FilmPageSnapshot.select(url,0,"Player 1")).getString("state"));}
 }
