@@ -35,7 +35,12 @@ final class FilmPageFocus {
          return pack({state:tap?'TAP':'FOCUSED',label:label(e),x,y,width:innerWidth,height:innerHeight,tag:e.tagName});
         }
         if(action==='watch'){let n=candidates.findIndex(watch);if(n<0){const media=candidates.map((e,i)=>({e,i})).filter(x=>/^(VIDEO|IFRAME)$/.test(x.e.tagName));if(media.length===1)n=media[0].i;}return focus(n,true);}
-        if(action==='watchlist')return focus(candidates.findIndex(watchlist),true);
+        if(action==='watchlist'){
+         // Prefer the current title's mutation control to the generic header link.
+         let n=candidates.findIndex(e=>/^(add to |remove from )(watchlist|watch list|playlist)$/i.test(label(e)));
+         if(n<0)n=candidates.findIndex(e=>watchlist(e)&&!e.closest('nav,header,[role="navigation"]'));
+         if(n<0)n=candidates.findIndex(watchlist);return focus(n,true);
+        }
         if(!candidates.length)return pack({state:'NOT_FOUND'});
         if(i<0){let preferred=candidates.findIndex(watch);i=preferred>=0?preferred:0;if(action!=='activate')return focus(i);}
         if(action==='activate')return focus(i,true);
