@@ -19,7 +19,7 @@ import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import static org.junit.Assert.*;
 
-/** Production page/controller in Android WebView. Local PNG pixels, no provider requests. */
+/** Actual production controller/WebView, local image bytes and synthetic page only. */
 @RunWith(AndroidJUnit4.class)
 public class FilmNativeControlsTest {
     private PreviewHarnessActivity activity;
@@ -30,13 +30,14 @@ public class FilmNativeControlsTest {
     @Before public void open(){Intent i=new Intent(InstrumentationRegistry.getInstrumentation().getTargetContext(),PreviewHarnessActivity.class).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);activity=(PreviewHarnessActivity)InstrumentationRegistry.getInstrumentation().startActivitySync(i);ui(()->{browser=new WebView(activity);browser.getSettings().setJavaScriptEnabled(true);activity.setContentView(browser);});}
     @After public void close(){ui(()->{if(controls!=null)controls.destroy();browser.destroy();activity.finish();});}
     private void document(String url,String html) throws Exception {
-        // A missing src is a broken-image icon, not a loaded poster: Chromium can
-        // ignore HTML width/height for that icon. Use actual local image bytes.
         String pixels="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR4nGOQy8z+DwADjQHyoDTvrgAAAABJRU5ErkJggg==";
         final String fixture=html.replace("<img ","<img src='"+pixels+"' ");
         CountDownLatch latch=new CountDownLatch(1);
-        ui(()->{browser.setWebViewClient(new WebViewClient(){@Override public void onPageFinished(WebView w,String u){latch.countDown();}});browser.loadDataWithBaseURL(url,"<!doctype html><meta name='viewport' content='width=device-width,initial-scale=1'><title>Local provider layout fixture</title>"+fixture,"text/html","UTF-8",null);});
+        // Give the local fixture its history URL as well as its base URL, so
+        // native getUrl and document.location agree as they do on a real load.
+        ui(()->{browser.setWebViewClient(new WebViewClient(){@Override public void onPageFinished(WebView w,String u){latch.countDown();}});browser.loadDataWithBaseURL(url,"<!doctype html><meta name='viewport' content='width=device-width,initial-scale=1'><title>Local provider layout fixture</title>"+fixture,"text/html","UTF-8",url);});
         assertTrue(latch.await(6,TimeUnit.SECONDS));SystemClock.sleep(150);
+        String[] current={null};ui(()->current[0]=browser.getUrl());assertEquals("Local fixture identity",url,current[0]);
     }
     private JSONObject evaluate(String js) throws Exception {CountDownLatch done=new CountDownLatch(1);String[] value={null};ui(()->browser.evaluateJavascript(js,v->{value[0]=v;done.countDown();}));assertTrue(done.await(3,TimeUnit.SECONDS));Object unwrapped=new JSONTokener(value[0]).nextValue();return new JSONObject((String)unwrapped);}
     @Test public void returnsOnlyRealVisibleProviderTitleLinks() throws Exception {document("https://flixmomo.app/search?q=test","<a href='/movie/1'>Actual local title</a><a href='/movie/1'>Duplicate</a><a href='https://other.invalid/movie/1'>External</a><a style='display:none' href='/tv/2'>Hidden</a><a href='/login'>Login</a>");JSONObject r=evaluate(FilmPageSnapshot.read());assertEquals("SNAPSHOT",r.getString("state"));assertEquals(1,r.getJSONArray("results").length());assertEquals("Actual local title",r.getJSONArray("results").getJSONObject(0).getString("title"));assertEquals(0,r.getJSONArray("players").length());}
@@ -57,8 +58,6 @@ public class FilmNativeControlsTest {
             controls=new FilmNativeControls(activity,frame,chrome,new FilmNativeControls.Host(){public void navigate(String u){navigated=u;}public void usePage(){browser.requestFocus();}public void searchToolbar(){chrome.setVisibility(View.VISIBLE);}public void nativeMode(){}public void navigationHint(String t){}});
             controls.attach(browser);browser.setFocusableInTouchMode(true);browser.requestFocus();controls.finished();
         });
-        // Readiness crosses a renderer process. Await the actual observed result;
-        // no forcing private fields or fixed sleep in place of readiness.
         boolean[] ready={false};long end=SystemClock.elapsedRealtime()+6000;
         while(!ready[0]&&SystemClock.elapsedRealtime()<end){ui(()->ready[0]=coordinatorFlag("postersReady"));if(!ready[0])SystemClock.sleep(50);}
         String[] context={""};ui(()->context[0]="ready="+coordinatorFlag("postersReady")+",reading="+coordinatorFlag("reading")+",blocked="+coordinatorFlag("blocked")+",focus="+browser.hasFocus()+",url="+browser.getUrl());
