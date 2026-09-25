@@ -1,98 +1,145 @@
-name: GharTV smooth review source snapshot
+name: GharTV existing review entry validation
 on:
   push:
     branches: ['codex/ghartv-remove-auto-preview']
-    paths: ['.github/workflows/smooth-source-snapshot.yml','tools/tv-first/repair_review_entry.py']
+    paths: ['.github/workflows/smooth-source-snapshot.yml']
 permissions:
   contents: write
-  actions: read
 concurrency:
   group: ghartv-existing-review-entry
   cancel-in-progress: false
 jobs:
-  review_entry:
+  entry:
     runs-on: macos-14
-    timeout-minutes: 4
+    timeout-minutes: 7
     env:
       PYTHONDONTWRITEBYTECODE: '1'
-      GH_TOKEN: ${{ github.token }}
     steps:
       - uses: actions/checkout@v5
         with:
           fetch-depth: 0
-      - name: Retain actual signing evidence and the observed macOS consent boundary
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: android-actions/setup-android@v3
+        with:
+          packages: 'build-tools;36.0.0'
+          log-accepted-android-sdk-licenses: false
+      - name: Add explicit candidate selection without changing the existing runtime and tab logic
         run: |
-          mkdir -p /tmp/ghartv-entry-proof
-          gh run download 35988834803 --repo AmritSinghGit/ghartv --name ghartv-review-entry-proof --dir /tmp/ghartv-prior-entry
-          python3 tools/tv-first/repair_review_entry.py
-          bash -n GHARTV_OPEN_REVIEW.command
+          mkdir -p /tmp/ghartv-review-entry
           python3 - <<'PY'
           from pathlib import Path
-          import ast,hashlib,json,types
-          def embedded(path):return Path(path).read_text().split("<<'PY'\n",1)[1].rsplit('\nPY\n',1)[0]
-          source=embedded('GHARTV_OPEN_REVIEW.command');prior=embedded('/tmp/ghartv-prior-entry/GHARTV_OPEN_REVIEW.command')
-          def funcs(text):return {n.name:ast.dump(n,include_attributes=False) for n in ast.parse(text).body if isinstance(n,ast.FunctionDef)}
-          a,b=funcs(source),funcs(prior)
-          for name in ('signing_values','signing_tools','prepare_signed','apk_identity','payload','artifact','web_review','android_review'):assert a[name]==b[name],name
-          sig=json.loads(Path('/tmp/ghartv-prior-entry/SIGNING_VALIDATION.json').read_text());assert sig['status']=='PASS'
-          Path('/tmp/ghartv-entry-proof/SIGNING_VALIDATION.json').write_text(json.dumps(sig,indent=2))
-          browser=json.loads(Path('/tmp/ghartv-prior-entry/BROWSER_VALIDATION.json').read_text());assert browser['status']=='FAIL'
-          # Native probe reached the normal macOS "control Safari" consent sheet.
-          # Its screenshot was inspected; no TCC modification or auto-approval.
-          browser['interpretation']='MACOS_AUTOMATION_CONSENT_REQUIRED_NATIVE_TAB_REUSE_NOT_VERIFIED'
-          browser['permission_bypassed']=False
-          Path('/tmp/ghartv-entry-proof/BROWSER_NATIVE_BOUNDARY.json').write_text(json.dumps(browser,indent=2))
-          m=types.ModuleType('entry');exec(compile(source,'entry','exec'),m.__dict__)
-          Path('/tmp/ghartv-entry-proof/browser.js').write_text(m.BROWSER_SCRIPT)
-          assert m.CODE==33 and m.CERT=='40a9d8bf6b1c557b3d6fd02acef075368dd13e28691f207a297202d0d5ec233c'
-          assert 'scrcpy' not in m.android_review.__code__.co_names
+          import ast,hashlib,json
+          p=Path('GHARTV_OPEN_REVIEW.command');s=p.read_text();before=s
+          def change(a,b,count=1):
+            global s
+            assert s.count(a)==count,a
+            s=s.replace(a,b)
+          if '# EXPLICIT_REVIEW_CANDIDATE_33_OR_34' not in s:
+            assert hashlib.sha256(p.read_bytes()).hexdigest()=='3c2d4d6809958c45f65b6b868f6da274c5c182b5343cf9b1c8e2630acc102c2b'
+            anchor="TAG='v0.6.0-rc10.6-remote-cursor'\n"
+            selection="""# EXPLICIT_REVIEW_CANDIDATE_33_OR_34
+          # Approval of code33 is independent: this command never publishes either version.
+          if sys.argv[1:] not in ([], ['--candidate','33'], ['--candidate','34']):
+              print('Usage: GHARTV_OPEN_REVIEW.command [--candidate 33|34]')
+              raise SystemExit(2)
+          if sys.argv[1:]==['--candidate','34']:
+              SOURCE='7f1a9239fbf1a642e43a3bb17b7eea8354578086'
+              CODE=34
+              VERSION='0.6.0-rc10.7-native-navigation'
+              APK_SHA='ea2a1116afb744e7cdd9bf1b952b9d25019af396a2b666fd661a9354d9d3f37f'
+              ZIP_SHA='3addaabb7fdadcbce7a37aa9bee45e34970f35730dc651c555d5c99c8e309793'
+              TAG='v0.6.0-rc10.7-native-navigation'
+          SOURCE_ASSET='GHARTV_CODE'+str(CODE)+'_SOURCE.zip'
+          APK_ASSET='GharTV-code'+str(CODE)+'-review-unsigned.apk'
+          """
+            change(anchor,anchor+selection)
+            change('Published script, immutable code33 artifact.','Published script, explicitly selected immutable review artifact.')
+            change("'GHARTV-CYAN-33-'","'GHARTV-CYAN-'+str(CODE)+'-'")
+            change("artifact('GHARTV_CODE33_SOURCE.zip',ZIP_SHA)","artifact(SOURCE_ASSET,ZIP_SHA)",2)
+            change("artifact('GharTV-code33-review-unsigned.apk',APK_SHA)","artifact(APK_ASSET,APK_SHA)")
+            replacements=[
+              ("'REUSED_EXISTING_VERIFIED_CODE33'","'REUSED_EXISTING_VERIFIED_CODE'+str(CODE)"),
+              ("Hold('SIGNED_PAYLOAD_DIFFERS_FROM_CODE33')","Hold('SIGNED_PAYLOAD_DIFFERS_FROM_CODE'+str(CODE))"),
+              ("Hold('DIFFERENT_CODE33_PAYLOAD_PRESERVED')","Hold('DIFFERENT_CODE'+str(CODE)+'_PAYLOAD_PRESERVED')"),
+              ("'RC33_INSTALLED_BYTES_VERIFIED_AND_FOREGROUND'","'RC'+str(CODE)+'_INSTALLED_BYTES_VERIFIED_AND_FOREGROUND'"),
+              ("'REUSED_NORMAL_NOVA_CODE33' if not started else 'OPENED_NORMAL_NOVA_CODE33'","('REUSED_NORMAL_NOVA_CODE' if not started else 'OPENED_NORMAL_NOVA_CODE')+str(CODE)"),
+              ("print('A newer review is recorded. Code33 will not replace it.')","print('A newer review is recorded. Code'+str(CODE)+' will not replace it.')"),
+              ("print('\\nGharTV code33 · sign, reopen and reuse · no new project or tabs per rerun\\n',flush=True)","print('\\nGharTV code'+str(CODE)+' · sign, reopen and reuse · no new project or tabs per rerun\\n',flush=True)"),
+              ("print('Signed code33 verified. Key/passwords remain on this Mac.',flush=True)","print('Signed code'+str(CODE)+' verified. Key/passwords remain on this Mac.',flush=True)")]
+            for a,b in replacements:change(a,b)
+          def functions(text):
+            raw=text.split("<<'PY'\n",1)[1].rsplit('\nPY\n',1)[0]
+            return {n.name:ast.dump(n,include_attributes=False) for n in ast.parse(raw).body if isinstance(n,ast.FunctionDef)}
+          a,b=functions(before),functions(s)
+          assert a.keys()==b.keys()
+          allowed={'apk_identity','prepare_signed','android_review','main'}
+          assert all(a[k]==b[k] for k in a if k not in allowed)
+          assert "if code>CODE:raise Hold('NEWER_ANDROID_CANDIDATE_PRESERVED_NO_DOWNGRADE')" in s
+          compile(s.split("<<'PY'\n",1)[1].rsplit('\nPY\n',1)[0],str(p),'exec');p.write_text(s)
+          Path('/tmp/ghartv-review-entry/UNCHANGED_BOUNDARIES.json').write_text(json.dumps({'same_browser_tab_functions':True,'same_web_runtime_functions':True,'same_private_key_reader':True,'same_payload_comparison':True,'same_local_cleanup_behavior':True,'no_publication_operation':True},indent=2))
           PY
-          node --check /tmp/ghartv-entry-proof/browser.js
-      - name: Verify seven same-tab selection cases without bypassing native browser consent
+          bash -n GHARTV_OPEN_REVIEW.command
+      - name: Verify both exact modes and actual code34 signing on a Mac with disposable test key
         run: |
-          cat > /tmp/ghartv-entry-proof/browser-model-test.cjs <<'JS'
-          const fs=require('fs'),vm=require('vm'),assert=require('assert');
-          const script=fs.readFileSync('/tmp/ghartv-entry-proof/browser.js','utf8');
-          function setup(initial,denied){
-           const apps={},actions=[];
-           function tab(url){const o={value:url};Object.defineProperty(o,'url',{get(){return ()=>o.value;},set(v){o.value=v;actions.push(['navigate',v]);}});return o;}
-           function win(urls){const ts=urls.map(tab);function tabs(){return ts;}tabs.push=v=>{ts.push(tab(v.url));actions.push(['tab',v.url]);};const w={tabs,index:1};Object.defineProperty(w,'currentTab',{get(){return w.ct||ts[0];},set(t){w.ct=t;}});return w;}
-           for(const name of ['Safari','Brave Browser','Google Chrome']){
-            let wins=(initial[name]||[]).map(win),running=name in initial;
-            apps[name]={running:()=>running,launch:()=>{running=true;},activate:()=>{},windows:()=>{if(name===denied)throw Error('denied');return wins;},Tab:o=>o,Document:()=>({make:()=>{const w=win(['about:blank']);wins.push(w);actions.push(['window']);return w;}})};
-           }
-           const ctx={Application:name=>apps[name],delay:()=>{},JSON,console:{log:()=>{}}};vm.createContext(ctx);vm.runInContext(script,ctx);
-           return {apps,actions,run:t=>JSON.parse(ctx.run([JSON.stringify(t),JSON.stringify(['Safari','Brave Browser','Google Chrome'])])),count:()=>Object.values(apps).reduce((n,a)=>n+(a.running()?a.windows().reduce((n,w)=>n+w.tabs().length,0):0),0)};
-          }
-          const t=[{id:'public',url:'https://amritsinghgit.github.io/ghartv/'},{id:'viewer',url:'http://127.0.0.1:8790/'},{id:'analytics',url:'http://127.0.0.1:4371/#/engineering'}];let tests=0;
-          let x=setup({Safari:[[t[0].url,'http://127.0.0.1:8790/flixmomo.html',t[2].url]]});let r=x.run(t);assert.equal(x.count(),3);assert(r.results.every(x=>x.status==='REUSED_EXISTING_TAB'));tests++;
-          x=setup({Safari:[['about:blank']]});x.run(t);assert.equal(x.count(),3);x.run(t);assert.equal(x.count(),3);tests++;
-          x=setup({Safari:[[t[0].url]],'Brave Browser':[[t[1].url,t[2].url]]});x.run(t);assert.equal(x.count(),3);assert(!x.actions.some(x=>x[0]==='tab'));tests++;
-          x=setup({Safari:[]});x.run(t);x.run(t);assert.equal(x.count(),3);assert.equal(x.actions.filter(x=>x[0]==='window').length,1);tests++;
-          x=setup({Safari:[[t[0].url,t[1].url,'http://127.0.0.1:8790/owner.html']]});x.run(t);assert.equal(x.count(),3);assert.equal(x.apps.Safari.windows()[0].tabs()[2].value,t[2].url);tests++;
-          x=setup({Safari:[[t[0].url]]},'Safari');assert.equal(x.run(t).status,'BROWSER_AUTOMATION_PERMISSION_NEEDED_NO_TABS_CREATED');assert.equal(x.actions.length,0);tests++;
-          x=setup({Safari:[['https://example.com']]});x.run([{id:'analytics',url:null}]);assert.equal(x.count(),1);assert.equal(x.actions.length,0);tests++;
-          fs.writeFileSync('/tmp/ghartv-entry-proof/BROWSER_MODEL_VALIDATION.json',JSON.stringify({status:'PASS',tests,native_browser:false,native_permission:'REQUIRED_NOT_BYPASSED'},null,2));console.log('BROWSER_MODEL_TESTS='+tests+'_PASS');
-          JS
-          node /tmp/ghartv-entry-proof/browser-model-test.cjs
-      - name: Publish existing opener with exact scope, not a claim of native owner execution
+          python3 - <<'PY'
+          from pathlib import Path
+          import hashlib,json,os,secrets,subprocess,sys,tempfile,types
+          raw=Path('GHARTV_OPEN_REVIEW.command').read_text().split("<<'PY'\n",1)[1].rsplit('\nPY\n',1)[0]
+          def module(args):
+            sys.argv=['test']+args;m=types.ModuleType('test_entry');exec(compile(raw,'entry','exec'),m.__dict__);return m
+          cases=[]
+          for args,code in [([],33),(['--candidate','33'],33),(['--candidate','34'],34)]:
+            m=module(args);assert m.CODE==code and m.R['version_code']==code and m.RUN_ID.startswith('GHARTV-CYAN-'+str(code)+'-')
+            assert m.artifact.__defaults__==(m.TAG,) and str(code) in m.SOURCE_ASSET
+            cases.append({'arguments':args,'code':code,'result':'PASS'})
+          for args in [['--publish'],['--candidate','35'],['--candidate','34','--publish']]:
+            try:module(args);raise AssertionError('Unknown mode accepted')
+            except SystemExit as e:assert e.code==2
+          m=module(['--candidate','34'])
+          with tempfile.TemporaryDirectory(prefix='ghartv-code34-sign-test-') as d:
+            root=Path(d).resolve();m.HOME=root;m.STATE=root/'Library/Application Support/GharTV/owner-review';m.CACHE=m.STATE/'artifact-cache';m.CURRENT=m.STATE/'current';m.RUN=m.STATE/'runs/test';m.mkdir(m.RUN)
+            unsigned=m.artifact(m.APK_ASSET,m.APK_SHA);archive=m.artifact(m.SOURCE_ASSET,m.ZIP_SHA)
+            keyroot=m.mkdir(root/'Library/Application Support/GharTV/signing');key=keyroot/'ghartv-release.jks'
+            password=secrets.token_hex(16);env={**os.environ,'FIXTURE_PASSWORD':password}
+            subprocess.run(['keytool','-genkeypair','-keystore',str(key),'-storetype','JKS','-alias','existing','-keyalg','RSA','-keysize','2048','-validity','2','-dname','CN=Disposable GharTV CI identity','-storepass:env','FIXTURE_PASSWORD','-keypass:env','FIXTURE_PASSWORD'],env=env,check=True,capture_output=True)
+            der=root/'fixture.der';subprocess.run(['keytool','-exportcert','-keystore',str(key),'-alias','existing','-storepass:env','FIXTURE_PASSWORD','-file',str(der)],env=env,check=True,capture_output=True)
+            m.CERT=hashlib.sha256(der.read_bytes()).hexdigest()
+            cfg=keyroot/'signing.env';cfg.write_text('GHARTV_SIGNING_STORE='+json.dumps(str(key))+'\nGHARTV_SIGNING_STORE_PASSWORD='+password+'\nGHARTV_SIGNING_KEY_ALIAS=existing\nGHARTV_SIGNING_KEY_PASSWORD='+password+'\n');cfg.chmod(0o600)
+            tools,signenv=m.signing_tools(Path(os.environ['ANDROID_HOME']))
+            signed=m.prepare_signed(unsigned,tools,signenv)
+            assert m.apk_identity(signed,tools,signenv,34)==34 and m.payload(signed)==m.payload(unsigned)
+            cfg.unlink();assert m.prepare_signed(unsigned,tools,signenv)==signed and m.R['signing_mode']=='REUSED_EXISTING_VERIFIED_CODE34'
+            m.CERT='0'*64
+            try:m.apk_identity(signed,tools,signenv,34);raise AssertionError('Wrong certificate accepted')
+            except m.Hold as e:assert str(e)=='ORIGINAL_CERTIFICATE_MISMATCH_NO_INSTALL'
+          result={'status':'PASS','mode_cases':cases,'invalid_modes_rejected':3,'actual_mac_code34_signing':'PASS_DISPOSABLE_TEST_KEY_ONLY','payload_unchanged':True,'signed_cache_reused':True,'wrong_certificate_rejected':True,'owner_key_accessed':False,'owner_mac_executed':False,'normal_emulator_opened_on_owner_mac':False,'native_browser_tabs_retested':False,'approved_code33_published':False,'test_key_or_signed_test_apk_uploaded':False}
+          Path('/tmp/ghartv-review-entry/ENTRY_VALIDATION.json').write_text(json.dumps(result,indent=2));print(json.dumps(result))
+          PY
+      - name: Commit the verified existing entry without overwriting concurrent source work
         run: |
           set -euo pipefail
           test "$(git ls-remote origin refs/heads/codex/ghartv-remove-auto-preview | cut -f1)" = "$GITHUB_SHA"
           git config user.name 'GharTV review-entry validation'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git add GHARTV_OPEN_REVIEW.command
-          if ! git diff --cached --quiet; then git commit -m 'fix(review): sign code33 and reuse existing review surfaces with normal consent';git push origin HEAD:refs/heads/codex/ghartv-remove-auto-preview;fi
+          if ! git diff --cached --quiet; then
+            git commit -m 'feat(review): explicitly select signed code34 review without promoting code33'
+            git push origin HEAD:refs/heads/codex/ghartv-remove-auto-preview
+          fi
+          cp GHARTV_OPEN_REVIEW.command /tmp/ghartv-review-entry/
           python3 - <<'PY'
           from pathlib import Path
           import hashlib,json,subprocess
-          p=Path('GHARTV_OPEN_REVIEW.command');out=Path('/tmp/ghartv-entry-proof');(out/p.name).write_bytes(p.read_bytes())
-          data={'schema':'ghartv.review-entry-validation.v1','source':subprocess.check_output(['git','rev-parse','HEAD'],text=True).strip(),'entry_sha256':hashlib.sha256(p.read_bytes()).hexdigest(),'apk_source_unchanged':'39363ee529e9f8f3c00dcab8fdd69b88aa5e175c','native_mac_signing_fixture':'PASS_UNCHANGED_MECHANISM_REUSED_FROM_35988440720','tab_selection_model_tests':7,'native_safari_reuse':'NOT_VERIFIED_MACOS_AUTOMATION_CONSENT_REQUIRED','permission_bypass':False,'owner_mac_execution':False,'owner_analytics_authenticated':False,'household_feed_changed':False}
-          (out/'VALIDATION.json').write_text(json.dumps(data,indent=2));print(json.dumps(data))
+          p=Path('GHARTV_OPEN_REVIEW.command');root=Path('/tmp/ghartv-review-entry')
+          d={'schema':'ghartv.review-entry-code34.v1','entry_source':subprocess.check_output(['git','rev-parse','HEAD'],text=True).strip(),'entry_sha256':hashlib.sha256(p.read_bytes()).hexdigest(),'default_code':33,'explicit_review_code':34,'application_source_code34':'7f1a9239fbf1a642e43a3bb17b7eea8354578086','original_signer_required':True,'approved_code33_publication_unchanged':True,'owner_execution':False}
+          (root/'DELIVERY.json').write_text(json.dumps(d,indent=2));print(json.dumps(d))
           PY
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: ghartv-review-entry-proof
-          path: /tmp/ghartv-entry-proof/
+          name: ghartv-review-entry-code34
+          path: /tmp/ghartv-review-entry/
           retention-days: 7
