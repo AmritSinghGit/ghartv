@@ -1,68 +1,117 @@
-name: GharTV existing provider flow observation
+name: GharTV existing release continuation
 on:
   push:
     branches: ['codex/ghartv-remove-auto-preview']
     paths: ['.github/workflows/smooth-source-snapshot.yml']
 permissions:
-  contents: read
+  contents: write
 concurrency:
-  group: ghartv-existing-review-entry
-  cancel-in-progress: true
+  group: ghartv-existing-reviewed-publication
+  cancel-in-progress: false
 jobs:
-  observe:
+  finish_existing_upload:
     runs-on: ubuntu-latest
-    timeout-minutes: 6
+    timeout-minutes: 7
+    env:
+      GH_TOKEN: ${{ github.token }}
+      PYTHONDONTWRITEBYTECODE: '1'
     steps:
       - uses: actions/checkout@v5
-      - uses: actions/setup-node@v5
+      - uses: actions/setup-java@v5
         with:
-          node-version: '22'
-      - name: Use the existing optional browser dependency
-        working-directory: web-player/browser-tools
+          distribution: temurin
+          java-version: '17'
+      - uses: android-actions/setup-android@v3
+        with:
+          packages: 'build-tools;36.0.0'
+          log-accepted-android-sdk-licenses: false
+      - name: Resume only the already-uploaded approved draft, without build signing or new release
         run: |
-          npm ci --ignore-scripts --no-audit --no-fund
-          node node_modules/playwright-core/cli.js install --with-deps chromium
-      - name: Observe public controls with the normal browser identity and no saved account
-        working-directory: web-player/browser-tools
-        run: |
-          mkdir -p /tmp/ghartv-flow
-          cat > /tmp/ghartv-observe.mjs <<'JS'
-          import {createRequire} from 'node:module';import fs from 'node:fs';
-          const require=createRequire(process.cwd()+'/package.json');const {chromium}=require('playwright-core');
-          const browser=await chromium.launch({headless:true});const context=await browser.newContext({viewport:{width:1280,height:720}});const page=await context.newPage();
-          const evidence={schema:'ghartv.public-provider-flow-observation.v1',time:new Date().toISOString(),scope:'PUBLIC_HOME_SEARCH_DETAILS_AND_WATCH_CONTROL_NO_SIGNIN',protections_changed:false,playback_proven:false,pages:[]};
-          const allowed=u=>/^https:\/\/(www\.)?flixmomo\.(app|st|bet)(\/|$)/i.test(u);
-          async function inspect(stage){
-            const item=await page.evaluate(()=>{
-              const clean=s=>String(s||'').replace(/\s+/g,' ').trim();
-              const show=e=>{let r=e.getBoundingClientRect(),s=getComputedStyle(e);return r.width>0&&r.height>0&&s.visibility!=='hidden'&&s.display!=='none';};
-              const controls=Array.from(document.querySelectorAll('a,button,[role="button"],[role="tab"],select,input')).filter(show).slice(0,130).map(e=>({tag:e.tagName,role:e.getAttribute('role'),type:e.getAttribute('type'),text:clean(e.innerText||e.getAttribute('aria-label')||e.placeholder).slice(0,100),path:e.tagName==='A'?new URL(e.getAttribute('href')||'',location.href).pathname:null,classes:typeof e.className==='string'?e.className.slice(0,140):'',options:e.tagName==='SELECT'?Array.from(e.options).slice(0,15).map(o=>clean(o.text)):null}));
-              const cards=Array.from(document.querySelectorAll('a[href]')).filter(a=>show(a)&&a.querySelector('img')&&/^\/(movie|tv|show|title)\//i.test(new URL(a.href).pathname)).slice(0,8).map(a=>({href:a.href,title:a.innerText,alt:a.querySelector('img').alt,image:a.querySelector('img').currentSrc||a.querySelector('img').src,html:a.outerHTML.replace(/<script[^>]*>[\s\S]*?<\/script>/gi,'').slice(0,2200)}));
-              return {url:location.origin+location.pathname,title:document.title,headings:Array.from(document.querySelectorAll('h1,h2,h3')).slice(0,20).map(e=>clean(e.textContent)),controls,cards,iframe_count:document.querySelectorAll('iframe').length,video_count:document.querySelectorAll('video').length};
-            });item.stage=stage;evidence.pages.push(item);return item;
-          }
-          try{
-            await page.goto('https://flixmomo.app/',{waitUntil:'domcontentloaded',timeout:30000});await page.waitForTimeout(8000);let home=await inspect('home');
-            if(!allowed(page.url())||/just a moment|verify.*human|access denied/i.test(home.title)||page.url().includes('/dummy')){evidence.stop='PROVIDER_VERIFICATION_OR_UNREGISTERED_ORIGIN';}
-            else{
-              await page.goto(new URL('/search?q=harry%20potter',page.url()).href,{waitUntil:'domcontentloaded',timeout:25000});await page.waitForTimeout(5000);let search=await inspect('search');
-              const title=search.cards.find(c=>/\/movie\//.test(c.href));
-              if(title&&allowed(title.href)){
-                await page.goto(title.href,{waitUntil:'domcontentloaded',timeout:25000});await page.waitForTimeout(4000);await inspect('details');
-                const watch=page.getByText(/^watch now$/i).first();
-                if(await watch.isVisible().catch(()=>false)){
-                  // Inspect the provider's next page, not extract/play any protected source.
-                  await watch.click({timeout:5000});await page.waitForTimeout(4000);await inspect('watch-page');
-                }else evidence.stop='WATCH_CONTROL_NOT_VISIBLE';
-              }else evidence.stop='NO_VISIBLE_MOVIE_RESULT';
-            }
-          }catch(error){evidence.stop=error.name;evidence.error=String(error.message).slice(0,450);}
-          finally{await browser.close();fs.writeFileSync('/tmp/ghartv-flow/PROVIDER_FLOW.json',JSON.stringify(evidence,null,2));console.log(JSON.stringify({stop:evidence.stop,stages:evidence.pages.map(x=>({stage:x.stage,url:x.url,cards:x.cards.length,controls:x.controls.length}))}));}
-          JS
-          node /tmp/ghartv-observe.mjs
+          python3 - <<'PY'
+          import base64,datetime,hashlib,json,os,re,subprocess,sys,time
+          from pathlib import Path
+          sys.path.insert(0,str(Path('tools').resolve()))
+          import release_control_reviewed as rc
+          F=rc.FAMILY;REPO=rc.REPO;RID=397315098;AID=591028859
+          out=Path('/tmp/ghartv-release38-proof');out.mkdir(mode=0o700)
+          state={'schema':'ghartv.exact38-publication-resume.v1','release_id':RID,'asset_id':AID,'source':F['source'],'signed_sha256':F['signed'],'code':38,'new_build':False,'new_signing':False,'new_upload':False,'new_release':False,'physical_tv_installation':'NOT_VERIFIED','mac_or_obsidian_write':False,'workflow_run':os.environ['GITHUB_RUN_ID'],'stage':'VERIFY_APPROVAL'}
+          def save():
+              (out/'PUBLICATION.json').write_text(json.dumps(state,indent=2)+'\n')
+          def checked(args,timeout=45):
+              p=subprocess.run(list(map(str,args)),stdin=subprocess.DEVNULL,capture_output=True,timeout=timeout)
+              if p.returncode:raise RuntimeError('COMMAND_FAILED_'+Path(str(args[0])).name+'_EXIT_'+str(p.returncode))
+              return p.stdout.decode()
+          def asset_of(release,published=False):
+              rc.family_check_release(release,not published)
+              assets=[a for a in release['assets'] if a['id']==AID and a['name']==F['asset']]
+              assert len(assets)==1,'EXACT_EXISTING_ASSET_REQUIRED'
+              a=assets[0]
+              assert a['digest']=='sha256:'+F['signed'] and a['state']=='uploaded' and a['size']==6157069,'EXACT_ASSET_METADATA_REQUIRED'
+              if published:
+                  expected='https://github.com/'+REPO+'/releases/download/'+F['tag']+'/'+F['asset']
+                  assert a['browser_download_url']==expected,'PUBLISHED_URL_NOT_READY'
+              return a
+          try:
+              approval=rc.family_approval();blob,previous=rc.live_blue();same=rc.family_feed_relation(previous)
+              release=rc.github('repos/'+REPO+'/releases/'+str(RID));asset_of(release)
+              rc.family_check_tag()
+              state['stage']='VERIFY_UPLOADED_SIGNED_BYTES';save()
+              apk=out/'approved.apk'
+              with apk.open('xb') as output:
+                  p=subprocess.run(['gh','api','--hostname','github.com','-H','Accept: application/octet-stream','repos/'+REPO+'/releases/assets/'+str(AID)],stdout=output,stderr=subprocess.PIPE,stdin=subprocess.DEVNULL,timeout=120)
+              assert p.returncode==0,'AUTHENTICATED_ASSET_READ_FAILED'
+              assert apk.stat().st_size==6157069 and rc.digest(apk)==F['signed'],'UPLOADED_BYTES_DIFFER'
+              verifier=Path('tools/GharTVApkVerifier.java')
+              assert hashlib.sha256(verifier.read_bytes()).hexdigest()==F['verifier'],'VERIFIER_CHANGED'
+              tools=Path(os.environ['ANDROID_HOME'])/'build-tools/36.0.0'
+              identity=json.loads(checked(['java','-Xmx256m','-cp',tools/'lib/apksigner.jar',verifier,apk],60))
+              assert identity.get('ok') is True and identity.get('certificate_sha256')==[rc.CERT],'SIGNATURE_MISMATCH'
+              row=next(x for x in checked([tools/'aapt','dump','badging',apk]).splitlines() if x.startswith('package:'))
+              fields=dict(re.findall(r"(\w+)='([^']*)'",row))
+              assert (fields.get('name'),fields.get('versionCode'),fields.get('versionName'))==(rc.PACKAGE,'38',F['version']),'PACKAGE_VERSION_MISMATCH'
+              state['signature_and_package']='VERIFIED';save()
+              assert rc.family_approval()==approval,'APPROVAL_CHANGED'
+              current_blob,current=rc.live_blue()
+              assert current_blob==blob,'FEED_CHANGED_BEFORE_PUBLICATION'
+              state['stage']='PUBLISH_EXISTING_DRAFT_BY_ID';save()
+              if release['draft']:
+                  rc.github('repos/'+REPO+'/releases/'+str(RID),'PATCH',{'draft':False,'prerelease':True,'make_latest':'false'})
+              release=rc.github('repos/'+REPO+'/releases/'+str(RID));asset=asset_of(release,True);rc.family_check_tag(True)
+              state['release_published_at']=release['published_at'];state['stage']='ANONYMOUS_DOWNLOAD_VERIFICATION';save()
+              rc.family_public_download(asset['browser_download_url'],out/'anonymous-readback.apk')
+              state['public_apk_bytes']='VERIFIED';save()
+              assert rc.family_approval()==approval,'APPROVAL_CHANGED_BEFORE_FEED'
+              current_blob,current=rc.live_blue()
+              already=rc.family_feed_relation(current)
+              if already:
+                  feed=current;commit=None
+              else:
+                  assert current_blob==blob,'FEED_CHANGED_NO_OVERWRITE'
+                  feed={'versionCode':38,'versionName':F['version'],'apkUrl':asset['browser_download_url'],'sha256':F['signed'],'sourceCommit':F['source'],'artifactTag':F['tag'],'channel':'production','publishedAt':datetime.datetime.now(datetime.timezone.utc).isoformat(),'ownerDecision':'APPROVED_EXACT_CODE38_HOUSEHOLD_REVIEW','ownerRun':F['run'],'distributionMode':'exact-reviewed-signed-apk-no-rebuild','notes':'Household review update: channel filters, guide ordering, Discover navigation and shared search. Film suggestions and playback use FlixMomo; some provider controls remain under review. Update in place; do not uninstall.','mandatoryUpdateSupported':False,'silentInstallSupported':False,'previousVersionCode':previous['versionCode'],'previousArtifactSha256':previous['sha256']}
+                  state['stage']='CONDITIONAL_FEED_UPDATE';save()
+                  changed=rc.github('repos/'+REPO+'/contents/update/latest.json','PUT',{'branch':'main','sha':blob,'message':'release: finish exact signed38 household update after verified draft upload; no rebuild','content':base64.b64encode((json.dumps(feed,indent=2)+'\n').encode()).decode()})
+                  commit=changed.get('commit',{}).get('sha')
+              _,observed=rc.live_blue();assert observed==feed,'FEED_READBACK_DIFFERENT'
+              state.update(stage='PUBLIC_UPDATE_FEED_VERIFIED',feed_commit=commit,already_published=already,apk_url=feed['apkUrl'],public_raw_feed='PROPAGATION_PENDING',finished_at=datetime.datetime.now(datetime.timezone.utc).isoformat());save()
+              for attempt in range(6):
+                  try:
+                      raw=json.loads(checked(['curl','--proto','=https','--proto-redir','=https','-fLsS','--connect-timeout','10','--max-time','20','https://raw.githubusercontent.com/'+REPO+'/main/update/latest.json'],25))
+                      if all(raw.get(k)==feed.get(k) for k in ('versionCode','sha256','sourceCommit','apkUrl')):
+                          state['public_raw_feed']='VERIFIED';break
+                  except Exception:pass
+                  time.sleep(10)
+              (out/'FEED.json').write_text(json.dumps(feed,indent=2)+'\n');save();print(json.dumps(state))
+          except Exception as error:
+              state.update(status='STOPPED_WITH_PARTIAL_STATE_PRESERVED',error=str(error)[:180],feed_success_not_assumed=True);save();raise
+          finally:
+              # The existing release owns APK distribution, not redundant action artifacts.
+              for name in ('approved.apk','anonymous-readback.apk'):
+                  p=out/name
+                  if p.exists():p.unlink()
+          PY
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: ghartv-provider-flow-observation
-          path: /tmp/ghartv-flow/
-          retention-days: 7
+          name: ghartv-exact38-publication-proof
+          path: /tmp/ghartv-release38-proof/
+          retention-days: 14
