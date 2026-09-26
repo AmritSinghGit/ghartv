@@ -27,20 +27,19 @@ jobs:
           python - <<'PY'
           import base64,gzip,hashlib,json,os,subprocess
           from pathlib import Path
-          root=Path.cwd();parts=sorted(root.glob('tools/tv-first/review39-source.part*'))
+          root=Path.cwd();parts=sorted(root.glob('tools/tv-first/review40-source.part*'))
           def git(*a):return subprocess.check_output(['git',*a],text=True).strip()
           if parts:
-            assert len(parts)==4
+            assert len(parts)==3
             encoded=''.join(p.read_text() for p in parts)
-            # Repair two identified transport-copy defects before the full pinned checksum.
-            encoded=encoded.replace('HCepsVsVs20','HCepsVs20',1).replace('wbGM7uHE7Ooow','wbGM7u6YG7Ooow',1)
+            encoded=encoded.replace('NfhysOXd','NfhysXd',1)  # Full decoded SHA remains mandatory.
             raw=gzip.decompress(base64.b64decode(encoded,validate=True))
-            assert hashlib.sha256(raw).hexdigest()=='fbc5d33321ee211a8dd146b21a9980f3eaf07e40349d2846fcc67b4c5ddb4840'
-            records=json.loads(raw);assert len(records)==17;planned=[]
+            assert hashlib.sha256(raw).hexdigest()=='c0ac432bb56805dad2662fa3c6fdcfcc36859699983b92d13f7cca3f1b89ca51'
+            records=json.loads(raw);assert len(records)==12;planned=[]
             for item in records:
               name=item['path'];path=root/name
               assert not name.startswith('/') and '..' not in Path(name).parts and not path.is_symlink()
-              assert name.startswith(('android-tv/','tools/tv-first/','tools/provider-access/')) or name=='REVIEW39.md'
+              assert name.startswith(('android-tv/','tools/tv-first/','tools/provider-access/')) or name=='REVIEW40.md'
               before=path.read_bytes() if path.is_file() else None
               assert (hashlib.sha256(before).hexdigest() if before is not None else None)==item['before'],name+' changed'
               original=(before or b'').decode();chunks=[]
@@ -59,7 +58,7 @@ jobs:
             assert set(git('diff','--cached','--name-only').splitlines())==set(paths)
             subprocess.run(['git','config','user.name','GharTV verified source expansion'],check=True)
             subprocess.run(['git','config','user.email','41898282+github-actions[bot]@users.noreply.github.com'],check=True)
-            subprocess.run(['git','commit','-m','feat(ghartv): Review39 native title pages, attributed search and stable player actions'],check=True)
+            subprocess.run(['git','commit','-m','feat(ghartv): Review40 Watch metadata and observed playback handoff'],check=True)
             subprocess.run(['git','push','origin','HEAD:refs/heads/codex/ghartv-remove-auto-preview'],check=True)
           source=git('rev-parse','HEAD')
           with open(os.environ['GITHUB_OUTPUT'],'a') as out:out.write('source_sha='+source+'\n')
@@ -117,7 +116,7 @@ jobs:
           cd android-tv
           chmod +x gradlew
           ./gradlew --no-daemon --max-workers=2 assembleRelease assembleDebug assembleDebugAndroidTest
-          cp app/build/outputs/apk/release/app-release-unsigned.apk /tmp/ghartv-candidate/GharTV-code39-review-unsigned.apk
+          cp app/build/outputs/apk/release/app-release-unsigned.apk /tmp/ghartv-candidate/GharTV-code40-review-unsigned.apk
       - name: Start isolated cloud device, never an owner emulator
         run: |
           set -euo pipefail
@@ -147,21 +146,21 @@ jobs:
           else:raise RuntimeError('CLOUD_DEVICE_TIMEOUT')
           for args in (['wm','size','1280x720'],['wm','density','160'],['settings','put','secure','immersive_mode_confirmations','confirmed'],['input','keyevent','KEYCODE_WAKEUP'],['wm','dismiss-keyguard']):subprocess.run(['adb','-s','emulator-5580','shell']+args,check=True)
           PY
-      - name: Test actual Activity repeated Down-Up focus, guide scopes and retained behavior
+      - name: Test metadata, Watch navigation and advancing owned-video clock; retain earlier regressions
         run: |
           set -euo pipefail
           adb -s emulator-5580 install -r android-tv/app/build/outputs/apk/debug/app-debug.apk
           adb -s emulator-5580 install -r android-tv/app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk
-          adb -s emulator-5580 shell am instrument -w -r -e class in.ghartv.nova.RemoteWebCursorTest,in.ghartv.nova.FilmNativeControlsTest,in.ghartv.nova.DiscoverExperienceTest,in.ghartv.nova.Review38RegressionTest,in.ghartv.nova.Review39ExperienceTest in.ghartv.nova.test/androidx.test.runner.AndroidJUnitRunner | tee /tmp/ghartv-candidate/proof/android-tests.txt
-          grep -q 'OK (58 tests)' /tmp/ghartv-candidate/proof/android-tests.txt
-          adb -s emulator-5580 pull /sdcard/Android/data/in.ghartv.nova/files/review39-native-title-fixture.png /tmp/ghartv-candidate/proof/review39-native-title-fixture.png
-      - name: Bundle precompiled39 into the same original-key sign-and-open entry
+          adb -s emulator-5580 shell am instrument -w -r -e class in.ghartv.nova.RemoteWebCursorTest,in.ghartv.nova.FilmNativeControlsTest,in.ghartv.nova.DiscoverExperienceTest,in.ghartv.nova.Review38RegressionTest,in.ghartv.nova.Review39ExperienceTest,in.ghartv.nova.Review40PlaybackTest in.ghartv.nova.test/androidx.test.runner.AndroidJUnitRunner | tee /tmp/ghartv-candidate/proof/android-tests.txt
+          grep -q 'OK (70 tests)' /tmp/ghartv-candidate/proof/android-tests.txt
+          adb -s emulator-5580 pull /sdcard/Android/data/in.ghartv.nova/files/review40-owned-playback-fixture.png /tmp/ghartv-candidate/proof/review40-owned-playback-fixture.png
+      - name: Bundle precompiled40 into the same original-key sign-and-open entry
         run: |
           python - <<'PY'
           import ast,base64,hashlib,io,json,os,subprocess,sys,tempfile,types,zipfile
           from pathlib import Path
           root=Path('/tmp/ghartv-candidate');source=subprocess.check_output(['git','rev-parse','HEAD'],text=True).strip()
-          apk=root/'GharTV-code39-review-unsigned.apk';apk_hash=hashlib.sha256(apk.read_bytes()).hexdigest();archive=root/'GHARTV_CODE39_SOURCE.zip'
+          apk=root/'GharTV-code40-review-unsigned.apk';apk_hash=hashlib.sha256(apk.read_bytes()).hexdigest();archive=root/'GHARTV_CODE40_SOURCE.zip'
           with zipfile.ZipFile(archive,'w',zipfile.ZIP_DEFLATED) as z:
             for raw in subprocess.check_output(['git','ls-files','-z']).split(b'\0'):
               if not raw:continue
@@ -171,7 +170,7 @@ jobs:
           with zipfile.ZipFile(buf,'w',zipfile.ZIP_DEFLATED) as bundle:bundle.writestr(apk.name,apk.read_bytes());bundle.writestr(archive.name,archive.read_bytes())
           bundle_bytes=buf.getvalue();bundle_hash=hashlib.sha256(bundle_bytes).hexdigest()
           old=Path('GHARTV_OPEN_REVIEW.command').read_text();start=old.index("SOURCE='39363ee");end=old.index('SOURCE_ASSET=',start)
-          header="SOURCE="+repr(source)+"\nCODE=39\nVERSION='0.6.0-rc12-detail-player-review'\nAPK_SHA="+repr(apk_hash)+"\nZIP_SHA="+repr(zip_hash)+"\nCERT='40a9d8bf6b1c557b3d6fd02acef075368dd13e28691f207a297202d0d5ec233c'\nTAG='OWNER_REVIEW39_BUNDLED_NOT_PUBLIC_RELEASE'\nif sys.argv[1:] not in ([], ['--candidate','39']):\n    print('This entry reviews compiled39 only. Public release held. Use --candidate 39.')\n    raise SystemExit(2)\n"
+          header="SOURCE="+repr(source)+"\nCODE=40\nVERSION='0.6.0-rc12.1-watch-metadata-review'\nAPK_SHA="+repr(apk_hash)+"\nZIP_SHA="+repr(zip_hash)+"\nCERT='40a9d8bf6b1c557b3d6fd02acef075368dd13e28691f207a297202d0d5ec233c'\nTAG='OWNER_REVIEW40_BUNDLED_NOT_PUBLIC_RELEASE'\nif sys.argv[1:] not in ([], ['--candidate','40']):\n    print('This entry reviews compiled40 only. Public release held. Use --candidate 40.')\n    raise SystemExit(2)\n"
           entry=old[:start]+header+old[end:];entry=entry.replace('import ast, datetime','import base64, ast, datetime',1)
           marker='def artifact(name,sha,tag=TAG):\n';embedded='BUNDLE_SHA='+repr(bundle_hash)+'\nBUNDLE_B64='+repr(base64.b64encode(bundle_bytes).decode())+'\n\n'
           block=('    if name in (APK_ASSET,SOURCE_ASSET) and tag==TAG:\n'
@@ -191,24 +190,24 @@ jobs:
           def funcs(text):return {n.name:ast.dump(n,include_attributes=False) for n in ast.parse(rawcode(text)).body if isinstance(n,ast.FunctionDef)}
           before,after=funcs(old),funcs(entry);assert before.keys()==after.keys();assert all(before[n]==after[n] for n in before if n!='artifact')
           command=root/'GHARTV_OPEN_REVIEW.command';command.write_text(entry);subprocess.run(['bash','-n',command],check=True)
-          for args in ([],['--candidate','39']):
-            sys.argv=['entry']+args;m=types.ModuleType('entry_check');exec(compile(rawcode(entry),'entry','exec'),m.__dict__);assert m.CODE==39 and m.SOURCE==source
+          for args in ([],['--candidate','40']):
+            sys.argv=['entry']+args;m=types.ModuleType('entry_check');exec(compile(rawcode(entry),'entry','exec'),m.__dict__);assert m.CODE==40 and m.SOURCE==source
             with tempfile.TemporaryDirectory() as temp:m.CACHE=Path(temp).resolve();assert m.digest(m.artifact(m.APK_ASSET,m.APK_SHA))==apk_hash;assert m.digest(m.artifact(m.SOURCE_ASSET,m.ZIP_SHA))==zip_hash
-          for args in (['--candidate','37'],['--candidate','35'],['--publish']):
+          for args in (['--candidate','39'],['--candidate','38'],['--publish']):
             sys.argv=['entry']+args
             try:exec(compile(rawcode(entry),'entry','exec'),{'__name__':'not_main'});raise AssertionError('Old/publication mode accepted')
             except SystemExit as e:assert e.code==2
-          manifest={'schema':'ghartv.owner-review39.v1','source':source,'version_code':39,'version':'0.6.0-rc12-detail-player-review','apk':apk.name,'apk_bytes':apk.stat().st_size,'apk_sha256':apk_hash,'source_archive_sha256':zip_hash,'entry_sha256':hashlib.sha256(command.read_bytes()).hexdigest(),'entry_bytes':command.stat().st_size,'precompiled':True,'original_local_signing_required':True,'public_release':'HELD','public_feed_changed':False,'new_github_release_created':False}
+          manifest={'schema':'ghartv.owner-review40.v1','source':source,'version_code':40,'version':'0.6.0-rc12.1-watch-metadata-review','apk':apk.name,'apk_bytes':apk.stat().st_size,'apk_sha256':apk_hash,'source_archive_sha256':zip_hash,'entry_sha256':hashlib.sha256(command.read_bytes()).hexdigest(),'entry_bytes':command.stat().st_size,'precompiled':True,'original_local_signing_required':True,'public_release':'HELD','public_feed_changed':False,'new_github_release_created':False}
           (root/'CANDIDATE.json').write_text(json.dumps(manifest,indent=2)+'\n')
-          validation={'schema':'ghartv.review39-validation.v1','source':source,'android_release_compiled':True,'actual_android_tests_passed':58,'retained_tests':44,'new_review39_tests':14,'normalizer_logic_tests':16,'native_title_and_search_activity_tests':True,'queued_enter_and_visual_state_trusted_click_tests':True,'dynamic_badge_player_counts_and_reorder_tests':True,'test_content':'LOCAL_OWNED_DOCUMENTS_AND_IMAGES','test_viewport':'1280x720_density160','live_provider_movie_playback':False,'actual_voice_service_tested':False,'secure_qr_phone_remote_implemented':False,'remote_origin_configuration_distribution':False,'owner_mac_execution':False,'local_gradle_build_required':False,'same_original_signer_and_window_functions':True,'public38_unchanged':True,'workflow_run':os.environ['GITHUB_RUN_ID']}
+          validation={'schema':'ghartv.review40-validation.v1','source':source,'android_release_compiled':True,'actual_android_tests_passed':70,'retained_tests':58,'new_review40_tests':12,'normalizer_logic_tests':16,'native_title_and_search_activity_tests':True,'watch_to_owned_video_clock_advanced':True,'native_media3_all_sources':False,'queued_enter_and_visual_state_trusted_click_tests':True,'dynamic_badge_player_counts_and_reorder_tests':True,'test_content':'LOCAL_OWNED_DOCUMENTS_IMAGES_AND_GENERATED_MP4','test_viewport':'1280x720_density160','live_provider_movie_playback':False,'actual_voice_service_tested':False,'secure_qr_phone_remote_implemented':False,'remote_origin_configuration_distribution':False,'owner_mac_execution':False,'local_gradle_build_required':False,'same_original_signer_and_window_functions':True,'public38_unchanged':True,'workflow_run':os.environ['GITHUB_RUN_ID']}
           (root/'VALIDATION.json').write_text(json.dumps(validation,indent=2)+'\n')
-          for name in ('REVIEW39.md','PRIVACY.md','RELEASE_HOLD.json'):(root/name).write_bytes(Path(name).read_bytes())
+          for name in ('REVIEW40.md','PRIVACY.md','RELEASE_HOLD.json'):(root/name).write_bytes(Path(name).read_bytes())
           (root/'SHA256SUMS').write_text(''.join(hashlib.sha256(p.read_bytes()).hexdigest()+'  '+p.name+'\n' for p in sorted(root.iterdir()) if p.is_file() and p.name!='SHA256SUMS'))
           print(json.dumps(manifest));print(json.dumps(validation))
           PY
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: ghartv-code39-owner-review
+          name: ghartv-code40-owner-review
           path: /tmp/ghartv-candidate/
           retention-days: 14
