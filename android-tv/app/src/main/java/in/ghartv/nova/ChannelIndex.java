@@ -86,10 +86,10 @@ public final class ChannelIndex {
     }
 
     private void buildViews() {
-        putView(VIEW_FOR_YOU, buildForYou());
+        putView(VIEW_ALL, sortGuide(all)); // Number order, never household ranking.
 
         List<Channel> recent = channelsFromNumbers(historyStore.recentNumbers(40));
-        if (!recent.isEmpty()) putView(VIEW_RECENT, recent);
+        putView(VIEW_RECENT, recent);
 
         List<Channel> favouriteChannels = channelsFromNumbers(new ArrayList<>(favourites));
         favouriteChannels.sort(personalComparator());
@@ -105,7 +105,7 @@ public final class ChannelIndex {
         }
         // Proven-working channels are ranked into Home instead of becoming another
         // top-level chip. The visible guide stays simple for family use.
-        putView(VIEW_ALL, regularChannels());
+        // Home is a legacy alias of All channels; one visible catalogue tab.
 
         LinkedHashSet<String> languages = new LinkedHashSet<>();
         String[] preferredLanguages = {
@@ -114,7 +114,7 @@ public final class ChannelIndex {
         };
         for (String value : preferredLanguages) if (containsLanguage(value)) languages.add(value);
         for (Channel channel : all) {
-            if (needsAttention(channel)) continue;
+            // Keep language/category navigation available even when access needs attention.
             String value = clean(channel.language);
             if (!value.isEmpty() && !"Other".equalsIgnoreCase(value)) languages.add(value);
         }
@@ -127,7 +127,7 @@ public final class ChannelIndex {
         };
         for (String value : preferredGenres) if (containsCategory(value)) genres.add(value);
         for (Channel channel : all) {
-            if (needsAttention(channel)) continue;
+            // Keep language/category navigation available even when access needs attention.
             String value = clean(channel.category);
             if (!value.isEmpty() && !"Other".equalsIgnoreCase(value)) genres.add(value);
         }
@@ -182,13 +182,13 @@ public final class ChannelIndex {
         List<Channel> out = new ArrayList<>();
         for (Channel channel : all) {
             String field = language ? channel.language : channel.category;
-            if (!needsAttention(channel) && field != null && field.equalsIgnoreCase(value)) out.add(channel);
+            if (field != null && field.equalsIgnoreCase(value)) out.add(channel);
         }
         return sortGuide(out);
     }
 
     private void putView(String name, List<Channel> values) {
-        if (values == null || values.isEmpty() || viewCache.containsKey(name)) return;
+        if (values == null || (values.isEmpty() && !VIEW_RECENT.equals(name) && !VIEW_ALL.equals(name)) || viewCache.containsKey(name)) return;
         List<Channel> copy = Collections.unmodifiableList(new ArrayList<>(values));
         viewCache.put(name, copy);
         views.add(name);
@@ -199,13 +199,18 @@ public final class ChannelIndex {
 
     public Map<String, Integer> categoryCounts() { return new LinkedHashMap<>(viewCounts); }
 
+    public static String canonicalView(String value) {
+        String selected=clean(value);
+        if(selected.isEmpty()||"Home".equalsIgnoreCase(selected)||"All".equalsIgnoreCase(selected))return VIEW_ALL;
+        return selected;
+    }
     public List<Channel> filter(String category, String query) {
-        String normalizedQuery = normalize(query);
-        if (!normalizedQuery.isEmpty()) return search(normalizedQuery);
-        String selected = clean(category);
-        if (selected.isEmpty() || !viewCache.containsKey(selected)) selected = VIEW_FOR_YOU;
-        List<Channel> base = viewCache.get(selected);
-        return base == null ? new ArrayList<>(all) : new ArrayList<>(base);
+        String selected=canonicalView(category);
+        List<Channel> cached=viewCache.get(selected);
+        if(cached==null)cached=viewCache.get(VIEW_ALL);
+        List<Channel> base=cached==null?new ArrayList<>(all):new ArrayList<>(cached);
+        String normalizedQuery=normalize(query);
+        return normalizedQuery.isEmpty()?base:rankedSearch(base,normalizedQuery);
     }
 
     /** Global search across all channels. The result itself becomes the CH+/- scope. */
@@ -339,6 +344,7 @@ public final class ChannelIndex {
 
     public static String normalize(String value) {
         if (value == null) return "";
+        value=value.replace("हिन्दी","Hindi").replace("हिंदी","Hindi").replace("ਪੰਜਾਬੀ","Punjabi").replace("पंजाबी","Punjabi").replace("अंग्रेजी","English");
         String normalized = Normalizer.normalize(value, Normalizer.Form.NFD)
                 .replaceAll("\\p{M}+", "")
                 .toLowerCase(Locale.ROOT)

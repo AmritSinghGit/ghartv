@@ -18,7 +18,7 @@ assert 'playerView.setOnClickListener(view -> showGuide(true, nextButton))' in p
 assert 'MediaStore.ACTION_PICK_IMAGES' in family and 'ACTION_GET_CONTENT' in family and 'takePersistableUriPermission' in family
 assert 'takePlaybackHandoff' in api and 'PLAYBACK_HANDOFF_MS = 20_000L' in api
 gradle=(R/'android-tv/app/build.gradle.kts').read_text()
-assert 'versionCode = 37' in gradle and '0.6.0-rc11-discover-review' in gradle
+assert 'versionCode = 38' in gradle and '0.6.0-rc11.1-focus-filter-review' in gradle
 films=(J/'FlixMomoActivity.java').read_text();cursor=(J/'RemoteWebCursor.java').read_text();controls=(J/'FilmNativeControls.java').read_text()
 assert 'cursor.handle(event)' in films and 'onRenderProcessGone' in films and 'handler.cancel()' in films
 assert 'onPageFinished' in films and 'if(mainFrameError)' in films
@@ -34,7 +34,7 @@ assert 'transport.attach_or_start(sdk,RUN)' in launcher
 assert 'TV_EXPERIENCE_CONTRACT.json' in (R/'tools/package_owner_review.py').read_text()
 assert 'java.util.Objects.equals(selectedChannel.id,candidate.id)' in m
 assert 'channel.number+":"+safe(channel.id)' not in c
-print('CODE37_ORIGINAL_POSTERS_NO_TEXT_TILE_SURFACE_AND_EXISTING_TV_BEHAVIOR=PASS')
+print('CODE38_ORIGINAL_POSTERS_NO_TEXT_TILE_SURFACE_AND_EXISTING_TV_BEHAVIOR=PASS')
 
 manifest=(R/'android-tv/app/src/main/AndroidManifest.xml').read_text()
 assert not (J/'MovieHubActivity.java').exists()
@@ -46,4 +46,10 @@ assert 'FilmPageFocus.script' in controls and 'pageKey(event)' in films
 assert 'FilmHomeView' in (J/'FilmHomeView.java').read_text()
 assert 'Tor is not enabled' in (J/'ReviewNotice.java').read_text()
 assert json.loads((R/'RELEASE_HOLD.json').read_text())['public_feed_write'] is False
-print('CODE37_HOME_SHARED_SEARCH_DETAIL_FOCUS_PUNJABI_PLUS_REMOVAL_RELEASE_HOLD=PASS')
+print('CODE38_HOME_SHARED_SEARCH_DETAIL_FOCUS_PUNJABI_PLUS_REMOVAL_RELEASE_HOLD=PASS')
+
+assert 'searchQuery="";selectedChannel=null;startAtFirst=true;' in m
+assert 'chipAdapter = new ChipAdapter(this::selectGuideCategory)' in m
+assert 'actionButton("Voice")' not in m
+assert 'FOCUS_BLOCK_DESCENDANTS' in (J/'FilmHomeView.java').read_text()
+assert 'homePanel.handleRemote(event,getCurrentFocus())' in films

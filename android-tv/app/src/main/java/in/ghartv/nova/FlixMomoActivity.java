@@ -32,10 +32,10 @@ import java.io.ByteArrayInputStream;
 
 /** Single provider page with original artwork, remote poster focus and player tray.
  * No result replacement, stream extraction, security weakening or private-log upload. */
-public final class FlixMomoActivity extends Activity {
+public class FlixMomoActivity extends Activity {
     private static final String HOME="https://flixmomo.app/";
     
-    private WebView browser;
+    protected WebView browser;
     private RemoteWebCursor cursor;
     private FilmNativeControls nativeControls;
     private FilmHomeView homePanel;
@@ -84,11 +84,12 @@ public final class FlixMomoActivity extends Activity {
             public void nativeMode(){cursor.enable(false);modeButton.setText("Cursor: off");}
             public void navigationHint(String text){help.setText(text);}
             public void searchToolbar(){toolbar();query.requestFocus();}
+            public boolean pageIsVisible(){return !homeRequested;}
             public void pageObserved(org.json.JSONObject data){if(homeRequested&&homePanel!=null)homePanel.render(data);else if(!data.optBoolean("search"))liveResults.setVisibility(View.GONE);}
             public void pageAction(String action){nativeControls.pageAction(action);}
             public void verificationRequired(){if(homeRequested&&homePanel!=null)homePanel.unavailable("Provider verification is required.");else toolbar();}
         });
-        homePanel=new FilmHomeView(this,new FilmHomeView.Host(){
+        homePanel=createHomePanel(new FilmHomeView.Host(){
             public void open(String url){homeRequested=false;homePanel.setVisibility(View.GONE);liveResults.setVisibility(View.GONE);navigate(url,true);}
             public void refresh(){showHome(true);}
             public void provider(){homeRequested=false;homePanel.setVisibility(View.GONE);usePage();}
@@ -100,6 +101,7 @@ public final class FlixMomoActivity extends Activity {
             });}
         });
         stage.addView(homePanel,new FrameLayout.LayoutParams(-1,-1));
+        homePanel.setToolbarAnchor(pageButton);
         query.setOnFocusChangeListener((v,focused)->{if(focused)cursor.leave();});
         search.setOnClickListener(v->search());voice.setOnClickListener(v->voiceSearch());browse.setOnClickListener(v->showHome(false));guide.setOnClickListener(v->finish());
         query.setOnEditorActionListener((v,action,event)->{if(action==android.view.inputmethod.EditorInfo.IME_ACTION_SEARCH||event!=null&&event.getKeyCode()==KeyEvent.KEYCODE_ENTER&&event.getAction()==KeyEvent.ACTION_UP){search();return true;}return false;});
@@ -117,7 +119,7 @@ public final class FlixMomoActivity extends Activity {
     private boolean createBrowser(){
         if(browser!=null)return true;
         try{browser=new WebView(this);}catch(RuntimeException e){fail("Android System WebView is unavailable. Update that system component; live TV is unchanged.");return false;}
-        browser.setBackgroundColor(TvUi.BG);stage.addView(browser,0,new FrameLayout.LayoutParams(-1,-1));cursor.target(browser);nativeControls.attach(browser);
+        browser.setBackgroundColor(TvUi.BG);stage.addView(browser,0,new FrameLayout.LayoutParams(-1,-1));cursor.target(browser);nativeControls.attach(browser);homePanel.bindUnderlyingPage(browser);
         WebSettings settings=browser.getSettings();settings.setJavaScriptEnabled(true);settings.setDomStorageEnabled(true);settings.setAllowFileAccess(false);settings.setAllowContentAccess(false);
         settings.setMixedContentMode(WebSettings.MIXED_CONTENT_NEVER_ALLOW);settings.setMediaPlaybackRequiresUserGesture(true);settings.setSupportMultipleWindows(false);settings.setJavaScriptCanOpenWindowsAutomatically(false);settings.setSafeBrowsingEnabled(true);
         CookieManager.getInstance().setAcceptThirdPartyCookies(browser,false);
@@ -152,7 +154,7 @@ public final class FlixMomoActivity extends Activity {
                 }
             }
             @Override public boolean onRenderProcessGone(WebView view,RenderProcessGoneDetail detail){
-                nativeControls.failure();cursor.leave();exitFullScreen();stage.removeView(view);view.destroy();if(browser==view)browser=null;cursor.target(null);
+                nativeControls.failure();cursor.leave();exitFullScreen();stage.removeView(view);view.destroy();if(browser==view)browser=null;cursor.target(null);nativeControls.attach(null);
                 fail("The provider browser stopped. Retry reopens it; live TV and your query are preserved.");retryButton.requestFocus();return true;
             }
         });
@@ -167,8 +169,9 @@ public final class FlixMomoActivity extends Activity {
     private void showHome(boolean force){
         homeRequested=true;liveGeneration++;liveResults.setVisibility(View.GONE);query.setText("");chrome.setVisibility(View.VISIBLE);
         cursor.enable(false);modeButton.setText("Cursor: off");nativeControls.hideAll();homePanel.setVisibility(View.VISIBLE);homePanel.bringToFront();
-        if(force)homePanel.discardSuggestions();homePanel.loading();
-        navigate(providerOrigin()+"/",false);query.requestFocus();
+        if(force)homePanel.discardSuggestions();
+        if(force||homePanel.cardCount()==0){homePanel.loading();navigate(providerOrigin()+"/",false);}
+        homePanel.focusRefresh();
     }
     private void showLiveResults(String text){
         final int token=++liveGeneration;liveRow.removeAllViews();liveResults.setVisibility(View.VISIBLE);
@@ -190,7 +193,9 @@ public final class FlixMomoActivity extends Activity {
     private static boolean privateHost(String host){String h=host.toLowerCase(java.util.Locale.ROOT);return h.equals("localhost")||h.endsWith(".localhost")||h.endsWith(".local")||h.endsWith(".internal")||h.contains(":")||h.matches("(?i)(127\\..*|10\\..*|192\\.168\\..*|169\\.254\\..*|172\\.(1[6-9]|2[0-9]|3[01])\\..*|0\\..*)");}
     private String providerOrigin(){String url=browser==null?lastRequested:browser.getUrl();Uri uri=Uri.parse(url==null?HOME:url);return allowedTop(uri)?"https://"+uri.getHost():"https://flixmomo.app";}
     private void search(){String text=UnifiedSearch.clean(query.getText().toString());if(!UnifiedSearch.valid(text)){status.setText("Enter 2–120 characters.");return;}homeRequested=false;homePanel.setVisibility(View.GONE);showLiveResults(text);navigate(providerOrigin()+"/search?q="+Uri.encode(text),true);}
-    private void navigate(String url,boolean page){if(!allowedTop(Uri.parse(url))){fail("Only the registered provider can open here.");return;}hideKeyboard();lastRequested=url;if(browser==null){fail("Provider browser stopped. Press Retry to reopen it.");return;}browser.loadUrl(url);if(page)usePage();}
+    private void navigate(String url,boolean page){if(!allowedTop(Uri.parse(url))){fail("Only the registered provider can open here.");return;}hideKeyboard();lastRequested=url;if(browser==null){fail("Provider browser stopped. Press Retry to reopen it.");return;}loadProviderPage(url);if(page)usePage();}
+    protected FilmHomeView createHomePanel(FilmHomeView.Host host){return new FilmHomeView(this,host);}
+    protected void loadProviderPage(String url){browser.loadUrl(url);}
     private void voiceSearch(){hideKeyboard();UnifiedSearch.voice(this);}
     @Override protected void onActivityResult(int request,int result,Intent data){super.onActivityResult(request,result,data);String text=UnifiedSearch.voiceText(request,result,data);if(!text.isEmpty()){query.setText(text);search();}}
     @Override protected void onNewIntent(Intent intent){super.onNewIntent(intent);setIntent(intent);String text=UnifiedSearch.clean(intent.getStringExtra(UnifiedSearch.QUERY));if(UnifiedSearch.valid(text)){query.setText(text);search();}}
@@ -198,6 +203,12 @@ public final class FlixMomoActivity extends Activity {
     private void usePage(){homeRequested=false;if(homePanel!=null)homePanel.setVisibility(View.GONE);if(nativeControls!=null)nativeControls.hideAll();hideKeyboard();chrome.setVisibility(View.GONE);if(browser!=null){browser.requestFocus();cursor.enter();nativeControls.enterPosters();}}
     private void toolbar(){chrome.setVisibility(View.VISIBLE);cursor.leave();if(custom!=null)exitFullScreen();pageButton.requestFocus();}
     @Override public boolean dispatchKeyEvent(KeyEvent event){
+        if(homeRequested&&homePanel!=null&&homePanel.getVisibility()==View.VISIBLE){
+            if(homePanel.handleRemote(event,getCurrentFocus()))return true;
+            if(event.getKeyCode()==KeyEvent.KEYCODE_MENU){if(event.getAction()==KeyEvent.ACTION_UP){chrome.setVisibility(View.VISIBLE);query.requestFocus();}return true;}
+            // The underlying WebView must never receive navigation intended for visible cards.
+            if(event.getKeyCode()!=KeyEvent.KEYCODE_VOICE_ASSIST&&event.getKeyCode()!=KeyEvent.KEYCODE_SEARCH)return super.dispatchKeyEvent(event);
+        }
         if(event.getAction()==KeyEvent.ACTION_DOWN&&event.getRepeatCount()==0){
             if(event.getKeyCode()==KeyEvent.KEYCODE_VOICE_ASSIST){voiceSearch();return true;}
             if(event.getKeyCode()==KeyEvent.KEYCODE_SEARCH){toolbar();query.requestFocus();return true;}

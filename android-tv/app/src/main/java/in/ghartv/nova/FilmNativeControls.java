@@ -23,6 +23,7 @@ import java.util.Set;
 /** Original provider posters stay in the one WebView. Only the player tray is native. */
 final class FilmNativeControls {
     interface Host { void navigate(String url); void usePage(); void searchToolbar(); void nativeMode(); void navigationHint(String text);
+        default boolean pageIsVisible(){return true;}
         default void pageObserved(JSONObject data){} default void pageAction(String action){} default void verificationRequired(){}
     }
     private final Activity activity;
@@ -49,7 +50,7 @@ final class FilmNativeControls {
         choices=new LinearLayout(a);choices.setOrientation(LinearLayout.VERTICAL);choices.setPadding(dp(16),dp(12),dp(16),dp(12));choiceView.addView(choices);
         FrameLayout.LayoutParams cp=new FrameLayout.LayoutParams(dp(360),dp(250),Gravity.END|Gravity.BOTTOM);cp.setMargins(dp(12),dp(12),dp(12),dp(95));stage.addView(choiceView,cp);choiceView.setVisibility(View.GONE);
         tray=new LinearLayout(a);tray.setOrientation(LinearLayout.VERTICAL);tray.setPadding(dp(12),dp(8),dp(12),dp(8));tray.setBackground(TvUi.rounded(0xee071e29,12,TvUi.MINT,1,a));
-        state=TvUi.label(a,"GharTV · provider controls · Review 37",12,TvUi.TEXT,false);tray.addView(state);
+        state=TvUi.label(a,"GharTV · provider controls · Review 38",12,TvUi.TEXT,false);tray.addView(state);
         LinearLayout row=new LinearLayout(a);add(row,"Play",this::playDefault);add(row,"Players",this::showPlayers);add(row,"Watchlist",()->host.pageAction("watchlist"));add(row,"Not playing",()->next(true));
         add(row,"Search",()->{hideAll();host.searchToolbar();});add(row,"Use page",()->{hideAll();host.usePage();});add(row,"Hide",this::hideTray);tray.addView(row);
         FrameLayout.LayoutParams tp=new FrameLayout.LayoutParams(-1,-2,Gravity.BOTTOM);tp.setMargins(dp(10),dp(8),dp(10),dp(10));stage.addView(tray,tp);tray.setVisibility(View.GONE);
@@ -69,8 +70,8 @@ final class FilmNativeControls {
     void menu(){if(postersReady){hideAll();host.searchToolbar();}else showTray(true);}
     void userInput(){if(tray.getVisibility()==View.VISIBLE){handler.removeCallbacks(hide);if(choiceView.getVisibility()!=View.VISIBLE)handler.postDelayed(hide,6000);}}
     void hideAll(){handler.removeCallbacks(hide);choiceView.setVisibility(View.GONE);tray.setVisibility(View.GONE);}
-    private void hideTray(){if(choiceView.getVisibility()!=View.VISIBLE){tray.setVisibility(View.GONE);if(browser!=null)browser.requestFocus();}}
-    private void showTray(boolean focus){if(!active)return;tray.setVisibility(View.VISIBLE);tray.bringToFront();if(focus)((LinearLayout)tray.getChildAt(1)).getChildAt(0).requestFocus();handler.removeCallbacks(hide);if(choiceView.getVisibility()!=View.VISIBLE)handler.postDelayed(hide,6000);if(players.length()==0&&!blocked)finished();}
+    private void hideTray(){if(choiceView.getVisibility()!=View.VISIBLE){tray.setVisibility(View.GONE);if(browser!=null&&host.pageIsVisible())browser.requestFocus();}}
+    private void showTray(boolean focus){if(!active||!host.pageIsVisible())return;tray.setVisibility(View.VISIBLE);tray.bringToFront();if(focus)((LinearLayout)tray.getChildAt(1)).getChildAt(0).requestFocus();handler.removeCallbacks(hide);if(choiceView.getVisibility()!=View.VISIBLE)handler.postDelayed(hide,6000);if(players.length()==0&&!blocked)finished();}
     private JSONObject decode(String raw) throws Exception {if(raw==null||raw.length()>131072)throw new IllegalArgumentException("Page result too large");Object value=new JSONTokener(raw).nextValue();if(!(value instanceof String))throw new IllegalArgumentException("No page snapshot");return new JSONObject((String)value);}
     private void read(){
         if(!active||blocked||reading||browser==null||probeCount>=6)return;String url=browser.getUrl();if(url==null||!FlixMomoActivity.allowedTop(Uri.parse(url)))return;
@@ -81,8 +82,8 @@ final class FilmNativeControls {
                 JSONObject data=decode(raw);if(!"SNAPSHOT".equals(data.optString("state"))){if("PROVIDER_VERIFICATION_REQUIRED".equals(data.optString("state"))){failure();host.navigationHint("Complete the provider verification on its page.");host.verificationRequired();}return;}
                 String actual=data.getString("url");if(!actual.equals(source.getUrl())||!FlixMomoActivity.allowedTop(Uri.parse(actual)))return;snapshotUrl=actual;host.pageObserved(data);
                 JSONArray found=data.optJSONArray("players");if(found!=null&&found.length()<=12){String identity=actual+":"+found.toString();players=found;if(!identity.equals(playerIdentity)){playerIdentity=identity;if(choiceView.getVisibility()==View.VISIBLE)renderPlayers();}}
-                if(data.optBoolean("search"))enablePosters(actual);
-                else if(!detailFocusApplied&&source.hasFocus()){detailFocusApplied=true;pageAction("focus");}
+                if(host.pageIsVisible()&&data.optBoolean("search"))enablePosters(actual);
+                else if(host.pageIsVisible()&&!detailFocusApplied&&source.hasFocus()){detailFocusApplied=true;pageAction("focus");}
                 if(!data.optBoolean("search")&&players.length()>0&&!playerTrayAnnounced&&!selectedByViewer){playerTrayAnnounced=true;state.setText(players.length()+" players offered · Menu opens controls");showTray(false);}
                 if(selectedByViewer&&SystemClock.elapsedRealtime()-selectedAt>=5000&&autoNext&&data.optBoolean("mediaObservable")&&data.optInt("mediaError")>0&&!pending)next(false);
                 if(probeCount<6){handler.removeCallbacks(probe);handler.postDelayed(probe,1800);}
@@ -101,7 +102,7 @@ final class FilmNativeControls {
     void enterPosters(){if(!active||!postersReady||browser==null)return;final int token=generation;final WebView source=browser;source.evaluateJavascript(FilmPosterNavigation.script("focus"),raw->{if(!active||browser!=source||token!=generation)return;try{posterHint(decode(raw));}catch(Exception ignored){}});}
     private void posterHint(JSONObject value){String label=value.optString("label","");int count=value.optInt("count"),index=value.optInt("index");if(label.length()>0&&label.length()<=180&&index>=0&&index<count)host.navigationHint(label+" · "+(index+1)+" of "+count+" · OK opens · Menu shows search");}
     boolean posterKey(KeyEvent event){
-        if(!active||blocked||!postersReady||browser==null||!browser.hasFocus()||ownsFocus())return false;
+        if(!host.pageIsVisible()||!active||blocked||!postersReady||browser==null||!browser.hasFocus()||ownsFocus())return false;
         String action;switch(event.getKeyCode()){case KeyEvent.KEYCODE_DPAD_LEFT:action="left";break;case KeyEvent.KEYCODE_DPAD_RIGHT:action="right";break;case KeyEvent.KEYCODE_DPAD_UP:action="up";break;case KeyEvent.KEYCODE_DPAD_DOWN:action="down";break;case KeyEvent.KEYCODE_DPAD_CENTER:case KeyEvent.KEYCODE_ENTER:case KeyEvent.KEYCODE_NUMPAD_ENTER:action="activate";break;default:return false;}
         if(event.getAction()==KeyEvent.ACTION_UP)return true;if(event.getAction()!=KeyEvent.ACTION_DOWN)return false;
         long now=SystemClock.uptimeMillis();if(posterBusy||event.getRepeatCount()>0&&now-lastPosterKey<110)return true;lastPosterKey=now;posterBusy=true;
@@ -125,7 +126,7 @@ final class FilmNativeControls {
         add(choices,autoNext?"Auto next on media error: on":"Auto next on media error: off",()->{autoNext=!autoNext;renderPlayers();});add(choices,"Close",()->{choiceView.setVisibility(View.GONE);showTray(true);});if(restore!=null)restore.requestFocus();else if(first!=null)first.requestFocus();
     }
     private void select(int index){
-        if(!active||blocked||browser==null||pending||snapshotUrl.isEmpty()||index<0||index>=players.length())return;JSONObject choice=players.optJSONObject(index);if(choice==null)return;String label=choice.optString("label");if(!label.matches("(?i)^(player|server|source)\\s*#?\\s*\\d{1,2}$"))return;
+        if(!host.pageIsVisible()||!active||blocked||browser==null||pending||snapshotUrl.isEmpty()||index<0||index>=players.length())return;JSONObject choice=players.optJSONObject(index);if(choice==null)return;String label=choice.optString("label");if(!label.matches("(?i)^(player|server|source)\\s*#?\\s*\\d{1,2}$"))return;
         final int token=generation;final WebView source=browser;pending=true;
         source.evaluateJavascript(FilmPageSnapshot.select(snapshotUrl,index,label),raw->{
             if(!active||browser!=source||generation!=token)return;pending=false;
@@ -136,7 +137,7 @@ final class FilmNativeControls {
     }
 
     void pageAction(String action){
-        if(!active||blocked||browser==null||pageBusy)return;
+        if(!host.pageIsVisible()||!active||blocked||browser==null||pageBusy)return;
         final WebView source=browser;final int token=generation;pageBusy=true;
         source.evaluateJavascript(FilmPageFocus.script(action),raw->{
             if(!active||source!=browser||token!=generation)return;pageBusy=false;

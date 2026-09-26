@@ -288,11 +288,11 @@ public final class ChannelRepository {
 
     public String lastCategory() {
         SharedPreferences prefs = context.getSharedPreferences(AppConfig.PREFS, Context.MODE_PRIVATE);
-        String value = prefs.getString(AppConfig.KEY_LAST_CATEGORY, ChannelIndex.VIEW_FOR_YOU);
-        if (value == null || value.trim().isEmpty()) return ChannelIndex.VIEW_FOR_YOU;
+        String value = prefs.getString(AppConfig.KEY_LAST_CATEGORY, ChannelIndex.VIEW_ALL);
+        if (value == null || value.trim().isEmpty()) return ChannelIndex.VIEW_ALL;
         String clean = value.trim();
         // One-time semantic migration from the v0.5.3 guide labels.
-        if ("All".equalsIgnoreCase(clean)) return ChannelIndex.VIEW_FOR_YOU;
+        if ("All".equalsIgnoreCase(clean) || "Home".equalsIgnoreCase(clean)) return ChannelIndex.VIEW_ALL;
         if ("Unavailable".equalsIgnoreCase(clean)) return ChannelIndex.VIEW_JIO_ACCESS;
         return clean;
     }
@@ -300,7 +300,7 @@ public final class ChannelRepository {
     public void setLastCategory(String value) {
         context.getSharedPreferences(AppConfig.PREFS, Context.MODE_PRIVATE)
                 .edit().putString(AppConfig.KEY_LAST_CATEGORY,
-                        value == null || value.trim().isEmpty() ? ChannelIndex.VIEW_FOR_YOU : value.trim())
+                        ChannelIndex.canonicalView(value))
                 .apply();
     }
 

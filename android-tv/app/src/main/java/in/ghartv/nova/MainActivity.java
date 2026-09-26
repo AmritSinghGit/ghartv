@@ -96,6 +96,7 @@ public final class MainActivity extends Activity implements ChannelNavigator.Lis
     };
 
     private boolean initialResume=true;
+    private boolean startAtFirst=true;
     private int diskLoadGeneration;
     private final long screenStarted=android.os.SystemClock.elapsedRealtime();
     private boolean guideMeasured;
@@ -119,7 +120,7 @@ public final class MainActivity extends Activity implements ChannelNavigator.Lis
         Telemetry.launchStage(this, "repository_create");
         repository = new ChannelRepository(this);
         navigator = new ChannelNavigator(this);
-        selectedCategory = repository.lastCategory();
+        selectedCategory = ChannelIndex.VIEW_ALL; // A fresh launch starts at the full numbered guide.
         FamilyTheme.applyPreviewIntent(this);
         Telemetry.launchStage(this, "ui_build");
         setContentView(buildUi());
@@ -161,7 +162,7 @@ public final class MainActivity extends Activity implements ChannelNavigator.Lis
 
     @Override protected void onActivityResult(int requestCode, int resultCode, Intent data) {
         super.onActivityResult(requestCode, resultCode, data);
-        if(requestCode==UnifiedSearch.VOICE){String q=UnifiedSearch.voiceText(requestCode,resultCode,data);if(!q.isEmpty()){searchQuery=q;UnifiedSearch.open(this,q);}return;}
+        if(requestCode==UnifiedSearch.VOICE){String q=UnifiedSearch.voiceText(requestCode,resultCode,data);if(!q.isEmpty()){UnifiedSearch.open(this,q);}return;}
         if (FamilyTheme.handlePhotoResult(this, requestCode, resultCode, data)) recreate();
     }
 
@@ -233,12 +234,10 @@ public final class MainActivity extends Activity implements ChannelNavigator.Lis
         header.addView(live, liveParams);
         header.addView(new View(this), new LinearLayout.LayoutParams(0, 1, 1f));
 
-        Button search = actionButton("Find");
+        Button search = actionButton("Search / mic");
+        search.setContentDescription("Search live channels and films. Type or use the microphone.");
         search.setOnClickListener(view -> showSearch());
         header.addView(search, headerButtonParams());
-        Button voice = actionButton("Voice");
-        voice.setOnClickListener(view -> UnifiedSearch.voice(this));
-        header.addView(voice, headerButtonParams());
 
         Button refresh = actionButton("Update guide");
         refresh.setOnClickListener(view -> refreshCatalogue(true));
@@ -403,12 +402,8 @@ public final class MainActivity extends Activity implements ChannelNavigator.Lis
 
         RecyclerView chips = new RecyclerView(this);
         chips.setLayoutManager(new LinearLayoutManager(this, RecyclerView.HORIZONTAL, false));
-        chipAdapter = new ChipAdapter(value -> {
-            selectedCategory = value;
-            repository.setLastCategory(value);
-            Telemetry.event(this, "guide_filter", Telemetry.data("category", value));
-            renderGuide(true);
-        });
+        chipAdapter = new ChipAdapter(this::selectGuideCategory);
+        chips.setItemAnimator(null);
         chips.setAdapter(chipAdapter);
         guide.addView(chips, new LinearLayout.LayoutParams(-1, TvUi.dp(this, 44)));
 
@@ -528,17 +523,29 @@ public final class MainActivity extends Activity implements ChannelNavigator.Lis
         });
     }
 
+    // A chip changes scope, not the last global film query or recently watched item.
+    void selectGuideCategory(String value) {
+        selectedCategory=ChannelIndex.canonicalView(value);
+        searchQuery="";selectedChannel=null;startAtFirst=true;
+        focusRequestGeneration++; // Abandon any older category's deferred focus request.
+        repository.setLastCategory(selectedCategory);
+        Telemetry.event(this,"guide_filter",Telemetry.data("category",selectedCategory));
+        renderGuide(false); // Keep the visible chip focused so left/right can select another.
+        channelGrid.scrollToPosition(0);
+    }
+
     private void renderGuide(boolean requestFocus) {
         List<String> categories = repository.categories(allChannels);
-        if (!categories.contains(selectedCategory)) selectedCategory = "All";
-        chipAdapter.submit(categories, selectedCategory);
+        selectedCategory=ChannelIndex.canonicalView(selectedCategory);
+        if (!categories.contains(selectedCategory)) selectedCategory = ChannelIndex.VIEW_ALL;
+        chipAdapter.submit(categories, selectedCategory, repository.categoryCounts(allChannels));
         visibleChannels = repository.filter(allChannels, selectedCategory, searchQuery);
         channelAdapter.submit(visibleChannels, repository.favourites());
         boolean empty = visibleChannels.isEmpty();
         emptyState.setVisibility(empty ? View.VISIBLE : View.GONE);
         channelGrid.setVisibility(empty ? View.INVISIBLE : View.VISIBLE);
         if (empty) {
-            emptyState.setText(allChannels.isEmpty() ? "Getting your live channels ready…" : "No channels match this view.");
+            emptyState.setText(allChannels.isEmpty() ? "Getting your live channels ready…" : ChannelIndex.VIEW_RECENT.equals(selectedCategory) ? "No recently watched channels yet." : "No channels match this view.");
             select(null);
             return;
         }
@@ -549,12 +556,13 @@ public final class MainActivity extends Activity implements ChannelNavigator.Lis
             Telemetry.markLaunchHealthy(this);
         }
 
-        Channel preferred=null;
-        if(selectedChannel!=null)for(Channel candidate:visibleChannels){
+        Channel preferred=startAtFirst?visibleChannels.get(0):null;
+        if(!startAtFirst&&selectedChannel!=null)for(Channel candidate:visibleChannels){
             if(java.util.Objects.equals(selectedChannel.id,candidate.id)){preferred=candidate;break;}
         }
-        if(preferred==null)preferred = repository.byNumber(visibleChannels, repository.lastChannel());
+        // Never jump the newly selected catalogue to a previous viewing-history item.
         if (preferred == null) preferred = visibleChannels.get(0);
+        if(startAtFirst){channelGrid.scrollToPosition(0);startAtFirst=false;}
         select(preferred);
         scheduleVisibleEpg();
         if (requestFocus) {
@@ -710,30 +718,7 @@ public final class MainActivity extends Activity implements ChannelNavigator.Lis
 
     private void showSearch() {
         if(heroPreviewController!=null)heroPreviewController.stop(false);
-        EditText input = new EditText(this);
-        input.setSingleLine(true);
-        input.setText(searchQuery);
-        input.setHint("Live channel, film or series");
-        input.setInputType(InputType.TYPE_CLASS_TEXT);
-        input.setSelectAllOnFocus(true);
-        new AlertDialog.Builder(this)
-                .setTitle("Search GharTV · live + films")
-                .setMessage("Search the cached live guide and FlixMomo. Your film query goes to the provider.")
-                .setView(input)
-                .setPositiveButton("Search", (dialog, which) -> {
-                    searchQuery = input.getText().toString().trim();
-                    Telemetry.event(this, "guide_search", Telemetry.data("active", !searchQuery.isEmpty()));
-                    renderGuide(true);
-                    if(UnifiedSearch.valid(searchQuery)) UnifiedSearch.open(this,searchQuery);
-                })
-                .setNeutralButton("Clear", (dialog, which) -> {
-                    searchQuery = "";
-                    Telemetry.event(this, "guide_search", Telemetry.data("active", false));
-                    renderGuide(true);
-                })
-                .setNegativeButton("Cancel", null)
-                .show();
-        input.requestFocus();
+        UnifiedSearch.dialog(this);
     }
 
     private void showAccountMenu() {
