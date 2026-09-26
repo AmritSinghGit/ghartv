@@ -35,6 +35,7 @@ final class FilmHomeView extends FrameLayout {
     private final ScrollView scroll;
     private final LinearLayout content;
     private final TextView status;
+    private TextView heading;private String searchText="";
     private final LinearLayout grid;
     private String identity="";
     private int cardCount;
@@ -117,13 +118,16 @@ final class FilmHomeView extends FrameLayout {
         setBackground(TvUi.gradient(0xff09282e,TvUi.BG,0,Color.TRANSPARENT,0,a));
         scroll=new ScrollView(a);scroll.setFocusable(false);scroll.setDescendantFocusability(ViewGroup.FOCUS_AFTER_DESCENDANTS);scroll.setSmoothScrollingEnabled(false);scroll.setFillViewport(true);addView(scroll,new FrameLayout.LayoutParams(-1,-1));
         content=new LinearLayout(a);content.setOrientation(LinearLayout.VERTICAL);content.setPadding(dp(24),dp(18),dp(24),dp(24));scroll.addView(content);
-        content.addView(TvUi.label(a,"Your next watch.",30,TvUi.TEXT,true));
-        content.addView(TvUi.label(a,"Provider suggestions · FlixMomo · Review 38",13,TvUi.MINT,true));
+        heading=TvUi.label(a,"Your next watch.",30,TvUi.TEXT,true);content.addView(heading);
+        content.addView(TvUi.label(a,"Suggestions by FlixMomo · GharTV Review "+BuildConfig.VERSION_CODE,13,TvUi.MINT,true));
         TextView info=TvUi.label(a,"Search above for live channels, films and series. Browse below with your remote.",14,TvUi.MUTED,false);info.setPadding(0,dp(8),0,dp(10));content.addView(info);
         LinearLayout actionRow=new LinearLayout(a);button(actionRow,"Refresh suggestions",host::refresh);button(actionRow,"Open provider page",host::provider);button(actionRow,"Privacy & content use",host::privacy);content.addView(actionRow);
         status=TvUi.label(a,"Loading suggestions from the provider…",13,TvUi.MUTED,false);status.setPadding(0,dp(12),0,dp(12));content.addView(status);
         grid=new LinearLayout(a);grid.setOrientation(LinearLayout.VERTICAL);content.addView(grid);
     }
+    void mode(String query){String next=UnifiedSearch.clean(query);if(!next.equals(searchText)){discardSuggestions();searchText=next;}heading.setText(next.isEmpty()?"Your next watch.":"Results for “"+next+"”");}
+    JSONObject card(String target){for(JSONObject c:lastCards)if(target.equals(c.optString("url")))return c;return null;}
+    private final java.util.List<JSONObject> lastCards=new java.util.ArrayList<>();
     private int dp(int value){return TvUi.dp(activity,value);}
     private void button(LinearLayout row,String label,Runnable action){Button b=TvUi.button(activity,label,false);b.setId(View.generateViewId());b.setOnClickListener(v->action.run());actions.add(b);LinearLayout.LayoutParams p=new LinearLayout.LayoutParams(-2,dp(40));p.rightMargin=dp(8);row.addView(b,p);}
     static boolean safePoster(String raw){try {Uri u=Uri.parse(raw);return "https".equals(u.getScheme())&&u.getPort()==-1&&u.getUserInfo()==null&&(FlixMomoActivity.providerHost(u.getHost())||"image.tmdb.org".equals(u.getHost()));}catch(Exception e){return false;}}
@@ -143,6 +147,7 @@ final class FilmHomeView extends FrameLayout {
             allowed.add(item);
         }
         if(allowed.isEmpty()){unavailable("The current page has not supplied any readable poster suggestions yet.");return;}
+        lastCards.clear();lastCards.addAll(allowed);
         String next=allowed.toString();if(identity.equals(next)){status.setText(cardCount+" suggestions supplied by FlixMomo · availability is not verified");return;}
         // Do not reset a user's focus while they are browsing an already-rendered set.
         if(grid.hasFocus()&&cardCount>0){status.setText("Browsing "+cardCount+" suggestions · Refresh loads the latest set");return;}
@@ -164,6 +169,6 @@ final class FilmHomeView extends FrameLayout {
         wireFocus();
         status.setText(cardCount+" suggestions supplied by FlixMomo · availability is not verified");
     }
-    static String readable(String text){String s=text.trim();return s.indexOf(' ')<0?s.replace('-',' ').replace('_',' '):s;}
-    void discardSuggestions(){boolean focused=grid.hasFocus();identity="";cardCount=0;grid.removeAllViews();cards.clear();wireFocus();if(focused)focusRefresh();}
+    static String readable(String text){String s=text.trim();if(s.indexOf(' ')>=0)return s;String[] words=s.replace('-',' ').replace('_',' ').split(" ");StringBuilder result=new StringBuilder();for(String word:words){if(word.isEmpty())continue;if(result.length()>0)result.append(' ');result.append(Character.toUpperCase(word.charAt(0))).append(word.substring(1));}return result.toString();}
+    void discardSuggestions(){boolean focused=grid.hasFocus();identity="";cardCount=0;lastCards.clear();grid.removeAllViews();cards.clear();wireFocus();if(focused)focusRefresh();}
 }

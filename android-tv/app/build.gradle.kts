@@ -13,8 +13,8 @@ android {
         applicationId = "in.ghartv.nova"
         minSdk = 26
         targetSdk = 35
-        versionCode = 38
-        versionName = "0.6.0-rc11.1-focus-filter-review"
+        versionCode = 39
+        versionName = "0.6.0-rc12-detail-player-review"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
     buildFeatures { buildConfig = true }

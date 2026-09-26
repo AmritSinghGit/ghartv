@@ -74,7 +74,7 @@ public class Review38RegressionTest {
         open();ui(()->home().focusRefresh());press(KeyEvent.KEYCODE_DPAD_DOWN);press(KeyEvent.KEYCODE_DPAD_RIGHT);
         ui(()->assertTrue(activity.getCurrentFocus().getContentDescription().toString().startsWith("Fixture 1.")));
         press(KeyEvent.KEYCODE_DPAD_CENTER);SystemClock.sleep(200);
-        ui(()->{assertEquals(View.GONE,home().getVisibility());assertTrue(web().isFocusable());assertTrue(web().getUrl().contains("/movie/fixture-1"));});
+        ui(()->{assertEquals(View.GONE,home().getVisibility());assertFalse("Native title shields the page until Original page is selected",web().isFocusable());assertTrue(web().getUrl().contains("/movie/fixture-1"));View original=text(activity.getWindow().getDecorView(),"Original page");assertNotNull(original);original.performClick();assertTrue(web().isFocusable());});
     }
     @Test public void loadedSuggestionRefreshDoesNotRebuildFocusedCard() throws Exception {
         open();ui(()->home().focusRefresh());press(KeyEvent.KEYCODE_DPAD_DOWN);press(KeyEvent.KEYCODE_DPAD_RIGHT);

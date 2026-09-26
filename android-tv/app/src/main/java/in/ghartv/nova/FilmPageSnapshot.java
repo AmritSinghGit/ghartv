@@ -4,8 +4,8 @@ import org.json.JSONObject;
 /** Bounded top-document labels and permitted controls. No cookies, media URLs,
  * scripts, player iframe contents, or access-control changes are returned. */
 final class FilmPageSnapshot {
-    static final String CORE="""
-        const hosts=['flixmomo.app','flixmomo.st','www.flixmomo.st','flixmomo.bet','www.flixmomo.bet'];
+    static final String CORE=("""
+        const hosts=__GHARTV_HOSTS__;
         function permitted(u){return u.protocol==='https:'&&hosts.includes(u.hostname)&&!u.username&&!u.password&&!u.port;}
         const here=new URL(location.href);
         if(!permitted(here))return JSON.stringify({state:'ORIGIN_REJECTED'});
@@ -13,29 +13,33 @@ final class FilmPageSnapshot {
         const visible=e=>{const r=e.getBoundingClientRect(),s=getComputedStyle(e);return r.width>0&&r.height>0&&s.display!=='none'&&s.visibility!=='hidden';};
         const heading=clean(document.title+' '+Array.from(document.querySelectorAll('h1,h2')).slice(0,4).map(x=>x.textContent).join(' '));
         if(here.pathname==='/dummy'||/just a moment|verify (that )?you are human|checking your browser|security verification|access denied/i.test(heading))return JSON.stringify({state:'PROVIDER_VERIFICATION_REQUIRED'});
+        """ + FilmPlayerOptions.JS + """
+        let playerRead={detectedCount:0,returnedCount:0,truncated:false};
         function players(){
-          const choices=[],seen=new Set();
-          Array.from(document.querySelectorAll('button,[role="button"],[role="tab"],input[type="button"],a[href]')).slice(0,700).forEach(e=>{
-            if(!visible(e)||e.disabled||e.getAttribute('aria-disabled')==='true')return;
-            if(e.tagName==='A'){
-              let u;try{u=new URL(e.getAttribute('href'),here);}catch(err){return;}
-              if(!permitted(u)||u.origin!==here.origin||u.pathname!==here.pathname||u.search!==here.search)return;
-            }
-            const label=clean(e.innerText||e.value||e.getAttribute('aria-label'));
-            if(!/^(player|server|source)\\s*#?\\s*\\d{1,2}$/i.test(label)||seen.has(label.toLowerCase()))return;
-            seen.add(label.toLowerCase());choices.push({kind:'button',label,element:e,selected:e.getAttribute('aria-pressed')==='true'||e.getAttribute('aria-selected')==='true'||e.getAttribute('data-state')==='active'});
-          });
-          Array.from(document.querySelectorAll('select')).slice(0,20).forEach(select=>{
-            if(!visible(select)||select.disabled)return;
-            Array.from(select.options).slice(0,20).forEach((option,oi)=>{
-              const label=clean(option.textContent);
-              if(option.disabled||!/^(player|server|source)\\s*#?\\s*\\d{1,2}$/i.test(label)||seen.has(label.toLowerCase()))return;
-              seen.add(label.toLowerCase());choices.push({kind:'select',label,element:select,option:oi,selected:option.selected});
-            });
-          });return choices.slice(0,12);
+          const observed=[],elements=new Map();
+          const nodes=Array.from(document.querySelectorAll('button,[role="button"],[role="tab"],input[type="button"],a[href],select'));
+          let scanned=0;
+          for(const e of nodes){
+            if(++scanned>700)break;
+            if(!visible(e)||e.disabled||e.getAttribute('aria-disabled')==='true')continue;
+            if(e.tagName==='A'){let u;try{u=new URL(e.getAttribute('href'),here);}catch(error){continue;}if(!permitted(u)||u.origin!==here.origin||u.pathname!==here.pathname||u.search!==here.search)continue;}
+            const add=(node,option=-1)=>{
+              const isOption=option>=0;
+              const o={kind:isOption?'select-option':e.tagName==='A'?'link':e.getAttribute('role')==='tab'?'tab':'button',visible:true,
+                disabled:!!node.disabled,text:clean(node.innerText||node.value||node.textContent||node.getAttribute('aria-label')),
+                directText:clean(Array.from(node.childNodes).filter(x=>x.nodeType===3).map(x=>x.textContent).join(' ')),
+                badges:Array.from(node.querySelectorAll('span,small,[data-badge]')).slice(0,8).map(x=>clean(x.textContent)),href:e.getAttribute('href'),
+                selected:isOption?node.selected:e.getAttribute('aria-pressed')==='true'||e.getAttribute('aria-selected')==='true'||e.getAttribute('data-state')==='active'};
+              observed.push(o);const id=PlayerOptions.identifyPlayer(o);if(id&&!elements.has(id.id))elements.set(id.id,{element:e,option,kind:isOption?'select':'button'});
+            };
+            if(e.tagName==='SELECT')Array.from(e.options).slice(0,64).forEach((o,i)=>add(o,i));else add(e);
+          }
+          playerRead=PlayerOptions.enumeratePlayers(observed,here.href,{limit:48,scanLimit:700});
+          playerRead.truncated=playerRead.truncated||nodes.length>700;
+          return playerRead.choices.map(p=>({...p,...elements.get(p.id)}));
         }
-        """;
-    static String read(){return "(()=>{"+CORE+"""
+        """).replace("__GHARTV_HOSTS__",FilmProviderPolicy.hostsJavascript());
+    static String read(){return "(()=>{"+CORE+FilmDetailSnapshot.JS+"""
         const results=[],seen=new Set();
         Array.from(document.querySelectorAll('a[href]')).slice(0,900).forEach(a=>{
           if(results.length>=60||!visible(a))return;
@@ -56,15 +60,15 @@ final class FilmPageSnapshot {
           const metadata=clean(a.innerText||card?.innerText||'').slice(0,180);
           seen.add(u.href);results.push({title:label,url:u.href,image,metadata});
         });
-        const offered=players().map((p,i)=>({index:i,label:p.label,selected:p.selected}));
+        const offered=players().map((p,i)=>({index:i,id:p.id,label:p.label,badges:p.badges,providerLabel:p.providerLabel,selected:p.selected}));
         const media=Array.from(document.querySelectorAll('video')).filter(visible);
         const mediaError=media.length===1&&media[0].error?media[0].error.code:0;
-        return JSON.stringify({state:'SNAPSHOT',url:here.href,search:here.pathname.replace(/\\/+$/,'')==='/search',results,players:offered,mediaError,mediaObservable:media.length===1});
+        return JSON.stringify({state:'SNAPSHOT',url:here.href,search:here.pathname.replace(/\\/+$/,'')==='/search',results,players:offered,playerDetectedCount:playerRead.detectedCount,playerTruncated:playerRead.truncated,detail:detail(),mediaError,mediaObservable:media.length===1});
         """+"})()";}
     static String select(String pageUrl,int index,String label){
-        if(index<0||index>=12)throw new IllegalArgumentException("Invalid player index");
+        if(index<0||index>=48)throw new IllegalArgumentException("Invalid player index");
         return "(()=>{"+CORE+"if(location.href!=="+JSONObject.quote(pageUrl)+")return JSON.stringify({state:'STALE_PAGE'});"+
-            "const list=players(),p=list["+index+"];if(!p||p.label!=="+JSONObject.quote(label)+")return JSON.stringify({state:'PLAYER_CHANGED'});"+
+            "const list=players(),p=list.find(x=>x.label==="+JSONObject.quote(label)+");if(!p)return JSON.stringify({state:'PLAYER_CHANGED'});"+
             "if(p.kind==='select'){p.element.selectedIndex=p.option;p.element.dispatchEvent(new Event('change',{bubbles:true}));}else{p.element.click();}"+
             "return JSON.stringify({state:'SELECTION_REQUESTED',label:p.label});})()";
     }
