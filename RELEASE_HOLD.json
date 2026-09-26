@@ -1,15 +1,39 @@
 {
-  "schema": "ghartv.owner-release-hold.v1",
+  "schema": "ghartv.owner-release-hold.v2",
   "lane": "ghartv",
   "repository": "AmritSinghGit/ghartv",
-  "owner_decision": "HOLD_PUBLIC_AND_HOUSEHOLD_RELEASE_PENDING_END_TO_END_REVIEW",
-  "decision_date": "2026-09-25",
-  "approval_comment": 5833335683,
-  "supersedes": "Earlier request to publish the signed code33 to Dad and the public update channel now",
-  "permitted_work": ["Continue the existing source branch and PR", "Compile and test the next owner-review candidate", "Supply a review bundle for original-key local signing and the same normal Nova emulator"],
-  "not_authorized": ["Advance the production update feed", "Promote a new signed family APK", "Launch public marketing or a commercial streaming service"],
-  "existing_production_and_signed_artifacts": "PRESERVE_UNCHANGED",
-  "tor_for_next_build": "DEFERRED_NOT_ENABLED",
-  "public_feed_changed_by_this_decision_record": false,
-  "required_before_promotion": "New explicit owner approval for the exact reviewed signed bytes"
+  "owner_decision": "EXACT_CODE38_HOUSEHOLD_UPDATE_APPROVED_OTHER_ROLLOUT_HELD",
+  "decision_date": "2026-09-26",
+  "previous_hold_comment": 5833335683,
+  "approved_candidate": {
+    "version_code": 38,
+    "version_name": "0.6.0-rc11.1-focus-filter-review",
+    "source": "b5bc564dc83db4b157c2325c9df80ffa0b80d934",
+    "signed_apk_sha256": "439df956cb8c1a064291fb10db5b7566aaee26772213f7f6aeb5a7a7174aa7e5",
+    "unsigned_apk_sha256": "48109b8de7920ce5270e554a78eec4e48ad61596f603bae0c3aa9b40e4e6c127",
+    "certificate_sha256": "40a9d8bf6b1c557b3d6fd02acef075368dd13e28691f207a297202d0d5ec233c",
+    "owner_run": "GHARTV-CYAN-38-20260926T160406Z-94907",
+    "approval_scope": "ANDROID_UPDATE_AND_DOWNLOAD_FEED_ONLY",
+    "distribution": "EXISTING_SHARED_HOUSEHOLD_UPDATE_FEED_NOT_A_REMOTE_OR_SILENT_TV_INSTALL",
+    "user_review": "Reviewed by owner; approved for father's household review with known browser limitations",
+    "rebuild_or_resign": false
+  },
+  "permitted_work": [
+    "Upload the exact existing signed38 APK, verify its downloaded public bytes, then conditionally advance the existing update/latest.json feed",
+    "Record actual publication readback in existing release-control receipts and continuity",
+    "Continue subsequent fixes in the same branch and PR as a separately reviewed candidate"
+  ],
+  "not_authorized": [
+    "Substitute a rebuilt or differently signed APK for the approved bytes",
+    "Promote code33 or a newer unreviewed candidate under this approval",
+    "Launch broad marketing or a commercial streaming service",
+    "Change the app signing identity, uninstall or clear TV data, or silently install on a physical TV",
+    "Enable Tor or remove third-party access protections"
+  ],
+  "public_marketing": "HELD",
+  "newer_candidate_rollout": "HELD_PENDING_SEPARATE_OWNER_APPROVAL",
+  "existing_signed_artifacts": "PRESERVE",
+  "publication_status": "APPROVED_NOT_YET_UPLOADED_OR_ADVERTISED",
+  "last_observed_public_feed_code": 24,
+  "public_feed_changed_by_this_decision_record": false
 }
