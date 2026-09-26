@@ -1,0 +1,45 @@
+{
+  "schema": "ghartv.next-candidate-progress.v1",
+  "date": "2026-09-26",
+  "lane": "ghartv",
+  "branch": "codex/ghartv-remove-auto-preview",
+  "pr": 1,
+  "baseline_review": 38,
+  "baseline_application_source": "b5bc564dc83db4b157c2325c9df80ffa0b80d934",
+  "implementation_source": "c32b5fe11536daa005afff24d4c247f09fe615b8",
+  "stage": "SOURCE_IMPLEMENTATION_STARTED_NOT_AN_INSTALLABLE_NEXT_APK",
+  "implemented": {
+    "module": "tools/provider-access/player-options.mjs",
+    "tests": "tools/provider-access/player-options.test.mjs",
+    "behavior": [
+      "Separate stable player number and label from nested or recognized quality/status badges",
+      "Handle detected sets of 10, 12, 13 or other bounded sizes without a fixed six-source total",
+      "Preserve stable selection when controls reorder or quality badges change",
+      "Report detected count, returned count and truncation separately",
+      "Reject hidden/disabled controls, unrelated links, lookalike origins and stale pages",
+      "Do not invent working-source counts or treat provider quality labels as verified"
+    ],
+    "tests_passed": 16,
+    "test_command": "node --test tools/provider-access/player-options.test.mjs",
+    "test_runtime": "Node v22.16.0",
+    "test_scope": "LOCAL_PURE_LOGIC_TESTS_WITH_SYNTHETIC_CONTROL_OBSERVATIONS",
+    "android_or_live_dom_integration": false
+  },
+  "remaining": [
+    "Integrate the new control normalizer into the Android/WebView adapter and test actual observed DOM",
+    "Persistent prominent FlixMomo attribution on loading, home, details and playback",
+    "Native GharTV title-details screen populated only by actual available metadata",
+    "Single Enter/OK activation across async rendering and scrolling",
+    "Secure QR-paired phone trackpad, D-pad, scrolling and text entry",
+    "Versioned authenticated provider configuration and approved migration workflow",
+    "Full Android, landscape TV, real-device and live-provider acceptance"
+  ],
+  "approved38_apk_changed": false,
+  "next_apk_compiled": false,
+  "next_apk_signed": false,
+  "next_apk_published": false,
+  "new_lane_worktree_key_or_runtime_created": false,
+  "tor": "DEFERRED",
+  "broad_marketing": "HELD",
+  "requirements": "REVIEW38_FEEDBACK_AND_NEXT.md"
+}
