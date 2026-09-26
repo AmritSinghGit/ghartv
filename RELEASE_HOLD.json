@@ -19,21 +19,25 @@
     "rebuild_or_resign": false
   },
   "permitted_work": [
-    "Upload the exact existing signed38 APK, verify its downloaded public bytes, then conditionally advance the existing update/latest.json feed",
-    "Record actual publication readback in existing release-control receipts and continuity",
+    "Verify the existing published signed38 asset and feed without changing approved bytes",
+    "Record actual publication readback in existing continuity",
     "Continue subsequent fixes in the same branch and PR as a separately reviewed candidate"
   ],
   "not_authorized": [
     "Substitute a rebuilt or differently signed APK for the approved bytes",
     "Promote code33 or a newer unreviewed candidate under this approval",
     "Launch broad marketing or a commercial streaming service",
-    "Change the app signing identity, uninstall or clear TV data, or silently install on a physical TV",
+    "Change signing identity, uninstall or clear TV data, or silently install on a physical TV",
     "Enable Tor or remove third-party access protections"
   ],
   "public_marketing": "HELD",
   "newer_candidate_rollout": "HELD_PENDING_SEPARATE_OWNER_APPROVAL",
   "existing_signed_artifacts": "PRESERVE",
-  "publication_status": "APPROVED_NOT_YET_UPLOADED_OR_ADVERTISED",
-  "last_observed_public_feed_code": 24,
-  "public_feed_changed_by_this_decision_record": false
+  "publication_status": "PUBLIC_UPDATE_FEED_VERIFIED",
+  "last_observed_public_feed_code": 38,
+  "publication_receipt": "RELEASE38_PUBLICATION.json",
+  "publication_workflow_run": 36256603907,
+  "public_feed_commit": "9c4d25dcfb5f9cd0274abb69732f9930c85fe655",
+  "public_raw_feed": "VERIFIED",
+  "physical_tv_installation": "NOT_VERIFIED"
 }
