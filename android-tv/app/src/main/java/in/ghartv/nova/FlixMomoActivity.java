@@ -46,7 +46,8 @@ public class FlixMomoActivity extends Activity {
     private final java.util.concurrent.ExecutorService liveExecutor=java.util.concurrent.Executors.newSingleThreadExecutor();
     private int liveGeneration;
     private EditText query;
-    private TextView status,help;
+    private TextView status,help,playNotice;
+    private long playUntil,playAfter;private boolean mediaAttempted;private double lastMediaTime=-1;
     private Button pageButton,modeButton,scrollButton,retryButton;
     private LinearLayout chrome;
     private FrameLayout stage;
@@ -76,6 +77,7 @@ public class FlixMomoActivity extends Activity {
         status=TvUi.label(this,"Provider pages stay in GharTV · direct connection",12,TvUi.MUTED,false);chrome.addView(status);
         root.addView(chrome);
         TextView credit=TvUi.label(this,FilmProviderPolicy.CREDIT,12,TvUi.MINT,true);credit.setPadding(0,TvUi.dp(this,5),0,TvUi.dp(this,6));root.addView(credit);
+        playNotice=TvUi.label(this,"",12,TvUi.MUTED,false);playNotice.setVisibility(View.GONE);root.addView(playNotice);
         liveResults=new android.widget.HorizontalScrollView(this);liveResults.setHorizontalScrollBarEnabled(false);liveResults.setVisibility(View.GONE);
         liveRow=new LinearLayout(this);liveResults.addView(liveRow);root.addView(liveResults,new LinearLayout.LayoutParams(-1,TvUi.dp(this,48)));
         stage=new FrameLayout(this);root.addView(stage,new LinearLayout.LayoutParams(-1,0,1));setContentView(root);
@@ -87,8 +89,15 @@ public class FlixMomoActivity extends Activity {
             public void navigationHint(String text){help.setText(text);}
             public void searchToolbar(){toolbar();query.requestFocus();}
             public boolean pageIsVisible(){return !homeRequested&&!detailRequested;}
-            public void pageObserved(org.json.JSONObject data){if(homeRequested&&homePanel!=null)homePanel.render(data);else if(detailRequested&&detailPanel!=null)detailPanel.render(data.optJSONObject("detail"));else if(!data.optBoolean("search"))liveResults.setVisibility(View.GONE);}
-            public void pageAction(String action){nativeControls.pageAction(action);}
+            public void pageObserved(org.json.JSONObject data){if(homeRequested&&homePanel!=null)homePanel.render(data);else if(detailRequested&&detailPanel!=null)detailPanel.render(data.optJSONObject("detail"));else if(!data.optBoolean("search"))liveResults.setVisibility(View.GONE);followPlayback(data);}
+            public void pageAction(String action){if("watch".equals(action))requestWatch();else nativeControls.pageAction(action);}
+            public void playerSelected(){armPlayback();}
+            public void actionOutcome(String action,String result){
+                if("watch".equals(action)||"media".equals(action)){
+                    if("VISUAL_TIMEOUT".equals(result)||"NOT_FOUND".equals(result)||"AMBIGUOUS_MEDIA".equals(result)){playUntil=0;playMessage("Playback has not started: "+result.replace('_',' ').toLowerCase(java.util.Locale.ROOT)+". Use Original page or another player.");}
+                    else if("media".equals(action))playMessage("Play sent to FlixMomo. Video playback is not yet confirmed.");
+                }
+            }
             public void verificationRequired(){if(homeRequested&&homePanel!=null)homePanel.unavailable("Provider verification is required.");else if(detailRequested)detailPanel.unavailable("Provider verification is required.");else toolbar();}
         });
         homePanel=createHomePanel(new FilmHomeView.Host(){
@@ -104,7 +113,7 @@ public class FlixMomoActivity extends Activity {
         });
         stage.addView(homePanel,new FrameLayout.LayoutParams(-1,-1));
         detailPanel=createDetailPanel(new FilmDetailView.Host(){
-            public void watch(){usePage();nativeControls.pageAction("watch");}
+            public void watch(){requestWatch();}
             public void watchlist(){usePage();nativeControls.pageAction("watchlist");}
             public void original(){usePage();}
             public void back(){returnToCards();}
@@ -142,13 +151,23 @@ public class FlixMomoActivity extends Activity {
                 Uri uri=request.getUrl();String host=uri.getHost();if(!"https".equals(uri.getScheme())||host==null||privateHost(host))return new WebResourceResponse("text/plain","UTF-8",new ByteArrayInputStream(new byte[0]));return null;
             }
             @Override public void onPageStarted(WebView view,String url,Bitmap icon){
-                cursor.cancel();nativeControls.started();if("about:blank".equals(url))return;mainFrameError=false;pageReady=false;loading=true;if(allowedTop(Uri.parse(url)))lastRequested=url;
+                cursor.cancel();nativeControls.started();if("about:blank".equals(url))return;
+                if(detailRequested&&FilmProviderPolicy.detail(Uri.parse(url)))detailPanel.followNavigation(url);
+                else if(detailRequested&&allowedTop(Uri.parse(url))&&!FilmProviderPolicy.detail(Uri.parse(url)))usePage();mainFrameError=false;pageReady=false;loading=true;if(allowedTop(Uri.parse(url)))lastRequested=url;
                 status.setText("Opening FlixMomo…");handler.removeCallbacks(slowLoad);handler.postDelayed(slowLoad,20000);
             }
             @Override public void onPageFinished(WebView view,String url){
                 loading=false;handler.removeCallbacks(slowLoad);if(mainFrameError){pageReady=false;return;}
                 if("/dummy".equals(Uri.parse(url).getPath())){fail("FlixMomo declined this session. No provider protection was changed.");return;}
                 pageReady=allowedTop(Uri.parse(url));if(pageReady){status.setText("Original page loaded · artwork stays here · Menu shows GharTV controls");nativeControls.finished();}
+            }
+            @Override public void doUpdateVisitedHistory(WebView view,String url,boolean reload){
+                if(!loading&&allowedTop(Uri.parse(url))&&!java.util.Objects.equals(lastRequested,url)){
+                    lastRequested=url;nativeControls.started();
+                    if(detailRequested&&FilmProviderPolicy.detail(Uri.parse(url)))detailPanel.followNavigation(url);
+                    else if(detailRequested)usePage();
+                    nativeControls.finished();
+                }
             }
             @Override public void onReceivedHttpError(WebView view,WebResourceRequest request,WebResourceResponse response){if(request.isForMainFrame())fail("Provider returned HTTP "+response.getStatusCode()+". Your search is kept. Use Retry or Browse.");}
             @Override public void onReceivedSslError(WebView view,SslErrorHandler handler,SslError error){handler.cancel();fail("TLS verification failed. Connection stopped; security checks remain enabled.");}
@@ -174,7 +193,7 @@ public class FlixMomoActivity extends Activity {
         });return true;
     }
 
-    private void showHome(boolean force){
+    private void showHome(boolean force){playUntil=0;if(playNotice!=null)playNotice.setVisibility(View.GONE);
         detailRequested=false;if(detailPanel!=null)detailPanel.setVisibility(View.GONE);homeRequested=true;nativeSearch="";homePanel.mode("");liveGeneration++;liveResults.setVisibility(View.GONE);query.setText("");chrome.setVisibility(View.VISIBLE);
         cursor.enable(false);modeButton.setText("Cursor: off");nativeControls.hideAll();homePanel.setVisibility(View.VISIBLE);homePanel.bringToFront();
         if(force)homePanel.discardSuggestions();
@@ -195,7 +214,22 @@ public class FlixMomoActivity extends Activity {
         });
     }
 
-    private void fail(String message){if(nativeControls!=null)nativeControls.failure();mainFrameError=true;pageReady=false;loading=false;handler.removeCallbacks(slowLoad);status.setText(message);if(homeRequested&&homePanel!=null)homePanel.unavailable(message);if(detailRequested&&detailPanel!=null)detailPanel.unavailable(message);}
+    private void playMessage(String text){playNotice.setText(text);playNotice.setVisibility(View.VISIBLE);}
+    private void armPlayback(){playUntil=android.os.SystemClock.elapsedRealtime()+20000;playAfter=android.os.SystemClock.elapsedRealtime()+700;mediaAttempted=false;lastMediaTime=-1;playMessage("Opening FlixMomo playback…");}
+    private void requestWatch(){armPlayback();usePage();nativeControls.pageAction("watch");}
+    private void followPlayback(org.json.JSONObject data){
+        if(playUntil==0||homeRequested||detailRequested)return;
+        long now=android.os.SystemClock.elapsedRealtime();
+        if(data.optBoolean("mediaPlaying")&&data.optDouble("mediaTime")>lastMediaTime&&lastMediaTime>=0){playMessage("Video is playing in FlixMomo’s embedded player.");playUntil=0;return;}
+        if(data.optBoolean("mediaObservable"))lastMediaTime=data.optDouble("mediaTime");
+        if(now>playUntil){playMessage("Playback is not confirmed. Use Play, another provider player, or Original page.");playUntil=0;return;}
+        org.json.JSONArray offered=data.optJSONArray("players");
+        boolean playbackPage=!FilmProviderPolicy.detail(Uri.parse(data.optString("url")))||(offered!=null&&offered.length()>0)||data.optBoolean("mediaObservable");
+        if(!loading&&!mediaAttempted&&now>=playAfter&&playbackPage&&data.optInt("mediaCandidates")==1){
+            mediaAttempted=true;playMessage("Starting the provider’s visible player…");nativeControls.pageAction("media");
+        }
+    }
+    private void fail(String message){if(playUntil>0){playUntil=0;playMessage(message);}if(nativeControls!=null)nativeControls.failure();mainFrameError=true;pageReady=false;loading=false;handler.removeCallbacks(slowLoad);status.setText(message);if(homeRequested&&homePanel!=null)homePanel.unavailable(message);if(detailRequested&&detailPanel!=null)detailPanel.unavailable(message);}
     static boolean providerHost(String host){return FilmProviderPolicy.host(host);}
     static boolean allowedTop(Uri uri){return FilmProviderPolicy.allowed(uri);}
     private static boolean privateHost(String host){String h=host.toLowerCase(java.util.Locale.ROOT);return h.equals("localhost")||h.endsWith(".localhost")||h.endsWith(".local")||h.endsWith(".internal")||h.contains(":")||h.matches("(?i)(127\\..*|10\\..*|192\\.168\\..*|169\\.254\\..*|172\\.(1[6-9]|2[0-9]|3[01])\\..*|0\\..*)");}
@@ -209,7 +243,7 @@ public class FlixMomoActivity extends Activity {
         // Retained cards are immediately reviewable. Do not reread a title as search suggestions.
         if(!nativeSearch.isEmpty()){query.setText(nativeSearch);navigate(providerOrigin()+"/search?q="+Uri.encode(nativeSearch),false);}else navigate(providerOrigin()+"/",false);
     }
-    private void search(){String text=UnifiedSearch.clean(query.getText().toString());if(!UnifiedSearch.valid(text)){status.setText("Enter 2–120 characters.");return;}
+    private void search(){playUntil=0;playNotice.setVisibility(View.GONE);String text=UnifiedSearch.clean(query.getText().toString());if(!UnifiedSearch.valid(text)){status.setText("Enter 2–120 characters.");return;}
         detailRequested=false;detailPanel.setVisibility(View.GONE);homeRequested=true;nativeSearch=text;homePanel.mode(text);homePanel.discardSuggestions();homePanel.setVisibility(View.VISIBLE);homePanel.bringToFront();nativeControls.hideAll();cursor.enable(false);showLiveResults(text);homePanel.loading();navigate(providerOrigin()+"/search?q="+Uri.encode(text),false);homePanel.focusRefresh();
     }
     private void navigate(String url,boolean page){if(!allowedTop(Uri.parse(url))){fail("Only the registered provider can open here.");return;}hideKeyboard();lastRequested=url;if(browser==null){fail("Provider browser stopped. Press Retry to reopen it.");return;}loadProviderPage(url);if(page)usePage();}

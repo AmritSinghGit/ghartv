@@ -1,0 +1,13 @@
+# Review40 — Watch action, metadata and playback handoff
+
+Same GharTV lane, PR1, normal Nova and original signing key. Review38 remains the published household build. No public40 rollout or native Mac cleanup is authorized by an owner-review request.
+
+The previous title extractor required h1. This repair supports visible h1/h2/h3 title blocks near Watch Now, reads actual overview and sidebar facts, rejects unrelated recommendation metadata, and follows approved in-flight canonical title navigation. It never reads iframe source URLs, account data or undocumented media endpoints. A title visible on the provider page is not a playback guarantee.
+
+Approved provider Watch links are navigated directly using their observed URL, rather than a guessed mouse coordinate. Button actions still use a revalidated native user gesture. Hit coordinates use the visual viewport, including its offsets, rather than assuming the layout viewport equals the physical WebView. Watch labels are identified from the visible/accessibility text, not an unrelated tooltip. Same-document route changes refresh the observed page instead of waiting for a full-page callback.
+
+An explicit Watch request now stays active across the title-to-watch transition. Once the current playback page exposes exactly one visible media element it sends one initial play gesture, bounded to that request. It does not guess between multiple frames or blindly cycle sources. Subsequent source selection arms the same bounded follow-through. Directly observable video is only labelled playing after its media clock advances. Cross-origin iframe playback stays unverified; no success is inferred from a loaded page, button highlight, detected source or sent click. Status is visible outside the hidden toolbar.
+
+Tests keep the58 previous Android cases and add12 regressions for heading/metadata patterns, action labels, approved/unsafe links, visual viewport coordinates, ambiguous media, and actual production Activity title-to-player journeys. Two tests require a local owned MP4 video clock to advance after one Watch press (SPA button and normal link). The small clip and harness exist only in debug/test source, not the release APK. No live FlixMomo film, speech service or physical TV is tested by those assertions. Final test counts and build status belong in VALIDATION.json, not inferred from this file.
+
+This is provider playback embedded in GharTV, NOT native Media3 playback of arbitrary third-party streams. Secure QR phone remote and authenticated remote provider configuration remain outside this repair; Tor remains deferred. Existing source security checks are retained. If live playback still fails, preserve the observed failure rather than announcing a healthy stream.

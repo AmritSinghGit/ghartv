@@ -63,7 +63,11 @@ final class FilmPageSnapshot {
         const offered=players().map((p,i)=>({index:i,id:p.id,label:p.label,badges:p.badges,providerLabel:p.providerLabel,selected:p.selected}));
         const media=Array.from(document.querySelectorAll('video')).filter(visible);
         const mediaError=media.length===1&&media[0].error?media[0].error.code:0;
-        return JSON.stringify({state:'SNAPSHOT',url:here.href,search:here.pathname.replace(/\\/+$/,'')==='/search',results,players:offered,playerDetectedCount:playerRead.detectedCount,playerTruncated:playerRead.truncated,detail:detail(),mediaError,mediaObservable:media.length===1});
+        const frames=Array.from(document.querySelectorAll('iframe')).filter(e=>visible(e)&&e.getBoundingClientRect().width>=160&&e.getBoundingClientRect().height>=90);
+        const mediaTime=media.length===1?media[0].currentTime:0;
+        const mediaPlaying=media.length===1&&!media[0].paused&&!media[0].ended&&media[0].readyState>=2;
+        
+        return JSON.stringify({state:'SNAPSHOT',url:here.href,search:here.pathname.replace(/\\/+$/,'')==='/search',results,players:offered,playerDetectedCount:playerRead.detectedCount,playerTruncated:playerRead.truncated,detail:detail(),mediaError,mediaObservable:media.length===1,mediaTime,mediaPlaying,mediaCandidates:media.length+frames.length,frameCount:frames.length});
         """+"})()";}
     static String select(String pageUrl,int index,String label){
         if(index<0||index>=48)throw new IllegalArgumentException("Invalid player index");

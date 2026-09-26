@@ -24,7 +24,7 @@ import java.util.Set;
 final class FilmNativeControls {
     interface Host { void navigate(String url); void usePage(); void searchToolbar(); void nativeMode(); void navigationHint(String text);
         default boolean pageIsVisible(){return true;}
-        default void pageObserved(JSONObject data){} default void pageAction(String action){} default void verificationRequired(){}
+        default void playerSelected(){} default void actionOutcome(String action,String state){} default void pageObserved(JSONObject data){} default void pageAction(String action){} default void verificationRequired(){}
     }
     private final Activity activity;
     private final View chrome;
@@ -77,7 +77,7 @@ final class FilmNativeControls {
     private void showTray(boolean focus){if(!active||!host.pageIsVisible())return;tray.setVisibility(View.VISIBLE);tray.bringToFront();if(focus)((LinearLayout)tray.getChildAt(1)).getChildAt(0).requestFocus();handler.removeCallbacks(hide);if(choiceView.getVisibility()!=View.VISIBLE)handler.postDelayed(hide,6000);if(players.length()==0&&!blocked)finished();}
     private JSONObject decode(String raw) throws Exception {if(raw==null||raw.length()>131072)throw new IllegalArgumentException("Page result too large");Object value=new JSONTokener(raw).nextValue();if(!(value instanceof String))throw new IllegalArgumentException("No page snapshot");return new JSONObject((String)value);}
     private void read(){
-        if(!active||blocked||reading||browser==null||probeCount>=6)return;String url=browser.getUrl();if(url==null||!FlixMomoActivity.allowedTop(Uri.parse(url)))return;
+        if(!active||blocked||reading||browser==null||probeCount>=14)return;String url=browser.getUrl();if(url==null||!FlixMomoActivity.allowedTop(Uri.parse(url)))return;
         final int token=generation;final WebView source=browser;reading=true;probeCount++;
         source.evaluateJavascript(FilmPageSnapshot.read(),raw->{
             if(!active||browser!=source||token!=generation)return;reading=false;
@@ -89,7 +89,7 @@ final class FilmNativeControls {
                 else if(host.pageIsVisible()&&!detailFocusApplied&&source.hasFocus()){detailFocusApplied=true;pageAction("focus");}
                 if(!data.optBoolean("search")&&players.length()>0&&!playerTrayAnnounced&&!selectedByViewer){playerTrayAnnounced=true;state.setText(players.length()+" player choices detected"+(playerTruncated?" · partial list":"")+" · Menu opens controls");showTray(false);}
                 if(selectedByViewer&&SystemClock.elapsedRealtime()-selectedAt>=5000&&autoNext&&data.optBoolean("mediaObservable")&&data.optInt("mediaError")>0&&!pending)next(false);
-                if(probeCount<6){handler.removeCallbacks(probe);handler.postDelayed(probe,1800);}
+                if(probeCount<14){handler.removeCallbacks(probe);handler.postDelayed(probe,1800);}
             }catch(Exception ignored){host.navigationHint("Use the provider page; its player controls could not be read.");}
         });
     }
@@ -135,7 +135,7 @@ final class FilmNativeControls {
         source.evaluateJavascript(FilmPageSnapshot.select(snapshotUrl,index,label),raw->{
             if(!active||browser!=source||generation!=token)return;pending=false;
             try{JSONObject result=decode(raw);if(!"SELECTION_REQUESTED".equals(result.optString("state"))){state.setText("Provider choices changed. Reopen Players to refresh.");probeCount=0;finished();showTray(false);return;}
-                host.nativeMode();selected=label;selectedAt=SystemClock.elapsedRealtime();attempted.add(label);selectedByViewer=true;choiceView.setVisibility(View.GONE);chrome.setVisibility(View.GONE);state.setText(label+" selected · Not playing tries another · playback not verified");showTray(false);handler.removeCallbacks(slow);handler.postDelayed(slow,20000);probeCount=0;finished();
+                host.nativeMode();selected=label;selectedAt=SystemClock.elapsedRealtime();attempted.add(label);selectedByViewer=true;choiceView.setVisibility(View.GONE);chrome.setVisibility(View.GONE);state.setText(label+" selected · Not playing tries another · playback not verified");showTray(false);handler.removeCallbacks(slow);handler.postDelayed(slow,20000);host.playerSelected();probeCount=0;finished();
             }catch(Exception e){state.setText("Selection not confirmed. Use page or refresh Players.");showTray(false);}
         });
     }
@@ -158,12 +158,17 @@ final class FilmNativeControls {
         source.evaluateJavascript(FilmPageFocus.script(action),raw->{
             if(!active||source!=browser||token!=generation)return;
             try{JSONObject result=decode(raw);String response=result.optString("state");
-                if(!source.getUrl().equals(result.optString("url"))){finishPageAction(token);return;}
+                if(!java.util.Objects.equals(source.getUrl(),result.optString("url"))){finishPageAction(token);return;}
+                if("NAVIGATE".equals(response)){
+                    String target=result.optString("target");
+                    if(target.length()<=2048&&FlixMomoActivity.allowedTop(Uri.parse(target))){host.actionOutcome(action,"NAVIGATING");host.navigate(target);}
+                    finishPageAction(token);return;
+                }
                 if("TAP".equals(response)){
                     // Wait for the scrolled DOM to be ready to draw, then recheck the SAME node.
                     final String page=result.optString("url");
                     final boolean[] completed={false};
-                    Runnable timeout=()->{if(!completed[0]&&token==generation){completed[0]=true;pageActions.clear();posterActions.clear();host.navigationHint("Page is not ready. No click was sent; use Original page.");finishPageAction(token);}};
+                    Runnable timeout=()->{if(!completed[0]&&token==generation){completed[0]=true;pageActions.clear();posterActions.clear();host.navigationHint("Page is not ready. No click was sent; use Original page.");host.actionOutcome(action,"VISUAL_TIMEOUT");finishPageAction(token);}};
                     handler.postDelayed(timeout,1600);
                     source.postVisualStateCallback(SystemClock.uptimeMillis(),new WebView.VisualStateCallback(){public void onComplete(long request){
                         if(completed[0]||!active||source!=browser||token!=generation)return;
@@ -178,10 +183,10 @@ final class FilmNativeControls {
                                     float px=(float)(x*source.getWidth()/w),py=(float)(y*source.getHeight()/h);
                                     hideAll();source.requestFocus();long time=SystemClock.uptimeMillis();
                                     android.view.MotionEvent down=android.view.MotionEvent.obtain(time,time,android.view.MotionEvent.ACTION_DOWN,px,py,0);
-                                    try{source.dispatchTouchEvent(down);}finally{down.recycle();}
+                                    down.setSource(android.view.InputDevice.SOURCE_TOUCHSCREEN);try{source.dispatchTouchEvent(down);}finally{down.recycle();}
                                     handler.postDelayed(()->{if(source!=browser||token!=generation)return;
                                         android.view.MotionEvent up=android.view.MotionEvent.obtain(time,SystemClock.uptimeMillis(),android.view.MotionEvent.ACTION_UP,px,py,0);
-                                        try{source.dispatchTouchEvent(up);}finally{up.recycle();finishPageAction(token);}
+                                        up.setSource(android.view.InputDevice.SOURCE_TOUCHSCREEN);try{source.dispatchTouchEvent(up);host.actionOutcome(action,"CLICK_SENT_NOT_PLAYBACK_PROOF");}finally{up.recycle();finishPageAction(token);}
                                     },45);
                                 }catch(Exception error){finishPageAction(token);}
                             });
@@ -191,7 +196,7 @@ final class FilmNativeControls {
                 if("EDITING".equals(response)){
                     int key="left".equals(action)?KeyEvent.KEYCODE_DPAD_LEFT:"right".equals(action)?KeyEvent.KEYCODE_DPAD_RIGHT:"up".equals(action)?KeyEvent.KEYCODE_DPAD_UP:"down".equals(action)?KeyEvent.KEYCODE_DPAD_DOWN:KeyEvent.KEYCODE_DPAD_CENTER;
                     source.dispatchKeyEvent(new KeyEvent(KeyEvent.ACTION_DOWN,key));source.dispatchKeyEvent(new KeyEvent(KeyEvent.ACTION_UP,key));
-                }else if("NOT_FOUND".equals(response))host.navigationHint("The provider has not exposed that action yet. Original page remains available.");
+                }else if("NOT_FOUND".equals(response)||"MEDIA_NOT_READY".equals(response)||"AMBIGUOUS_MEDIA".equals(response)){host.navigationHint("The provider has not exposed an unambiguous control. Original page remains available.");host.actionOutcome(action,response);}
                 else if("FOCUSED".equals(response))host.navigationHint(result.optString("label")+" · arrows move · OK selects · Menu opens controls");
                 else if("VERIFICATION_REQUIRED".equals(response))host.verificationRequired();
             }catch(Exception error){host.navigationHint("Provider control could not be confirmed; Original page remains available.");}

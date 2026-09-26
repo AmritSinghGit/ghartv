@@ -6,6 +6,8 @@ final class FilmPageFocus {
         (()=>{
         const hosts=__GHARTV_HOSTS__;
         const here=new URL(location.href), action=__ACTION__, pack=o=>JSON.stringify({...o,url:location.href});
+        const viewport=()=>{const v=window.visualViewport;return {left:v?.offsetLeft||0,top:v?.offsetTop||0,width:v?.width||innerWidth,height:v?.height||innerHeight};};
+        const buttonText=e=>clean(e.getAttribute('aria-label')||e.innerText||e.textContent||e.value).replace(/^[\\s\\u25b6\\u25ba]+/,'').trim();
         if(here.protocol!=='https:'||!hosts.includes(here.hostname)||here.username||here.password||here.port)return pack({state:'ORIGIN_REJECTED'});
         const clean=s=>String(s||'').replace(/[\\x00-\\x1f]/g,' ').replace(/\\s+/g,' ').trim();
         const heading=clean(document.title+' '+Array.from(document.querySelectorAll('h1,h2')).slice(0,3).map(e=>e.textContent).join(' '));
@@ -19,15 +21,15 @@ final class FilmPageFocus {
         function permittedLink(e){if(e.tagName!=='A')return true;try{const u=new URL(e.getAttribute('href'),here);return u.protocol==='https:'&&hosts.includes(u.hostname)&&!u.username&&!u.password&&!u.port;}catch{return false;}}
         const candidates=Array.from(root.querySelectorAll('a[href],button,summary,input:not([type="hidden"]),textarea,select,video,iframe,[role="button"],[role="tab"],[tabindex]'))
         .filter(e=>visible(e)&&permittedLink(e)&&!e.closest('[aria-hidden="true"]')&&(!/^(IFRAME|VIDEO)$/.test(e.tagName)||(e.getBoundingClientRect().width>=160&&e.getBoundingClientRect().height>=90))).filter((e,i,all)=>!all.some((p,j)=>j!==i&&p.contains(e)&&/^(A|BUTTON|SELECT|INPUT|TEXTAREA|SUMMARY)$/.test(p.tagName))).slice(0,180);
-        const watch=e=>/^(watch now|play( now)?|start watching|resume watching|watch movie)$/i.test(label(e));
+        const watch=e=>/^(watch now|play( now)?|start watching|resume watching|watch movie)$/i.test(buttonText(e));
         const watchlist=e=>/^(add to |remove from )?(watchlist|watch list|playlist)$/i.test(label(e));
         if(action==='scan')return pack({state:'READY',count:candidates.length,watch:candidates.some(watch),watchlist:candidates.some(watchlist)});
         if(action==='commit'){
           const pending=window.__ghartvTap39;window.__ghartvTap39=null;
           if(!pending||pending.url!==location.href||!pending.element.isConnected||!visible(pending.element)||!permittedLink(pending.element))return pack({state:'STALE'});
-          const e=pending.element,r=e.getBoundingClientRect(),x=Math.max(1,Math.min(innerWidth-1,r.left+r.width/2)),y=Math.max(1,Math.min(innerHeight-1,r.top+r.height/2));
+          const e=pending.element,r=e.getBoundingClientRect(),v=viewport(),x=Math.max(v.left+1,Math.min(v.left+v.width-1,r.left+r.width/2)),y=Math.max(v.top+1,Math.min(v.top+v.height-1,r.top+r.height/2));
           const hit=document.elementFromPoint(x,y);if(!(hit===e||e.contains(hit)))return pack({state:'OBSCURED'});
-          return pack({state:'TAP',label:label(e),x,y,width:innerWidth,height:innerHeight,tag:e.tagName});
+          return pack({state:'TAP',label:label(e),x:x-v.left,y:y-v.top,width:v.width,height:v.height,tag:e.tagName});
         }
 
         let i=candidates.findIndex(e=>e===active||e.contains(active));if(i<0)i=candidates.findIndex(e=>e.getAttribute('data-ghartv-page-focus')==='true');
@@ -43,7 +45,16 @@ final class FilmPageFocus {
          if(tap&&(x<0||x>innerWidth||y<0||y>innerHeight))return pack({state:'OUTSIDE_VIEWPORT'});
          return pack({state:tap?'TAP':'FOCUSED',label:label(e),x,y,width:innerWidth,height:innerHeight,tag:e.tagName});
         }
-        if(action==='watch'){let n=candidates.findIndex(watch);if(n<0){const media=candidates.map((e,i)=>({e,i})).filter(x=>/^(VIDEO|IFRAME)$/.test(x.e.tagName));if(media.length===1)n=media[0].i;}return focus(n,true);}
+        if(action==='watch'){
+          const link=candidates.find(e=>watch(e)&&e.tagName==='A'&&permittedLink(e));
+          if(link){const u=new URL(link.getAttribute('href'),here);if(u.href!==here.href&&!u.hash)return pack({state:'NAVIGATE',target:u.href,label:buttonText(link)});}
+          let n=candidates.findIndex(watch);if(n<0){const media=candidates.map((e,i)=>({e,i})).filter(x=>/^(VIDEO|IFRAME)$/.test(x.e.tagName));if(media.length===1)n=media[0].i;}return focus(n,true);}
+        if(action==='media'){
+          const media=candidates.filter(e=>/^(VIDEO|IFRAME)$/.test(e.tagName));
+          if(media.length!==1)return pack({state:media.length?'AMBIGUOUS_MEDIA':'MEDIA_NOT_READY'});
+          const e=media[0];if(e.tagName==='VIDEO'&&!e.paused&&e.currentTime>0)return pack({state:'ALREADY_PLAYING'});
+          return focus(candidates.indexOf(e),true);
+        }
         if(action==='watchlist'){
          // Prefer the current title's mutation control to the generic header link.
          let n=candidates.findIndex(e=>/^(add to |remove from )(watchlist|watch list|playlist)$/i.test(label(e)));
@@ -62,7 +73,7 @@ final class FilmPageFocus {
         })()
         """;
     static String script(String action) {
-        switch(action) {case "commit":case "scan":case "focus":case "left":case "right":case "up":case "down":case "activate":case "watch":case "watchlist":break;
+        switch(action) {case "media":case "commit":case "scan":case "focus":case "left":case "right":case "up":case "down":case "activate":case "watch":case "watchlist":break;
             default:throw new IllegalArgumentException("Unsupported page action");}
         return JS.replace("__ACTION__", "'"+action+"'").replace("__GHARTV_HOSTS__",FilmProviderPolicy.hostsJavascript());
     }
