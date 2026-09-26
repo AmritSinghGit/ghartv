@@ -1,44 +1,58 @@
-# GharTV — household Review38 published; next candidate started
+# GharTV — Review39 compiled and ready for owner review
 
-HOUSEHOLD_UPDATE=EXACT_SIGNED38_PUBLISHED_PUBLIC_APK_AND_FEED_VERIFIED
-PUBLIC_MARKETING=HELD
-ANDROID_RELEASE_SOURCE=b5bc564dc83db4b157c2325c9df80ffa0b80d934
-NEXT_CANDIDATE=SOURCE_WORK_STARTED_NOT_YET_COMPILED_OR_READY_TO_INSTALL
+OWNER_REVIEW=CODE39_COMPILED_58_ANDROID_TESTS_PASSED_DOWNLOAD_VERIFIED
+APPLICATION_SOURCE=c9d6944384d7d6313d3dcc321bceeac41da80578
+HOUSEHOLD_UPDATE=EXACT_SIGNED38_PUBLISHED_UNCHANGED
+OWNER_MAC_39=NOT_YET_EXECUTED_BY_THIS_SESSION
 
-## Same authority
+## Same authority and current evidence
 
-Same ghartv lane, AmritSinghGit/ghartv, branch codex/ghartv-remove-auto-preview, PR1, package in.ghartv.nova. Existing normal Nova GharTV_Nova_Manual_google_tv_API36/emulator-5580, web8790, original signing identity and existing cleanup/mirror policies. No new lane, native worktree, emulator, service, key or database. Read this handoff, actual update/latest.json, RELEASE38_PUBLICATION.json, RELEASE_HOLD.json and native receipt5687119492. Next-candidate source work is not a change to the approved APK.
+Continue ghartv, AmritSinghGit/ghartv, codex/ghartv-remove-auto-preview, draft PR1, in.ghartv.nova. Same normal Nova GharTV_Nova_Manual_google_tv_API36/emulator-5580, existing web8790, original signing identity and existing cleanup/mirror policies. No new native repository/worktree/key/emulator/service/database. Read this handoff, REVIEW_CANDIDATE.json, RELEASE_HOLD.json, actual update/latest.json and managed receipt5687119492 before acting. No public release approval is implied by an owner-review artifact.
 
-## The failed Mac command uploaded successfully
+The previous chat stopped after a Java callback-brace repair while CI was running. Resume readback found workflow36261254997 fully successful, including compilation, Android tests and packaging. The earlier failed run36260897886 never produced a usable review artifact. Do not rerun that failed build or give the owner a code38/old Downloads launcher as39. App source c9d6944 is distinct from subsequent documentation commits such as0651ad778d3635ac2d9b9950470c25c50a75b1b3.
 
-The owner's command passed both helper checksums and reached stage2, then printed OPERATION_FAILED_GH_EXIT_1. Readback found the exact signed APK already uploaded in draft release397315098, asset591028859 (6157069bytes, SHA256439df956cb8c1a064291fb10db5b7566aaee26772213f7f6aeb5a7a7174aa7e5). The script then attempted its by-tag read for the draft, which returned404. This was our publisher's draft-state handling defect, not a signing or upload failure. The earlier simulated tests did not model draft lookup/temporary asset URLs properly.
+## Exact compiled39 and one-command opening
 
-Do not ask the owner to reupload, re-sign, rebuild or rerun the old publisher. The existing release was resumed by its numeric id in the existing smooth-source-snapshot workflow. No new release or asset was created and no bytes were substituted. The old pinned f9ec5cb3 publication script should not be reused for another candidate; future publishing must retain numeric release/asset identities across draft transitions.
+Version0.6.0-rc12-detail-player-review/code39; exact sourcec9d6944384d7d6313d3dcc321bceeac41da80578.
+Unsigned APK GharTV-code39-review-unsigned.apk:6128230bytes; SHA256ac2b91c7ebdae91a200c57ee18be5a8d0e11b99584bfbd0d91adbc784611697b.
+Source GHARTV_CODE39_SOURCE.zip:1327466bytes; SHA2568794978377f2d1229b81e99166ae3732f1f43d55d53fe6565cfeca88dc6f9a00.
+Bundled GHARTV_OPEN_REVIEW.command:9491070bytes; SHA2563fe9f63aabb3e748e48cd53ef71a3eb134bcc150a3f5d8bbd7d2c2188e67a179.
 
-## Actual publication completed
+Actions run36261254997, artifact10912466749, nameghartv-code39-owner-review. ZIP14335816bytes; SHA2563cb8dd68da5d7655596bfe9507284490049200b711ab451c6f6aa20f7016d6a6. Artifact expires2026-10-10T18:11:23Z. The owner-chat fallback ZIP contains the same compiled bundled launcher and avoids command-file preview/save confusion.
 
-Workflow36256603907 at control source581fca70fb920181f0a64cd685bf329f90e7bf13 succeeded. It verified the uploaded APK's SHA256, original signing certificate40a9d8bf6b1c557b3d6fd02acef075368dd13e28691f207a297202d0d5ec233c, package and code38, and rechecked the owner's exact approval. It published existing draft397315098 at2026-09-26T16:45:48Z, then downloaded the APK without credentials and checked its bytes. Only afterwards did it conditionally advance main/update/latest.json at commit9c4d25dcfb5f9cd0274abb69732f9930c85fe655. The raw public feed also read back code38.
+Use one Terminal block that downloads this exact Actions run/name into a fresh private temporary directory, verifies the opener checksum above, then runs:
+/bin/bash "$d/GHARTV_OPEN_REVIEW.command" --candidate 39
 
-Version0.6.0-rc11.1-focus-filter-review, code38, original app sourceb5bc564dc83db4b157c2325c9df80ffa0b80d934. Signed SHA256439df956cb8c1a064291fb10db5b7566aaee26772213f7f6aeb5a7a7174aa7e5. Tagv0.6.0-rc11.1-focus-filter-review, assetGharTV-code38-household-update.apk. Release remains labelled prerelease/household review, not a broad latest commercial launch.
+No argument also selects39. Old38/37/35 and publish arguments reject. The APK and source are embedded and verified into the existing artifact cache; there is no owner-Mac Gradle build. Signing, certificate/payload verification, normal-Nova opening, web/tab reuse and receipt functions were independently AST-compared to the source template and are unchanged. Only bundled artifact resolution differs. Required original certificate40a9d8bf6b1c557b3d6fd02acef075368dd13e28691f207a297202d0d5ec233c. No keystore/password exposure, new key, uninstall, data clear, debug-key replacement, scrcpy, second emulator or production promotion. The real local run must still verify its own available SDK/key/runtime and record39 installation.
 
-RELEASE38_PUBLICATION.json is the persisted actual receipt; proof artifact10910827742 has digest e185f30818b9b741767c868e7268a4540b8327c2ef10804f27330f52b759aab6. This session independently reread the GitHub release and main feed after the workflow. The model sandbox's separate network download could not resolve github.com; do not claim that failed attempt supplied a second APK verification. The CI did complete authenticated and unauthenticated byte verification, and the stored proof reports both accurately.
+## Implemented39 scope
 
-The most recent actual owner installation is still runGHARTV-CYAN-38-20260926T160406Z-94907, with normal Nova foreground and Obsidian readback. The cloud publication did not run on the Mac, write Obsidian or install anything on Dad's physical TV. There is no need for another owner terminal command to finish this publication.
+Prominent persistent FlixMomo attribution remains visible when the large toolbar is hidden. Native GharTV Discover and search use returned image cards, titles and available metadata. Title selection now has a native current-title details surface with observed description and metadata plus Watch now, provider Watchlist, Original page and Back. Missing fields stay unavailable; fixtures and invented catalogue entries are not shipped as content. Watchlist remains a provider account action, not a guaranteed saved local playlist.
 
-## What Dad should do
+The existing badge-aware player normalizer is integrated into Android through the checked source generator. Stable numbered identities are separated from OG/4K/BEST/GOOD/NEW badges; labels survive control reorder, detected/returned counts and partial-list status are distinct. These are detected choices, not verified working-source counts. Existing provider media remains in its WebView; native Media3 playback of all third-party sources is not claimed.
 
-In the existing app, open the Jio/account button at the top of the guide, choose Check for GharTV update, then Download update and accept Android installation. Do not uninstall the app. If Android asks to allow GharTV to install unknown apps, grant that per-app permission, return and repeat the update check. This setting is not enabled remotely.
+Bounded queued page actions retain Enter/OK across pending callbacks. Before a requested click the adapter waits for post-scroll visual readiness, revalidates the current page and same node, and hit-tests visible target geometry. It does not blindly retry account mutations. Covered provider views remain excluded from focus while native home/details are visible; explicit Original page restores the permitted browser fallback. Previous guide-order/filter/focus repairs, ordinary Punjabi channels and Punjabi Plus removal remain.
 
-Inspected production code24 source59c130abc1283e66607315db916973553164064d: MainActivity schedules UpdateManager.check(false)2600ms after guide creation. Automatic successful checks have a12hour interval and failures a5minute backoff; the manual account action uses check(true) and bypasses those interval gates. An available newer version shows GharTV update available, Download update and Later. It is not a server-pushed popup, guaranteed immediate prompt while watching or silent installation. Dad's installed version/network/permission state has not been independently read, so manual checking is the practical route. Once updated, version should show0.6.0-rc11.1-focus-filter-review/code38.
+FilmProviderPolicy provides versioned compiled provider identity/approved origins, with lookalikes and unapproved top-level migration targets rejected. It is not automatic authenticated remote policy distribution. Security/TLS/access checks are not weakened; no cross-origin iframe/media extraction or new Tor routing.
 
-## Next candidate actually started, not declared finished
+## Outstanding requested work — not hidden behind a completed label
 
-The first implementation module is tools/provider-access/player-options.mjs, with16 passing local Node tests in player-options.test.mjs. Source c32b5fe11536daa005afff24d4c247f09fe615b8; progress record NEXT_CANDIDATE_PROGRESS.json at0e692f5ff55e38bac12485e8e96ecbf36a5ced02. It normalizes observed player controls separately from OG/4K/BEST/GOOD/NEW badges, handles varying detected totals, deduplicates stable ids, preserves selections across reordering and flags truncation. It rejects unrelated origins/links, hidden or disabled choices and stale-page activation; it does not invent verified playback or source-quality claims.
+The secure QR phone-browser trackpad is NOT in39; no Pair button or unencrypted control port is shipped as a substitute. Authenticated encrypted pairing, TV approval/revocation and phone/network testing remain required. Authenticated remote origin/layout configuration distribution and verified migration workflow also remain. Speech recognition still uses the installed device service, not a new multilingual model. Real Hindi/Punjabi accuracy, live-provider all-player playback and physical-TV acceptance are not established by the fixture tests.
 
-Those16 tests use synthetic control observations and execute pure logic in Node22.16.0. This is not yet integrated into the Android DOM reader, not a live-player test, and not a compiled next APK. It does not alter the published38 app. Remaining requested work is retained in REVIEW38_FEEDBACK_AND_NEXT.md: persistent prominent attribution, native actual-metadata title details, reliable one-press activation, secure QR phone trackpad, versioned approved provider configuration and full Android/TV/live-provider acceptance. Tor and broad marketing remain deferred. Do not describe a prototype normalizer as all-feedback completion.
+## Actual validation and independent readback
 
-## Preservation and continuity
+Workflow36261254997 passed source/contract/candidate jobs at exact application source. All58 Android tests passed in136.777seconds, retaining44 and adding14. New tests cover native title/search Activity flows, actual queued Enter/trusted clicks, visual-state and covered-target checks, decorated player choices, varying counts and reorder handling.16 existing normalizer logic tests and generator parity passed in the contract job. Android test data is controlled local HTML with owned image bytes; no actual movie availability is asserted.
 
-GitHub source/approval/release state and handoff are updated. This cloud turn made no owner-Mac deletions, key reads, signing, builds of38, emulator actions or vault writes. Existing signed33/38 and private data are preserved. New candidates need separate exact-byte approval before a household rollout. Public availability and attribution do not grant content rights or guarantee provider reliability.
+The downloaded Actions ZIP matched the service's SHA256. All8 root checksum entries, embedded APK/source roundtrip, cache readback, accepted39/default and rejected old/publication modes were independently verified. Binary AndroidManifest parsing confirms in.ghartv.nova/code39/expected version. Release DEX contains FilmDetailView/FilmPlayerOptions/FilmProviderPolicy and excludes the debug Review39/38 harnesses and retired MovieHubActivity. Source archive contains no font files.
 
-Prior full build/tests/publication preparation remain in handoff blob81ff0185ec9ca2083d9cf206a9377c73f240c869 and earlier history. Do not revive its now-obsolete upload-pending instruction or old command as the current publication state.
+The landscape1280x720 density160 screenshot was inspected: native title, visible provider credit, owned test poster, description, duration/language and Watch now/Watchlist/Original page/Back are visible. It is explicitly a local test fixture, not a live film or owner-TV screenshot. This continuation did not perform a new Android build or rerun the physical tests locally; it verified the completed exact CI artifact. No owner39 signed digest exists yet.
+
+## Published38 stays available for Dad
+
+Main update/latest.json remains code38/sourceb5bc564dc83db4b157c2325c9df80ffa0b80d934; signed SHA256439df956cb8c1a064291fb10db5b7566aaee26772213f7f6aeb5a7a7174aa7e5, size6157069bytes. Tagv0.6.0-rc11.1-focus-filter-review, assetGharTV-code38-household-update.apk. Actual publication receiptRELEASE38_PUBLICATION.json, release397315098/asset591028859, workflow36256603907, feed commit9c4d25dcfb5f9cd0274abb69732f9930c85fe655. It was resumed from the existing uploaded draft by numeric ID; do not revive the obsolete by-tag publisher or ask for another38 upload/sign/build.
+
+Dad may use the Jio/account menu's Check for GharTV update and approve Android installation, without uninstalling. This remains the existing shared feed, not a private per-TV push or silent installation. His installation is not verified. Code39 requires separate owner review and approval before promotion. No new public release or feed change occurred for39; broader marketing remains held.
+
+Latest observed native receipt is still GHARTV-CYAN-38-20260926T160406Z-94907 with normal Nova and Obsidian readback. This is not an installation receipt for39. The current session did not open the owner's emulator/browser, write the Obsidian vault, confirm Amrit Memory replication or delete any owner files. The existing opener attempts established local/Obsidian/GitHub mirrors when actually executed. Preserve old signed candidates, keys, media, private data and dirty/unpushed source until accepted replacement and authorized canonical cleanup.
+
+Prior household publication/history handoff remains in blob3d24a530a0c6b24e04f403c86bf5681edcf0f41a; prior manifest06eb4cceb1c32f1092a7aec1c513c4a5e65a65f7 remains in Git. GitHub source, progress and review identity have been reconciled without creating a new lane.
