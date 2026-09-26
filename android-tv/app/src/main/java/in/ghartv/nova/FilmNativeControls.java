@@ -186,7 +186,7 @@ final class FilmNativeControls {
                                 }catch(Exception error){finishPageAction(token);}
                             });
                         });
-                    });return;
+                    }});return;
                 }
                 if("EDITING".equals(response)){
                     int key="left".equals(action)?KeyEvent.KEYCODE_DPAD_LEFT:"right".equals(action)?KeyEvent.KEYCODE_DPAD_RIGHT:"up".equals(action)?KeyEvent.KEYCODE_DPAD_UP:"down".equals(action)?KeyEvent.KEYCODE_DPAD_DOWN:KeyEvent.KEYCODE_DPAD_CENTER;
