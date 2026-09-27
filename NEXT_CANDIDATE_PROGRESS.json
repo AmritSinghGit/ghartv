@@ -6,57 +6,46 @@
   "pr": 1,
   "review_code": 40,
   "version": "0.6.0-rc12.1-watch-metadata-review",
-  "application_source": "f7e46bd7e0b71e28ba60313d3befbcb98cae4ca6",
-  "stage": "HELD_PLAYBACK_ACCEPTANCE_FAILED_NOT_OWNER_DELIVERABLE",
-  "workflow_run": 36276705088,
-  "candidate_job": 108500814235,
-  "android_release_compiled": true,
-  "owner_bundle_packaging": "SKIPPED_AFTER_TEST_FAILURE",
-  "failure_artifact": {"id":10916853787,"name":"ghartv-code40-owner-review","sha256":"9b6f404b0dcd5be21f6a3e82ca68d473846d827c47ac0b2e7a2831dafb42002f","is_complete_review_bundle":false,"deliver_to_owner_as_ready":false},
-  "validation": {
-    "android_tests_run": 70,
+  "application_source": "39da6d83d0f1f37073564a85ede581bf60503a0c",
+  "stage": "REPAIR_COMMITTED_RETAINED_PLAYBACK_ACCEPTANCE_RUNNING_NOT_YET_DELIVERABLE",
+  "workflow_run": 36340425362,
+  "candidate_job": 108679356816,
+  "correction": {
+    "path": "android-tv/app/src/main/java/in/ghartv/nova/FilmPageFocus.java",
+    "commit": "39da6d83d0f1f37073564a85ede581bf60503a0c",
+    "write_method": "NORMAL_GITHUB_UPDATE_FILE_ACTION_SUCCEEDED",
+    "scope": "Allow the existing explicit media action only when VIDEO or IFRAME itself holds focus; text and contenteditable focus keep existing editing behavior.",
+    "existing_origin_visibility_ambiguity_and_hit_checks": "UNCHANGED",
+    "alternate_tool_encoding_ci_patch_or_installer_used_for_correction": false,
+    "tests_changed_removed_or_weakened": false
+  },
+  "previous_failure": {
+    "application_source": "f7e46bd7e0b71e28ba60313d3befbcb98cae4ca6",
+    "workflow_run": 36276705088,
+    "tests_run": 70,
     "passed": 69,
     "failed": 1,
-    "seconds": 177.57,
-    "retained_review39_tests_passed": 58,
-    "new_metadata_link_viewport_and_other_tests_passed": 11,
     "failed_test": "Review40PlaybackTest.oneNativeWatchPressNavigatesSpaAndAdvancesOwnedVideo",
     "failure_state": {"path":"/watch/owned","time":0,"paused":true,"trusted":false,"watchClicks":1},
-    "normal_watch_anchor_to_advancing_owned_video": "PASSED",
-    "native_title_observed_description_and_language": "PASSED",
-    "normalizer_logic_tests_passed": 16,
-    "test_content": "CONTROLLED_LOCAL_DOCUMENTS_OWNED_IMAGES_AND_GENERATED_MP4",
-    "live_flixmomo_streaming_verified": false,
-    "owner_mac_executed": false
+    "diagnostic_artifact": 10916853787,
+    "diagnostic_artifact_is_not_an_owner_delivery": true
   },
-  "findings": [
-    "Review39 metadata reader depended on h1 and could miss other visible title structures.",
-    "Review39 click mapping did not account for visual viewport offsets and dimensions.",
-    "The new whole-journey test reached the same-document watch route with exactly one Watch activation but no trusted media gesture and no advancing video clock.",
-    "The media action encounters the editing guard when the current active element is VIDEO or IFRAME; this is the identified correction target, not a completed repair."
-  ],
-  "correction_write": {
-    "path": "android-tv/app/src/main/java/in/ghartv/nova/FilmPageFocus.java",
-    "outcome": "BLOCKED_BY_SESSION_SAFETY_CHECK_COULD_NOT_DETERMINE_STATUS",
-    "committed": false,
-    "rerouted_through_other_tools_or_installer": false,
-    "next_requirement": "Resolve the normal approved source-write path, then rerun the failing playback test and retained tests before packaging. Do not advertise the incomplete artifact."
-  },
+  "new_run_acceptance": "Require all70 retained Android cases, including advancing owned-video clock for button/SPA and normal-link Watch paths, before packaging.",
   "latest_actual_owner_install": {
     "run_id": "GHARTV-CYAN-39-20260926T221038Z-47275",
     "source": "c9d6944384d7d6313d3dcc321bceeac41da80578",
     "version_code": 39,
     "signed_sha256": "c61fdb465da912c6f324430f2fa9502fc1baf5f450fc8b69f9b8f8768e005aee",
-    "normal_nova_foreground": true,
-    "obsidian_readback": true,
-    "owner_feedback": "Watch Now and displayed movie information remain defective; streaming not accepted"
+    "owner_feedback": "CHANGES_REQUIRED_WATCH_METADATA_PLAYBACK"
   },
   "household": {"published_version_code":38,"changed_by_this_work":false,"newer_rollout_authorized":false},
   "provider_video_engine": "PROVIDER_WEBVIEW_NOT_UNIVERSAL_NATIVE_MEDIA3",
+  "live_provider_playback_verified": false,
   "remaining": ["Passing complete Watch-to-playing journey","Live-provider metadata and playback acceptance","Secure QR phone remote","Authenticated remote provider policy"],
+  "owner_mac_execution": false,
   "owner_mac_cleanup": {"files_deleted":0,"bytes_reclaimed":0},
   "obsidian_written_by_this_cloud_turn": false,
   "tor": "DEFERRED",
   "broad_marketing": "HELD",
-  "previous_progress_blob": "ca41443ae973008c8bb4f7b4a98ebb4ee2f2fcd1"
+  "previous_progress_blob": "5a54f1cc39c38f835ebd52c5c1c3d3f2fe7ca56b"
 }
