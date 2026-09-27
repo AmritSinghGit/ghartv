@@ -72,10 +72,29 @@ public class Review40PlaybackTest {
     @Test public void actualNativeTitleContainsObservedDescriptionAndLanguage()throws Exception{
         nativeTitle(false);ui(()->{FilmDetailView d=(FilmDetailView)field(activity,"detailPanel");assertEquals(View.VISIBLE,d.getVisibility());assertEquals("Paper Lantern",d.currentTitle());assertTrue(((TextView)field(d,"synopsis")).getText().toString().contains("original test story"));assertTrue(((TextView)field(d,"facts")).getText().toString().contains("Punjabi"));assertFalse(web.isFocusable());});
     }
+    private JSONObject transitionDiagnostic()throws Exception{
+        // Test-only introspection of this owned fixture; no device-wide logs,
+        // credentials, external account or real provider sessions are collected.
+        JSONObject result=new JSONObject();
+        ui(()->{try{
+            result.put("elapsed",SystemClock.elapsedRealtime());
+            for(String name:new String[]{"homeRequested","detailRequested","loading","pageReady","mainFrameError","lastRequested","playUntil","playAfter","mediaAttempted","lastMediaTime"})result.put(name,field(activity,name));
+            Object controls=field(activity,"nativeControls");JSONObject c=new JSONObject();
+            for(String name:new String[]{"active","blocked","reading","pageBusy","postersReady","probeCount","generation","snapshotUrl","pending","detailFocusApplied"})c.put(name,field(controls,name));
+            result.put("controls",c);result.put("webUrl",web.getUrl());result.put("webFocus",web.hasFocus());
+            result.put("webWidth",web.getWidth());result.put("webHeight",web.getHeight());
+            result.put("notice",((TextView)field(activity,"playNotice")).getText().toString());
+            result.put("hint",((TextView)field(activity,"help")).getText().toString());
+        }catch(Exception|AssertionError e){try{result.put("diagnosticError",e.getClass().getSimpleName());}catch(JSONException ignored){}}});
+        result.put("snapshot",eval(FilmPageSnapshot.read()));
+        result.put("dom",eval("JSON.stringify({active:document.activeElement?.tagName,visible:document.visibilityState,pendingTag:window.__ghartvTap39?.element?.tagName,pendingUrl:window.__ghartvTap39?.url,videoReady:document.querySelector('video')?.readyState,videoError:document.querySelector('video')?.error?.code})"));
+        return result;
+    }
     private void requirePlaybackClock()throws Exception{
         ui(()->{View watch=text((View)field(activity,"detailPanel"),"Watch now");watch.requestFocus();});press(KeyEvent.KEYCODE_DPAD_CENTER);
         long end=SystemClock.elapsedRealtime()+12000;JSONObject state=new JSONObject();
         while(SystemClock.elapsedRealtime()<end){state=eval("JSON.stringify({path:location.pathname,time:document.querySelector('video')?.currentTime||0,paused:document.querySelector('video')?.paused??true,trusted:!!window.trustedMedia,watchClicks:window.watchClicks||0})");if(state.optDouble("time")>.35&&!state.optBoolean("paused"))break;SystemClock.sleep(70);}
+        if(state.optDouble("time")<=.35||state.optBoolean("paused")||!state.optBoolean("trusted"))state.put("transitionDiagnostic",transitionDiagnostic());
         assertTrue("A highlight/click is insufficient: owned video must actually advance. "+state,state.optDouble("time")>.35);assertFalse(state.optBoolean("paused"));assertTrue(state.optBoolean("trusted"));assertEquals("/watch/owned",state.getString("path"));
         android.graphics.Bitmap shot=InstrumentationRegistry.getInstrumentation().getUiAutomation().takeScreenshot();if(shot!=null){try(java.io.FileOutputStream out=new java.io.FileOutputStream(new java.io.File(activity.getExternalFilesDir(null),"review40-owned-playback-fixture.png"))){shot.compress(android.graphics.Bitmap.CompressFormat.PNG,100,out);}shot.recycle();}
     }
