@@ -13,7 +13,11 @@ final class FilmPageFocus {
         const heading=clean(document.title+' '+Array.from(document.querySelectorAll('h1,h2')).slice(0,3).map(e=>e.textContent).join(' '));
         if(here.pathname==='/dummy'||/just a moment|verify (that )?you are human|checking your browser|security verification|access denied/i.test(heading))return pack({state:'VERIFICATION_REQUIRED'});
         const active=document.activeElement,editing=active&&(active.isContentEditable||/^(INPUT|TEXTAREA|SELECT|IFRAME|VIDEO)$/.test(active.tagName));
-        if(editing&&!['watch','watchlist','scan','focus','commit'].includes(action))return pack({state:'EDITING'});
+        // A focused video is not a text field. Let the already-requested media
+        // action reach its existing single-visible-target checks below. Inputs,
+        // editable content and ordinary navigation keep the editing behavior.
+        const focusedMediaAction=action==='media'&&active&&!active.isContentEditable&&/^(VIDEO|IFRAME)$/.test(active.tagName);
+        if(editing&&!focusedMediaAction&&!['watch','watchlist','scan','focus','commit'].includes(action))return pack({state:'EDITING'});
         const visible=e=>{let r=e.getBoundingClientRect(),s=getComputedStyle(e);return r.width>1&&r.height>1&&s.display!=='none'&&s.visibility!=='hidden'&&!e.disabled&&e.getAttribute('aria-disabled')!=='true';};
         const dialogs=Array.from(document.querySelectorAll('dialog[open],[role="dialog"],[aria-modal="true"]')).filter(visible);
         const root=dialogs.length?dialogs[dialogs.length-1]:document;
