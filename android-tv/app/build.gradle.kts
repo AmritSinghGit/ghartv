@@ -13,8 +13,8 @@ android {
         applicationId = "in.ghartv.nova"
         minSdk = 26
         targetSdk = 35
-        versionCode = 40
-        versionName = "0.6.0-rc12.1-watch-metadata-review"
+        versionCode = 41
+        versionName = "0.6.0-rc12.2-connection-diagnostics-review"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
     buildFeatures { buildConfig = true }

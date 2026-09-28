@@ -31,7 +31,9 @@ public final class DiagnosticsDialog {
                 "Delete queued diagnostics and reset ID",
                 "What GharTV collects",
                 "Open privacy policy",
-                "Check TV connection (DNS / HTTPS)"
+                "Check TV connection (DNS / HTTPS)",
+                "Send a delivery check",
+                "Refresh delivery status"
         };
         TextView statusTitle = new TextView(activity);
         statusTitle.setText("Diagnostics & privacy\n\n" + message);
@@ -50,8 +52,7 @@ public final class DiagnosticsDialog {
                             } else if (Telemetry.queuedCount(activity) == 0) {
                                 Toast.makeText(activity, "No diagnostics are waiting", Toast.LENGTH_SHORT).show();
                             } else {
-                                Telemetry.enqueueUpload(activity, true);
-                                Toast.makeText(activity, "Diagnostics will send when the TV is online", Toast.LENGTH_LONG).show();
+                                send(activity,false);
                             }
                             break;
                         case 2:
@@ -69,12 +70,32 @@ public final class DiagnosticsDialog {
                         case 6:
                             NetworkDiagnostics.show(activity);
                             break;
+                        case 7:
+                            send(activity,true);
+                            break;
+                        case 8:
+                            show(activity);
+                            break;
                         default:
                             break;
                     }
                 })
                 .setNegativeButton("Close", null)
                 .show();
+    }
+
+    private static void send(Activity activity,boolean check) {
+        if(!Telemetry.isEnabled(activity)){
+            new AlertDialog.Builder(activity).setTitle("Diagnostics are off").setMessage("No event was created or sent. You can opt in from Diagnostics & privacy; this check does not change consent.").setPositiveButton("Close",null).show();return;
+        }
+        AlertDialog wait=new AlertDialog.Builder(activity).setTitle("Checking diagnostic delivery")
+            .setMessage("Sending privacy-filtered queued reports to the existing collector. This can take up to 90 seconds. A check event is labelled as a delivery check, not viewing activity.").setNegativeButton("Close",null).show();
+        Telemetry.sendNow(activity,check,(outcome,message,queued)->{
+            if(activity.isFinishing()||activity.isDestroyed()||!wait.isShowing())return;wait.dismiss();
+            new AlertDialog.Builder(activity).setTitle(outcome==Telemetry.UploadOutcome.SUCCESS?"Collector acknowledged reports":"Delivery not confirmed")
+                .setMessage(message+"\n\nStill queued: "+queued+"\n\nA collector acknowledgement confirms receipt, not that the private report has refreshed. No movie titles or searches are in these reports.")
+                .setPositiveButton("Refresh status",(d,w)->show(activity)).setNegativeButton("Close",null).show();
+        });
     }
 
     private static void confirmEnable(Activity activity) {
@@ -127,7 +148,7 @@ public final class DiagnosticsDialog {
         new AlertDialog.Builder(activity)
                 .setTitle("Diagnostics waiting to send")
                 .setView(text)
-                .setPositiveButton("Send now", (dialog, which) -> Telemetry.enqueueUpload(activity, true))
+                .setPositiveButton("Send now", (dialog, which) -> send(activity,false))
                 .setNegativeButton("Close", null)
                 .show();
     }
@@ -139,7 +160,7 @@ public final class DiagnosticsDialog {
                         "Collected only after you opt in:\n"
                                 + "• app version and pseudonymous installation hash\n"
                                 + "• TV manufacturer/model, Android version, language and connection type\n"
-                                + "• screen and feature-use events\n"
+                                + "• screen and feature-use events (including film search/watch counts, never the text or title)\n"
                                 + "• guide/update success or failure and timing\n"
                                 + "• playback protocol, DRM flag, startup/buffering measurements\n"
                                 + "• errors, short code stack frames, HTTP status and a report reference\n"

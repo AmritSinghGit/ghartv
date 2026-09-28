@@ -55,11 +55,51 @@ public class FlixMomoActivity extends Activity {
     private WebChromeClient.CustomViewCallback customCallback;
     private boolean mainFrameError,pageReady,loading;
     private String lastRequested=HOME;
+    private final FilmConnectionState connection=new FilmConnectionState();
+    private String connectionDetail="No certificate failure observed in this screen session.";
+    private String connectionWarning="";private TextView networkNotice;private int filmErrors;
+    private void filmEvent(String name){Telemetry.event(this,name,Telemetry.data("surface","discover"));}
+    private void filmFailure(String stage,String reason){
+        if(filmErrors++<8)Telemetry.error(this,stage,new IllegalStateException(reason),Telemetry.data("provider","flixmomo"));
+    }
+    private void showFilmConnection(){
+        String version="unknown";try{android.content.pm.PackageInfo p=WebView.getCurrentWebViewPackage();if(p!=null)version=p.versionName;}catch(Exception ignored){}
+        String message=connectionDetail+"\n\nTV time: "+new java.util.Date()+"\nAndroid: "+android.os.Build.VERSION.RELEASE+" · WebView: "+version+"\n\nCertificate checks stay on. No passwords, cookies or search text are sent by a connection check.";
+        new android.app.AlertDialog.Builder(this).setTitle("FlixMomo connection")
+            .setMessage(message).setPositiveButton("Check DNS / HTTPS",(d,w)->NetworkDiagnostics.show(this))
+            .setNeutralButton("Registered addresses",(d,w)->chooseFilmOrigin()).setNegativeButton("Close",null).show();
+    }
+    private void chooseFilmOrigin(){
+        final String[] roots={"https://flixmomo.app/","https://flixmomo.st/","https://flixmomo.bet/","TV date and time settings"};
+        new android.app.AlertDialog.Builder(this).setTitle("Open an already registered address")
+            .setItems(roots,(d,index)->{if(index==3){try{startActivity(new Intent(android.provider.Settings.ACTION_DATE_SETTINGS));}catch(Exception ignored){}return;}new android.app.AlertDialog.Builder(this).setTitle("Use "+roots[index]+"?")
+                .setMessage("This starts a fresh navigation to an address already registered in this build. Your current search will be sent to it. Normal certificate checks apply. No cookies or passwords are copied between domains.")
+                .setPositiveButton("Open",(confirm,which)->{String text=UnifiedSearch.clean(query.getText().toString());
+                    playUntil=0;playNotice.setVisibility(View.GONE);detailRequested=false;detailPanel.setVisibility(View.GONE);
+                    homeRequested=true;nativeSearch=UnifiedSearch.valid(text)?text:"";homePanel.mode(nativeSearch);homePanel.discardSuggestions();homePanel.loading();homePanel.setVisibility(View.VISIBLE);homePanel.bringToFront();
+                    nativeControls.hideAll();cursor.enable(false);chrome.setVisibility(View.VISIBLE);
+                    navigate(roots[index]+(nativeSearch.isEmpty()?"":"search?q="+Uri.encode(nativeSearch)),false);homePanel.focusRefresh();})
+                .setNegativeButton("Cancel",null).show();}).setNegativeButton("Close",null).show();
+    }
+    void certificateFailure(Runnable cancel,SslError error){
+        cancel.run(); // The failed resource is NEVER trusted or loaded.
+        String url=error==null?"":error.getUrl();int code=error==null?SslError.SSL_INVALID:error.getPrimaryError();
+        FilmConnectionState.Scope scope=connection.scope(url);
+        connectionDetail=scope.name().replace('_',' ')+" · "+FilmConnectionState.reason(code)+"\n"+FilmConnectionState.origin(url)+"\n"+FilmConnectionState.help(code);
+        filmFailure(scope==FilmConnectionState.Scope.SUBRESOURCE?"film_resource_tls":"film_document_tls",FilmConnectionState.reason(code));
+        if(scope==FilmConnectionState.Scope.SUBRESOURCE){
+            connectionWarning="An embedded resource was blocked by certificate validation. The main page has not been declared failed. Connection shows details.";
+            networkNotice.setText(connectionWarning);networkNotice.setVisibility(View.VISIBLE);
+        }else{
+            networkNotice.setText(connectionDetail);networkNotice.setVisibility(View.VISIBLE);
+            fail("Secure connection could not be verified: "+FilmConnectionState.reason(code)+". Open Connection for details; no certificate bypass is available.");
+        }
+    }
     private final Handler handler=new Handler(Looper.getMainLooper());
     private final Runnable slowLoad=()->{if(loading&&!mainFrameError){status.setText("Still connecting. Retry is available; playback is not verified.");if(homeRequested&&homePanel!=null)homePanel.unavailable("The provider is taking longer than expected.");}};
 
     @Override public void onCreate(Bundle saved){
-        super.onCreate(saved);getWindow().getDecorView().setSystemUiVisibility(5894);
+        super.onCreate(saved);Telemetry.screen(this,"discover");filmEvent("discover_open");getWindow().getDecorView().setSystemUiVisibility(5894);
         LinearLayout root=new LinearLayout(this);root.setOrientation(LinearLayout.VERTICAL);root.setBackgroundColor(TvUi.BG);
         root.setPadding(TvUi.dp(this,18),TvUi.dp(this,10),TvUi.dp(this,18),TvUi.dp(this,10));
         chrome=new LinearLayout(this);chrome.setOrientation(LinearLayout.VERTICAL);
@@ -72,11 +112,15 @@ public class FlixMomoActivity extends Activity {
         row.addView(search);row.addView(voice);row.addView(browse);row.addView(guide);chrome.addView(row);
         LinearLayout navigation=new LinearLayout(this);
         pageButton=TvUi.button(this,"Use page",true);modeButton=TvUi.button(this,"Cursor: off",false);scrollButton=TvUi.button(this,"Scroll: off",false);retryButton=TvUi.button(this,"Retry",false);
-        navigation.addView(pageButton);navigation.addView(modeButton);navigation.addView(scrollButton);navigation.addView(retryButton);chrome.addView(navigation);
+        navigation.addView(pageButton);navigation.addView(modeButton);navigation.addView(scrollButton);navigation.addView(retryButton);
+        Button connectionButton=TvUi.button(this,"Connection",false),diagnosticsButton=TvUi.button(this,"Diagnostics",false);
+        connectionButton.setOnClickListener(v->showFilmConnection());diagnosticsButton.setOnClickListener(v->DiagnosticsDialog.show(this));
+        navigation.addView(connectionButton);navigation.addView(diagnosticsButton);chrome.addView(navigation);
         help=TvUi.label(this,"Original posters · arrows browse · OK opens · Menu shows controls · Cursor is optional",12,TvUi.MUTED,false);chrome.addView(help);
         status=TvUi.label(this,"Provider pages stay in GharTV · direct connection",12,TvUi.MUTED,false);chrome.addView(status);
         root.addView(chrome);
         TextView credit=TvUi.label(this,FilmProviderPolicy.CREDIT,12,TvUi.MINT,true);credit.setPadding(0,TvUi.dp(this,5),0,TvUi.dp(this,6));root.addView(credit);
+        networkNotice=TvUi.label(this,"",12,TvUi.MUTED,false);networkNotice.setVisibility(View.GONE);root.addView(networkNotice);
         playNotice=TvUi.label(this,"",12,TvUi.MUTED,false);playNotice.setVisibility(View.GONE);root.addView(playNotice);
         liveResults=new android.widget.HorizontalScrollView(this);liveResults.setHorizontalScrollBarEnabled(false);liveResults.setVisibility(View.GONE);
         liveRow=new LinearLayout(this);liveResults.addView(liveRow);root.addView(liveResults,new LinearLayout.LayoutParams(-1,TvUi.dp(this,48)));
@@ -144,14 +188,16 @@ public class FlixMomoActivity extends Activity {
         browser.setOnFocusChangeListener((v,focused)->{if(focused)cursor.enter();else cursor.leave();});
         browser.setWebViewClient(new WebViewClient(){
             @Override public boolean shouldOverrideUrlLoading(WebView view,WebResourceRequest request){
+                connection.observe(request.getUrl().toString(),request.isForMainFrame());
                 if(!request.isForMainFrame()||allowedTop(request.getUrl()))return false;
                 if(request.hasGesture())status.setText("That link opens outside the registered provider. This page was kept open.");return true;
             }
             @Override public WebResourceResponse shouldInterceptRequest(WebView view,WebResourceRequest request){
+                connection.observe(request.getUrl().toString(),request.isForMainFrame());
                 Uri uri=request.getUrl();String host=uri.getHost();if(!"https".equals(uri.getScheme())||host==null||privateHost(host))return new WebResourceResponse("text/plain","UTF-8",new ByteArrayInputStream(new byte[0]));return null;
             }
             @Override public void onPageStarted(WebView view,String url,Bitmap icon){
-                cursor.cancel();nativeControls.started();if("about:blank".equals(url))return;
+                cursor.cancel();nativeControls.started();if("about:blank".equals(url))return;connection.started(url);
                 if(detailRequested&&FilmProviderPolicy.detail(Uri.parse(url)))detailPanel.followNavigation(url);
                 else if(detailRequested&&allowedTop(Uri.parse(url))&&!FilmProviderPolicy.detail(Uri.parse(url)))usePage();mainFrameError=false;pageReady=false;loading=true;if(allowedTop(Uri.parse(url)))lastRequested=url;
                 status.setText("Opening FlixMomo…");handler.removeCallbacks(slowLoad);handler.postDelayed(slowLoad,20000);
@@ -170,10 +216,12 @@ public class FlixMomoActivity extends Activity {
                 }
             }
             @Override public void onReceivedHttpError(WebView view,WebResourceRequest request,WebResourceResponse response){if(request.isForMainFrame())fail("Provider returned HTTP "+response.getStatusCode()+". Your search is kept. Use Retry or Browse.");}
-            @Override public void onReceivedSslError(WebView view,SslErrorHandler handler,SslError error){handler.cancel();fail("TLS verification failed. Connection stopped; security checks remain enabled.");}
+            @Override public void onReceivedSslError(WebView view,SslErrorHandler handler,SslError error){certificateFailure(handler::cancel,error);}
             @Override public void onReceivedError(WebView view,WebResourceRequest request,android.webkit.WebResourceError error){
                 if(!request.isForMainFrame())return;
+                filmFailure("film_navigation","WEBVIEW_ERROR_"+error.getErrorCode());
                 switch(error.getErrorCode()){
+                    case WebViewClient.ERROR_FAILED_SSL_HANDSHAKE:fail("TLS handshake failed for the main page. Open Connection to check this TV; security checks remain enabled.");break;
                     case WebViewClient.ERROR_HOST_LOOKUP:fail("DNS: Android cannot resolve the provider. No page/video loaded. Your query is kept.");break;
                     case WebViewClient.ERROR_CONNECT:fail("Android could not connect. Check the TV network, then Retry; your query is kept.");break;
                     case WebViewClient.ERROR_TIMEOUT:fail("Provider request timed out. Your query is kept. Press Retry when ready.");break;
@@ -216,13 +264,13 @@ public class FlixMomoActivity extends Activity {
 
     private void playMessage(String text){playNotice.setText(text);playNotice.setVisibility(View.VISIBLE);}
     private void armPlayback(){playUntil=android.os.SystemClock.elapsedRealtime()+20000;playAfter=android.os.SystemClock.elapsedRealtime()+700;mediaAttempted=false;lastMediaTime=-1;playMessage("Opening FlixMomo playback…");}
-    private void requestWatch(){armPlayback();usePage();nativeControls.pageAction("watch");}
+    private void requestWatch(){filmEvent("film_watch_request");armPlayback();usePage();nativeControls.pageAction("watch");}
     private void followPlayback(org.json.JSONObject data){
         if(playUntil==0||homeRequested||detailRequested)return;
         long now=android.os.SystemClock.elapsedRealtime();
-        if(data.optBoolean("mediaPlaying")&&data.optDouble("mediaTime")>lastMediaTime&&lastMediaTime>=0){playMessage("Video is playing in FlixMomo’s embedded player.");playUntil=0;return;}
+        if(data.optBoolean("mediaPlaying")&&data.optDouble("mediaTime")>lastMediaTime&&lastMediaTime>=0){playMessage("Video is playing in FlixMomo’s embedded player.");filmEvent("film_playback_ready");playUntil=0;return;}
         if(data.optBoolean("mediaObservable"))lastMediaTime=data.optDouble("mediaTime");
-        if(now>playUntil){playMessage("Playback is not confirmed. Use Play, another provider player, or Original page.");playUntil=0;return;}
+        if(now>playUntil){filmFailure("film_playback","PLAYBACK_NOT_CONFIRMED");playMessage("Playback is not confirmed. Use Play, another provider player, or Original page.");playUntil=0;return;}
         org.json.JSONArray offered=data.optJSONArray("players");
         boolean playbackPage=!FilmProviderPolicy.detail(Uri.parse(data.optString("url")))||(offered!=null&&offered.length()>0)||data.optBoolean("mediaObservable");
         if(!loading&&!mediaAttempted&&now>=playAfter&&playbackPage&&data.optInt("mediaCandidates")==1){
@@ -235,6 +283,7 @@ public class FlixMomoActivity extends Activity {
     private static boolean privateHost(String host){String h=host.toLowerCase(java.util.Locale.ROOT);return h.equals("localhost")||h.endsWith(".localhost")||h.endsWith(".local")||h.endsWith(".internal")||h.contains(":")||h.matches("(?i)(127\\..*|10\\..*|192\\.168\\..*|169\\.254\\..*|172\\.(1[6-9]|2[0-9]|3[01])\\..*|0\\..*)");}
     private String providerOrigin(){String url=browser==null?lastRequested:browser.getUrl();Uri uri=Uri.parse(url==null?HOME:url);return allowedTop(uri)?"https://"+uri.getHost():"https://flixmomo.app";}
     private void openDetail(String url){
+        filmEvent("film_detail_open");
         if(!FilmProviderPolicy.detail(Uri.parse(url))){navigate(url,true);return;}
         org.json.JSONObject card=homePanel.card(url);homeRequested=false;homePanel.setVisibility(View.GONE);liveResults.setVisibility(View.GONE);
         detailRequested=true;nativeControls.hideAll();cursor.enable(false);chrome.setVisibility(View.GONE);detailPanel.begin(url,card);navigate(url,false);
@@ -244,13 +293,13 @@ public class FlixMomoActivity extends Activity {
         if(!nativeSearch.isEmpty()){query.setText(nativeSearch);navigate(providerOrigin()+"/search?q="+Uri.encode(nativeSearch),false);}else navigate(providerOrigin()+"/",false);
     }
     private void search(){playUntil=0;playNotice.setVisibility(View.GONE);String text=UnifiedSearch.clean(query.getText().toString());if(!UnifiedSearch.valid(text)){status.setText("Enter 2–120 characters.");return;}
-        detailRequested=false;detailPanel.setVisibility(View.GONE);homeRequested=true;nativeSearch=text;homePanel.mode(text);homePanel.discardSuggestions();homePanel.setVisibility(View.VISIBLE);homePanel.bringToFront();nativeControls.hideAll();cursor.enable(false);showLiveResults(text);homePanel.loading();navigate(providerOrigin()+"/search?q="+Uri.encode(text),false);homePanel.focusRefresh();
+        filmEvent("film_search");detailRequested=false;detailPanel.setVisibility(View.GONE);homeRequested=true;nativeSearch=text;homePanel.mode(text);homePanel.discardSuggestions();homePanel.setVisibility(View.VISIBLE);homePanel.bringToFront();nativeControls.hideAll();cursor.enable(false);showLiveResults(text);homePanel.loading();navigate(providerOrigin()+"/search?q="+Uri.encode(text),false);homePanel.focusRefresh();
     }
-    private void navigate(String url,boolean page){if(!allowedTop(Uri.parse(url))){fail("Only the registered provider can open here.");return;}hideKeyboard();lastRequested=url;if(browser==null){fail("Provider browser stopped. Press Retry to reopen it.");return;}loadProviderPage(url);if(page)usePage();}
+    private void navigate(String url,boolean page){if(!allowedTop(Uri.parse(url))){fail("Only the registered provider can open here.");return;}hideKeyboard();lastRequested=url;connection.begin(url);connectionWarning="";networkNotice.setVisibility(View.GONE);if(browser==null){fail("Provider browser stopped. Press Retry to reopen it.");return;}loadProviderPage(url);if(page)usePage();}
     protected FilmDetailView createDetailPanel(FilmDetailView.Host host){return new FilmDetailView(this,host);}
     protected FilmHomeView createHomePanel(FilmHomeView.Host host){return new FilmHomeView(this,host);}
     protected void loadProviderPage(String url){browser.loadUrl(url);}
-    private void voiceSearch(){hideKeyboard();UnifiedSearch.voice(this);}
+    private void voiceSearch(){filmEvent("film_voice_search");hideKeyboard();UnifiedSearch.voice(this);}
     @Override protected void onActivityResult(int request,int result,Intent data){super.onActivityResult(request,result,data);String text=UnifiedSearch.voiceText(request,result,data);if(!text.isEmpty()){query.setText(text);search();}}
     @Override protected void onNewIntent(Intent intent){super.onNewIntent(intent);setIntent(intent);String text=UnifiedSearch.clean(intent.getStringExtra(UnifiedSearch.QUERY));if(UnifiedSearch.valid(text)){query.setText(text);search();}}
     private void hideKeyboard(){InputMethodManager keyboard=(InputMethodManager)getSystemService(INPUT_METHOD_SERVICE);if(keyboard!=null)keyboard.hideSoftInputFromWindow(query.getWindowToken(),0);query.clearFocus();}

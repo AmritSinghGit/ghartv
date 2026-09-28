@@ -100,6 +100,7 @@ public final class Telemetry {
             .writeTimeout(25, TimeUnit.SECONDS)
             .callTimeout(45, TimeUnit.SECONDS)
             .retryOnConnectionFailure(true)
+            .followRedirects(false).followSslRedirects(false)
             .build();
 
     private static final Pattern EVENT_NAME = Pattern.compile("^[a-z][a-z0-9_]{1,63}$");
@@ -262,7 +263,10 @@ public final class Telemetry {
         final String eventName = normalized;
         final JSONObject attrs = attributes == null ? new JSONObject() : attributes;
         final Context application = context.getApplicationContext();
-        IO.execute(() -> appendEvent(application, buildEvent(application, null, eventName, attrs)));
+        IO.execute(() -> {
+            appendEvent(application, buildEvent(application, null, eventName, attrs));
+            if(eventName.startsWith("film_")||eventName.equals("discover_open")||eventName.equals("consent_changed"))enqueueUpload(application,false);
+        });
     }
 
     public static String error(Context context, String stage, Throwable error, JSONObject attributes) {
@@ -348,13 +352,16 @@ public final class Telemetry {
         );
     }
 
-    static UploadOutcome upload(Context context) {
+    static UploadOutcome upload(Context context) { return upload(context,CLIENT); }
+
+    // Package-private transport injection for owned tests; production always uses CLIENT.
+    static synchronized UploadOutcome upload(Context context,OkHttpClient transport) {
         if (context == null || !isEnabled(context)) return UploadOutcome.DISABLED;
         List<String> lines = readBatch(context, MAX_BATCH_EVENTS);
         if (lines.isEmpty()) return UploadOutcome.EMPTY;
 
         try {
-            CollectorConfig config = resolveConfig(context);
+            CollectorConfig config = resolveConfig(context,transport);
             if (!config.enabled) {
                 saveStatus(context, "Collector is temporarily disabled", false);
                 return UploadOutcome.PERMANENT_FAILURE;
@@ -377,27 +384,29 @@ public final class Telemetry {
             batch.put("device", deviceEnvelope(context));
             batch.put("events", events);
 
-            String endpoint = config.endpoint.endsWith("/v1/events")
-                    ? config.endpoint
-                    : stripTrailingSlash(config.endpoint) + "/v1/events";
+            String endpoint = TelemetryDelivery.endpoint(config.endpoint);
+            if(endpoint.isEmpty()) {saveStatus(context,"Collector address rejected; queued reports retained",false);return UploadOutcome.PERMANENT_FAILURE;}
             Request request = new Request.Builder()
                     .url(endpoint)
                     .header("User-Agent", "GharTV-Jio-Live/" + BuildConfig.VERSION_NAME)
                     .header("X-GharTV-Ingest-Key", config.ingestKey)
                     .post(RequestBody.create(batch.toString(), JSON))
                     .build();
-            try (Response response = CLIENT.newCall(request).execute()) {
+            try (Response response = transport.newCall(request).execute()) {
                 int code = response.code();
                 if (response.isSuccessful()) {
-                    JSONObject ack = new JSONObject(response.body()==null?"{}":response.body().string());
-                    if(!ack.optBoolean("ok",false) || ack.optInt("accepted",-1)!=lines.size() || ack.optInt("rejected",0)!=0) {
+                    if(response.body()==null||response.body().contentLength()>65536){saveStatus(context,"Collector receipt missing or oversized; reports retained",false);return UploadOutcome.RETRY;}
+                    okio.BufferedSource ackSource=response.body().source();ackSource.request(65537);
+                    if(ackSource.getBuffer().size()>65536){saveStatus(context,"Collector receipt oversized; reports retained",false);return UploadOutcome.RETRY;}
+                    JSONObject ack = new JSONObject(ackSource.readUtf8());
+                    if(!TelemetryDelivery.acknowledged(ack,lines.size())) {
                         saveStatus(context,"Collector acknowledgement incomplete; local reports retained",false); return UploadOutcome.RETRY;
                     }
                     removeAcknowledged(context, lines);
                     saveStatus(context, "Sent " + lines.size() + " diagnostics", true);
                     return UploadOutcome.SUCCESS;
                 }
-                String status = "Collector returned HTTP " + code;
+                String status = "Collector returned HTTP " + code + (code==401||code==403?"; collector access needs repair. Reports retained.":code>=300&&code<400?"; redirect not followed. Reports retained.":"; reports retained.");
                 saveStatus(context, status, false);
                 return code == 408 || code == 425 || code == 429 || code >= 500
                         ? UploadOutcome.RETRY : UploadOutcome.PERMANENT_FAILURE;
@@ -406,6 +415,18 @@ public final class Telemetry {
             saveStatus(context, "Upload waiting: " + scrubString(readable(error)), false);
             return UploadOutcome.RETRY;
         }
+    }
+
+    public interface DeliveryCallback { void complete(UploadOutcome outcome,String status,int queued); }
+    public static void sendNow(Context context,boolean deliveryCheck,DeliveryCallback callback) {
+        final Context app=context.getApplicationContext();
+        IO.execute(()->{
+            if(!isEnabled(app)){MAIN.post(()->callback.complete(UploadOutcome.DISABLED,"Diagnostics are off. No event was created or sent.",queuedCount(app)));return;}
+            if(deliveryCheck)appendEvent(app,buildEvent(app,null,"diagnostic_delivery_check",data("purpose","manual_delivery_check")));
+            UploadOutcome outcome=upload(app);
+            final UploadOutcome result=outcome;final String status=outcome==UploadOutcome.EMPTY?"No reports are queued. Use Send a delivery check to test this connection.":lastStatus(app);
+            final int queued=queuedCount(app);MAIN.post(()->callback.complete(result,status,queued));
+        });
     }
 
     public static int queuedCount(Context context) {
@@ -490,7 +511,7 @@ public final class Telemetry {
         return device;
     }
 
-    private static CollectorConfig resolveConfig(Context context) throws Exception {
+    private static CollectorConfig resolveConfig(Context context,OkHttpClient transport) throws Exception {
         SharedPreferences preferences = prefs(context);
         long now = System.currentTimeMillis();
         long fetched = preferences.getLong(KEY_CONFIG_FETCHED_AT, 0L);
@@ -503,7 +524,7 @@ public final class Telemetry {
                     .url(AppConfig.TELEMETRY_CONFIG)
                     .header("User-Agent", "GharTV-Jio-Live/" + BuildConfig.VERSION_NAME)
                     .build();
-            try (Response response = CLIENT.newCall(request).execute()) {
+            try (Response response = transport.newCall(request).execute()) {
                 if (response.isSuccessful() && response.body() != null) {
                     JSONObject json = new JSONObject(response.body().string());
                     endpoint = json.optString("endpoint", endpoint);

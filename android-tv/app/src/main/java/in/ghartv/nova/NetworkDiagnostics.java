@@ -33,7 +33,8 @@ public final class NetworkDiagnostics {
         .callTimeout(5, TimeUnit.SECONDS).followRedirects(false).followSslRedirects(false).build();
     private static final String[][] HOSTS = {
         {"jio_playback", "jiotvapi.media.jio.com"}, {"jio_guide", "jiotvapi.cdn.jio.com"},
-        {"updates", "api.github.com"}, {"collector", "ghartv-telemetry.ghartv-47d9a0.workers.dev"}
+        {"updates", "api.github.com"}, {"collector", "ghartv-telemetry.ghartv-47d9a0.workers.dev"},
+        {"flixmomo_app", "flixmomo.app"}, {"flixmomo_st", "flixmomo.st"}, {"flixmomo_bet", "flixmomo.bet"}
     };
     public static boolean reviewProbe(Activity activity) {
         String id = activity.getIntent().getStringExtra("ghartv_network_probe");
@@ -44,7 +45,7 @@ public final class NetworkDiagnostics {
     public static void show(Activity activity) {
         if(activity.isFinishing() || activity.isDestroyed()) return;
         AlertDialog wait = new AlertDialog.Builder(activity).setTitle("Checking this TV's connection")
-            .setMessage("Checking DNS and HTTPS separately for Jio, updates and diagnostics. No login, stream or private data is sent. This can take up to 15 seconds.")
+            .setMessage("Checking DNS and HTTPS separately for Jio, registered FlixMomo addresses, updates and diagnostics. No login, stream or private data is sent. This can take up to 15 seconds.")
             .setNegativeButton("Close", null).show();
         check(activity.getApplicationContext(), "manual_" + SystemClock.elapsedRealtime(), result -> {
             if(!wait.isShowing() || activity.isFinishing() || activity.isDestroyed()) return;
@@ -55,6 +56,7 @@ public final class NetworkDiagnostics {
                 JSONObject item=checks.optJSONObject(i); if(item==null) continue;
                 text.append(item.optString("service")).append(": ").append(item.optString("dns")).append(" / ").append(item.optString("https")).append('\n');
             }
+            text.append("\nTV clock: ").append(new java.util.Date()).append("\nA date/certificate failure can be caused by the TV clock or the server certificate. Do not disable verification.\n");
             text.append("\nHTTPS reachable does not prove account access or playback.\n\nDiagnostics: ")
                 .append(Telemetry.isEnabled(activity)?"enabled":"off; error references are not uploaded")
                 .append("\nWaiting on this TV: ").append(Telemetry.queuedCount(activity))
@@ -78,7 +80,7 @@ public final class NetworkDiagnostics {
             }
         } catch(Exception e) {
             String code=NetworkFailure.classify(e);
-            try {if(code.equals("DNS_UNAVAILABLE"))r.put("dns",code);else r.put("https",code);}catch(Exception ignored){}
+            try {if(code.equals("DNS_UNAVAILABLE"))r.put("dns",code);else r.put("https",code);r.put("cause",NetworkFailure.rootType(e));}catch(Exception ignored){}
         }
         try{r.put("elapsed_ms",SystemClock.elapsedRealtime()-start);}catch(Exception ignored){} return r;
     }

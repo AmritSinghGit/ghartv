@@ -18,9 +18,9 @@ assert 'playerView.setOnClickListener(view -> showGuide(true, nextButton))' in p
 assert 'MediaStore.ACTION_PICK_IMAGES' in family and 'ACTION_GET_CONTENT' in family and 'takePersistableUriPermission' in family
 assert 'takePlaybackHandoff' in api and 'PLAYBACK_HANDOFF_MS = 20_000L' in api
 gradle=(R/'android-tv/app/build.gradle.kts').read_text()
-assert 'versionCode = 40' in gradle and '0.6.0-rc12.1-watch-metadata-review' in gradle
+assert 'versionCode = 41' in gradle and '0.6.0-rc12.2-connection-diagnostics-review' in gradle
 films=(J/'FlixMomoActivity.java').read_text();cursor=(J/'RemoteWebCursor.java').read_text();controls=(J/'FilmNativeControls.java').read_text()
-assert 'cursor.handle(event)' in films and 'onRenderProcessGone' in films and 'handler.cancel()' in films
+assert 'cursor.handle(event)' in films and 'onRenderProcessGone' in films and 'certificateFailure(handler::cancel,error)' in films and 'cancel.run()' in films and '.proceed()' not in films
 assert 'onPageFinished' in films and 'if(mainFrameError)' in films
 assert 'postOnAnimation(frame)' in cursor and 'ACTION_CANCEL' in cursor and 'removeCallbacks(frame)' in cursor
 assert 'evaluateJavascript' not in films and 'addJavascriptInterface' not in films
@@ -57,3 +57,13 @@ assert 'homePanel.handleRemote(event,getCurrentFocus())' in films
 assert 'postVisualStateCallback' in controls and 'pageActions' in controls
 assert 'FilmDetailView' in films and 'FilmProviderPolicy.CREDIT' in films
 assert 'FilmPlayerOptions.JS' in (J/'FilmPageSnapshot.java').read_text()
+
+# Every failed certificate is cancelled; only observed subresources avoid the document fatal state.
+assert 'scope==FilmConnectionState.Scope.SUBRESOURCE' in films
+assert 'connection.observe(request.getUrl().toString(),request.isForMainFrame())' in films
+tel=(J/'Telemetry.java').read_text()
+assert '.followRedirects(false).followSslRedirects(false)' in tel
+assert 'TelemetryDelivery.endpoint(config.endpoint)' in tel and 'TelemetryDelivery.acknowledged' in tel
+assert 'diagnostic_delivery_check' in tel and 'film_playback_ready' in films
+assert 'query.getText' not in films[films.index('private void filmEvent'):films.index('private void showFilmConnection')]
+print('CODE41_SCOPED_TLS_CANCELLATION_AND_PRIVATE_DIAGNOSTICS=PASS')
