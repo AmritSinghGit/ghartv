@@ -1,0 +1,100 @@
++        String version="unknown";try{android.content.pm.PackageInfo p=WebView.getCurrentWebViewPackage();if(p!=null)version=p.versionName;}catch(Exception ignored){}
++        String message=connectionDetail+"\n\nTV time: "+new java.util.Date()+"\nAndroid: "+android.os.Build.VERSION.RELEASE+" · WebView: "+version+"\n\nCertificate checks stay on. No passwords, cookies or search text are sent by a connection check.";
++        new android.app.AlertDialog.Builder(this).setTitle("FlixMomo connection")
++            .setMessage(message).setPositiveButton("Check DNS / HTTPS",(d,w)->NetworkDiagnostics.show(this))
++            .setNeutralButton("Registered addresses",(d,w)->chooseFilmOrigin()).setNegativeButton("Close",null).show();
++    }
++    private void chooseFilmOrigin(){
++        final String[] roots={"https://flixmomo.app/","https://flixmomo.st/","https://flixmomo.bet/","TV date and time settings"};
++        new android.app.AlertDialog.Builder(this).setTitle("Open an already registered address")
++            .setItems(roots,(d,index)->{if(index==3){try{startActivity(new Intent(android.provider.Settings.ACTION_DATE_SETTINGS));}catch(Exception ignored){}return;}new android.app.AlertDialog.Builder(this).setTitle("Use "+roots[index]+"?")
++                .setMessage("This starts a fresh navigation to an address already registered in this build. Your current search will be sent to it. Normal certificate checks apply. No cookies or passwords are copied between domains.")
++                .setPositiveButton("Open",(confirm,which)->{String text=UnifiedSearch.clean(query.getText().toString());
++                    playUntil=0;playNotice.setVisibility(View.GONE);detailRequested=false;detailPanel.setVisibility(View.GONE);
++                    homeRequested=true;nativeSearch=UnifiedSearch.valid(text)?text:"";homePanel.mode(nativeSearch);homePanel.discardSuggestions();homePanel.loading();homePanel.setVisibility(View.VISIBLE);homePanel.bringToFront();
++                    nativeControls.hideAll();cursor.enable(false);chrome.setVisibility(View.VISIBLE);
++                    navigate(roots[index]+(nativeSearch.isEmpty()?"":"search?q="+Uri.encode(nativeSearch)),false);homePanel.focusRefresh();})
++                .setNegativeButton("Cancel",null).show();}).setNegativeButton("Close",null).show();
++    }
++    void certificateFailure(Runnable cancel,SslError error){
++        cancel.run(); // The failed resource is NEVER trusted or loaded.
++        String url=error==null?"":error.getUrl();int code=error==null?SslError.SSL_INVALID:error.getPrimaryError();
++        FilmConnectionState.Scope scope=connection.scope(url);
++        connectionDetail=scope.name().replace('_',' ')+" · "+FilmConnectionState.reason(code)+"\n"+FilmConnectionState.origin(url)+"\n"+FilmConnectionState.help(code);
++        filmFailure(scope==FilmConnectionState.Scope.SUBRESOURCE?"film_resource_tls":"film_document_tls",FilmConnectionState.reason(code));
++        if(scope==FilmConnectionState.Scope.SUBRESOURCE){
++            connectionWarning="An embedded resource was blocked by certificate validation. The main page has not been declared failed. Connection shows details.";
++            networkNotice.setText(connectionWarning);networkNotice.setVisibility(View.VISIBLE);
++        }else{
++            networkNotice.setText(connectionDetail);networkNotice.setVisibility(View.VISIBLE);
++            fail("Secure connection could not be verified: "+FilmConnectionState.reason(code)+". Open Connection for details; no certificate bypass is available.");
++        }
++    }
+@@ -62 +102 @@
+-        super.onCreate(saved);getWindow().getDecorView().setSystemUiVisibility(5894);
++        super.onCreate(saved);Telemetry.screen(this,"discover");filmEvent("discover_open");getWindow().getDecorView().setSystemUiVisibility(5894);
+@@ -75 +115,4 @@
+-        navigation.addView(pageButton);navigation.addView(modeButton);navigation.addView(scrollButton);navigation.addView(retryButton);chrome.addView(navigation);
++        navigation.addView(pageButton);navigation.addView(modeButton);navigation.addView(scrollButton);navigation.addView(retryButton);
++        Button connectionButton=TvUi.button(this,"Connection",false),diagnosticsButton=TvUi.button(this,"Diagnostics",false);
++        connectionButton.setOnClickListener(v->showFilmConnection());diagnosticsButton.setOnClickListener(v->DiagnosticsDialog.show(this));
++        navigation.addView(connectionButton);navigation.addView(diagnosticsButton);chrome.addView(navigation);
+@@ -79,0 +123 @@
++        networkNotice=TvUi.label(this,"",12,TvUi.MUTED,false);networkNotice.setVisibility(View.GONE);root.addView(networkNotice);
+@@ -146,0 +191 @@
++                connection.observe(request.getUrl().toString(),request.isForMainFrame());
+@@ -150,0 +196 @@
++                connection.observe(request.getUrl().toString(),request.isForMainFrame());
+@@ -154 +200 @@
+-                cursor.cancel();nativeControls.started();if("about:blank".equals(url))return;
++                cursor.cancel();nativeControls.started();if("about:blank".equals(url))return;connection.started(url);
+@@ -173 +219 @@
+-            @Override public void onReceivedSslError(WebView view,SslErrorHandler handler,SslError error){handler.cancel();fail("TLS verification failed. Connection stopped; security checks remain enabled.");}
++            @Override public void onReceivedSslError(WebView view,SslErrorHandler handler,SslError error){certificateFailure(handler::cancel,error);}
+@@ -175,0 +222 @@
++                filmFailure("film_navigation","WEBVIEW_ERROR_"+error.getErrorCode());
+@@ -176,0 +224 @@
++                    case WebViewClient.ERROR_FAILED_SSL_HANDSHAKE:fail("TLS handshake failed for the main page. Open Connection to check this TV; security checks remain enabled.");break;
+@@ -219 +267 @@
+-    private void requestWatch(){armPlayback();usePage();nativeControls.pageAction("watch");}
++    private void requestWatch(){filmEvent("film_watch_request");armPlayback();usePage();nativeControls.pageAction("watch");}
+@@ -223 +271 @@
+-        if(data.optBoolean("mediaPlaying")&&data.optDouble("mediaTime")>lastMediaTime&&lastMediaTime>=0){playMessage("Video is playing in FlixMomo’s embedded player.");playUntil=0;return;}
++        if(data.optBoolean("mediaPlaying")&&data.optDouble("mediaTime")>lastMediaTime&&lastMediaTime>=0){playMessage("Video is playing in FlixMomo’s embedded player.");filmEvent("film_playback_ready");playUntil=0;return;}
+@@ -225 +273 @@
+-        if(now>playUntil){playMessage("Playback is not confirmed. Use Play, another provider player, or Original page.");playUntil=0;return;}
++        if(now>playUntil){filmFailure("film_playback","PLAYBACK_NOT_CONFIRMED");playMessage("Playback is not confirmed. Use Play, another provider player, or Original page.");playUntil=0;return;}
+@@ -237,0 +286 @@
++        filmEvent("film_detail_open");
+@@ -247,3 +296,3 @@
+-        detailRequested=false;detailPanel.setVisibility(View.GONE);homeRequested=true;nativeSearch=text;homePanel.mode(text);homePanel.discardSuggestions();homePanel.setVisibility(View.VISIBLE);homePanel.bringToFront();nativeControls.hideAll();cursor.enable(false);showLiveResults(text);homePanel.loading();navigate(providerOrigin()+"/search?q="+Uri.encode(text),false);homePanel.focusRefresh();
+-    }
+-    private void navigate(String url,boolean page){if(!allowedTop(Uri.parse(url))){fail("Only the registered provider can open here.");return;}hideKeyboard();lastRequested=url;if(browser==null){fail("Provider browser stopped. Press Retry to reopen it.");return;}loadProviderPage(url);if(page)usePage();}
++        filmEvent("film_search");detailRequested=false;detailPanel.setVisibility(View.GONE);homeRequested=true;nativeSearch=text;homePanel.mode(text);homePanel.discardSuggestions();homePanel.setVisibility(View.VISIBLE);homePanel.bringToFront();nativeControls.hideAll();cursor.enable(false);showLiveResults(text);homePanel.loading();navigate(providerOrigin()+"/search?q="+Uri.encode(text),false);homePanel.focusRefresh();
++    }
++    private void navigate(String url,boolean page){if(!allowedTop(Uri.parse(url))){fail("Only the registered provider can open here.");return;}hideKeyboard();lastRequested=url;connection.begin(url);connectionWarning="";networkNotice.setVisibility(View.GONE);if(browser==null){fail("Provider browser stopped. Press Retry to reopen it.");return;}loadProviderPage(url);if(page)usePage();}
+@@ -253 +302 @@
+-    private void voiceSearch(){hideKeyboard();UnifiedSearch.voice(this);}
++    private void voiceSearch(){filmEvent("film_voice_search");hideKeyboard();UnifiedSearch.voice(this);}
+--- a/android-tv/app/src/main/java/in/ghartv/nova/NetworkDiagnostics.java
++++ b/android-tv/app/src/main/java/in/ghartv/nova/NetworkDiagnostics.java
+@@ -36 +36,2 @@
+-        {"updates", "api.github.com"}, {"collector", "ghartv-telemetry.ghartv-47d9a0.workers.dev"}
++        {"updates", "api.github.com"}, {"collector", "ghartv-telemetry.ghartv-47d9a0.workers.dev"},
++        {"flixmomo_app", "flixmomo.app"}, {"flixmomo_st", "flixmomo.st"}, {"flixmomo_bet", "flixmomo.bet"}
+@@ -47 +48 @@
+-            .setMessage("Checking DNS and HTTPS separately for Jio, updates and diagnostics. No login, stream or private data is sent. This can take up to 15 seconds.")
++            .setMessage("Checking DNS and HTTPS separately for Jio, registered FlixMomo addresses, updates and diagnostics. No login, stream or private data is sent. This can take up to 15 seconds.")
+@@ -57,0 +59 @@
++            text.append("\nTV clock: ").append(new java.util.Date()).append("\nA date/certificate failure can be caused by the TV clock or the server certificate. Do not disable verification.\n");
+@@ -81 +83 @@
+-            try {if(code.equals("DNS_UNAVAILABLE"))r.put("dns",code);else r.put("https",code);}catch(Exception ignored){}
++            try {if(code.equals("DNS_UNAVAILABLE"))r.put("dns",code);else r.put("https",code);r.put("cause",NetworkFailure.rootType(e));}catch(Exception ignored){}
+--- a/android-tv/app/src/main/java/in/ghartv/nova/Telemetry.java
++++ b/android-tv/app/src/main/java/in/ghartv/nova/Telemetry.java
+@@ -102,0 +103 @@
++            .followRedirects(false).followSslRedirects(false)
+@@ -265 +266,4 @@
+-        IO.execute(() -> appendEvent(application, buildEvent(application, null, eventName, attrs)));
++        IO.execute(() -> {
++            appendEvent(application, buildEvent(application, null, eventName, attrs));
