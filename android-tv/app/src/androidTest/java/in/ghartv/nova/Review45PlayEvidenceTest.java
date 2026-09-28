@@ -16,7 +16,7 @@ public class Review45PlayEvidenceTest {
     @After public void close(){h.close();}
     void cover(String extra)throws Exception {
         h.player();
-        h.eval("JSON.stringify((()=>{const v=document.querySelector('video');v.pause();v.currentTime=0;window.coverClicks=0;window.badClicks=0;window.trustedCover=false;v.onclick=null;const box=document.createElement('div');box.style.cssText='position:relative;width:620px;height:350px';v.before(box);box.append(v);const b=document.createElement('button');b.id='play-cover';b.textContent='Play video';b.style.cssText='position:absolute;left:260px;top:140px;width:100px;height:70px;margin:0;padding:0;z-index:3';b.onclick=e=>{window.coverClicks++;window.trustedCover=e.isTrusted;b.remove();v.play()};box.append(b);window.testBox=box;"+extra+";return {ok:true}})())");
+        h.eval("JSON.stringify((()=>{const v=document.querySelector('video');v.pause();v.currentTime=0;window.coverClicks=0;window.badClicks=0;window.trustedCover=false;v.onclick=null;const box=document.createElement('div');box.style.cssText='position:relative;width:620px;height:350px';v.before(box);box.append(v);const b=document.createElement('button');b.id='play-cover';b.textContent='Play video';b.style.cssText='position:absolute;left:260px;top:140px;width:100px;height:70px;margin:0;padding:0;z-index:3';b.onclick=e=>{window.coverClicks++;window.trustedCover=e.isTrusted;b.remove();v.play()};box.append(b);window.testBox=box;{"+extra+"};return {ok:true}})())");
         SystemClock.sleep(100);
     }
     void play(){h.ui(()->{FilmNativeControls c=(FilmNativeControls)h.field(h.activity,"nativeControls");c.menu();View v=h.text((View)h.field(c,"tray"),"Play");assertNotNull(v);v.requestFocus();});h.press(KeyEvent.KEYCODE_DPAD_CENTER);}
