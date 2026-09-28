@@ -13,8 +13,8 @@ android {
         applicationId = "in.ghartv.nova"
         minSdk = 26
         targetSdk = 35
-        versionCode = 44
-        versionName = "0.6.0-rc12.5-loading-mouse-review"
+        versionCode = 45
+        versionName = "0.6.0-rc12.6-play-control-evidence-review"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
     buildFeatures { buildConfig = true }

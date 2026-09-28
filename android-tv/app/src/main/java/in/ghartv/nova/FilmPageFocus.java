@@ -54,9 +54,21 @@ final class FilmPageFocus {
           if(link){const u=new URL(link.getAttribute('href'),here);if(u.href!==here.href&&!u.hash)return pack({state:'NAVIGATE',target:u.href,label:buttonText(link)});}
           let n=candidates.findIndex(watch);if(n<0){const media=candidates.map((e,i)=>({e,i})).filter(x=>/^(VIDEO|IFRAME)$/.test(x.e.tagName));if(media.length===1)n=media[0].i;}return focus(n,true);}
         if(action==='media'){
+          // A provider may put a real play button ABOVE its video/iframe.
+          // Only a visible, semantic play control over the one media region is
+          // eligible. We never click an arbitrary obscuring advert or new origin.
           const media=candidates.filter(e=>/^(VIDEO|IFRAME)$/.test(e.tagName));
           if(media.length!==1)return pack({state:media.length?'AMBIGUOUS_MEDIA':'MEDIA_NOT_READY'});
           const e=media[0];if(e.tagName==='VIDEO'&&!e.paused&&e.currentTime>0)return pack({state:'ALREADY_PLAYING'});
+          const r=e.getBoundingClientRect();
+          const isPlay=b=>/^(play|play video|start video|start playback|resume video|resume playback|watch now)$/i.test(buttonText(b));
+          const buttons=Array.from(root.querySelectorAll('button,[role="button"],a[href],.vjs-big-play-button,.plyr__control--overlaid'))
+            .filter(b=>b!==e&&visible(b)&&permittedLink(b)&&!b.closest('nav,header,footer,[aria-hidden="true"]')&&isPlay(b))
+            .filter(b=>{const q=b.getBoundingClientRect(),x=q.left+q.width/2,y=q.top+q.height/2;
+              return x>=r.left&&x<=r.right&&y>=r.top&&y<=r.bottom&&q.width*q.height<=r.width*r.height;});
+          const unique=buttons.filter((b,i)=>!buttons.some((p,j)=>j!==i&&p.contains(b)));
+          if(unique.length>1)return pack({state:'AMBIGUOUS_MEDIA'});
+          if(unique.length===1){const b=unique[0];if(!candidates.includes(b))candidates.push(b);return focus(candidates.indexOf(b),true);}
           return focus(candidates.indexOf(e),true);
         }
         if(action==='watchlist'){

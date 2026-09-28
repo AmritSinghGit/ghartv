@@ -180,6 +180,7 @@ final class FilmNativeControls {
     }
     private void executePageAction(String action){
         final WebView source=browser;final int token=generation;pageBusy=true;
+        if("media".equals(action)){hideAll();source.requestFocus();}
         source.evaluateJavascript(FilmPageFocus.script(action),raw->{
             if(!active||source!=browser||token!=generation)return;
             try{JSONObject result=decode(raw);String response=result.optString("state");
@@ -202,9 +203,12 @@ final class FilmNativeControls {
                             source.evaluateJavascript(FilmPageFocus.script("commit"),answer->{
                                 if(completed[0]||!active||source!=browser||token!=generation)return;completed[0]=true;handler.removeCallbacks(timeout);
                                 try{JSONObject target=decode(answer);
-                                    if(!"TAP".equals(target.optString("state"))||!page.equals(target.optString("url"))||!page.equals(source.getUrl())){host.navigationHint("The control moved or became covered. No click was sent.");finishPageAction(token);return;}
+                                    if(!"TAP".equals(target.optString("state"))||!page.equals(target.optString("url"))||!page.equals(source.getUrl())){
+                                        host.navigationHint("The play control is covered or changed. No click sent; Mouse remains available.");
+                                        host.actionOutcome(action,"OBSCURED".equals(target.optString("state"))?"TARGET_OBSCURED":"TARGET_CHANGED");finishPageAction(token);return;}
                                     double w=target.optDouble("width"),h=target.optDouble("height"),x=target.optDouble("x"),y=target.optDouble("y");
                                     if(!Double.isFinite(w)||!Double.isFinite(h)||!Double.isFinite(x)||!Double.isFinite(y)||w<=0||h<=0||x<0||x>w||y<0||y>h){finishPageAction(token);return;}
+                                    host.actionOutcome(action,"IFRAME".equals(target.optString("tag"))?"TARGET_FRAME":"VIDEO".equals(target.optString("tag"))?"TARGET_VIDEO":"TARGET_CONTROL");
                                     float px=(float)(x*source.getWidth()/w),py=(float)(y*source.getHeight()/h);
                                     hideAll();source.requestFocus();long time=SystemClock.uptimeMillis();
                                     android.view.MotionEvent down=android.view.MotionEvent.obtain(time,time,android.view.MotionEvent.ACTION_DOWN,px,py,0);
@@ -222,6 +226,7 @@ final class FilmNativeControls {
                     int key="left".equals(action)?KeyEvent.KEYCODE_DPAD_LEFT:"right".equals(action)?KeyEvent.KEYCODE_DPAD_RIGHT:"up".equals(action)?KeyEvent.KEYCODE_DPAD_UP:"down".equals(action)?KeyEvent.KEYCODE_DPAD_DOWN:KeyEvent.KEYCODE_DPAD_CENTER;
                     source.dispatchKeyEvent(new KeyEvent(KeyEvent.ACTION_DOWN,key));source.dispatchKeyEvent(new KeyEvent(KeyEvent.ACTION_UP,key));
                 }else if("NOT_FOUND".equals(response)||"MEDIA_NOT_READY".equals(response)||"AMBIGUOUS_MEDIA".equals(response)){host.navigationHint("The provider has not exposed an unambiguous control. Original page remains available.");host.actionOutcome(action,response);}
+                else if("ALREADY_PLAYING".equals(response))host.actionOutcome(action,"ALREADY_PLAYING");
                 else if("FOCUSED".equals(response))host.navigationHint(result.optString("label")+" · arrows move · OK selects · Menu opens controls");
                 else if("VERIFICATION_REQUIRED".equals(response))host.verificationRequired();
             }catch(Exception error){host.navigationHint("Provider control could not be confirmed; Original page remains available.");}
