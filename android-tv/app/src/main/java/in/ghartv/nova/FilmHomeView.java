@@ -35,6 +35,9 @@ final class FilmHomeView extends FrameLayout {
     private final ScrollView scroll;
     private final LinearLayout content;
     private final TextView status;
+    private final android.widget.ProgressBar progress;
+    private boolean loadingData;
+    private final Runnable loadingDeadline=()->{if(loadingData)unavailable("The provider is taking longer to supply suggestions.");};
     private TextView heading;private String searchText="";
     private final LinearLayout grid;
     private String identity="";
@@ -70,6 +73,9 @@ final class FilmHomeView extends FrameLayout {
         for(PosterTask task:posterTasks)if(task.loaded&&!activity.isDestroyed())Glide.with(activity).clear(task.view);
         posterTasks.clear();
     }
+    @Override protected void onAttachedToWindow(){super.onAttachedToWindow();schedulePosters();}
+    @Override protected void onVisibilityChanged(View changed,int visible){super.onVisibilityChanged(changed,visible);if(visible==VISIBLE)schedulePosters();}
+    @Override protected void onDetachedFromWindow(){removeCallbacks(loadingDeadline);super.onDetachedFromWindow();}
     @Override protected void onSizeChanged(int w,int h,int oldw,int oldh){super.onSizeChanged(w,h,oldw,oldh);schedulePosters();}
 
 
@@ -90,7 +96,7 @@ final class FilmHomeView extends FrameLayout {
         underlyingPage.setDescendantFocusability(savedDescendants);underlyingPage.setFocusable(savedFocusable);
         underlyingPage.setFocusableInTouchMode(savedTouchFocusable);underlyingPage.setImportantForAccessibility(savedAccessibility);pageBlocked=false;
     }
-    void focusRefresh(){if(!actions.isEmpty())focusVisible(actions.get(0));}
+    void focusRefresh(){for(View a:actions)if(a.isEnabled()){focusVisible(a);return;}}
     private void focusVisible(View target){
         if(target==null||!target.isShown())return;target.requestFocus();
         Rect rect=new Rect(0,0,target.getWidth(),target.getHeight());target.requestRectangleOnScreen(rect,true);
@@ -131,6 +137,7 @@ final class FilmHomeView extends FrameLayout {
             if(key==KeyEvent.KEYCODE_DPAD_UP)target=c<columns?actions.get(Math.min(col,actions.size()-1)):cards.get(c-columns);
             if(key==KeyEvent.KEYCODE_DPAD_DOWN&&c+columns<cards.size())target=cards.get(c+columns);
         }
+        if(!target.isEnabled()){if(key==KeyEvent.KEYCODE_DPAD_DOWN&&!cards.isEmpty())target=cards.get(0);else {focusRefresh();return true;}}
         focusVisible(target);return true;
     }
     FilmHomeView(Activity a,Host host) {this(a,host,(view,url)->{
@@ -149,8 +156,12 @@ final class FilmHomeView extends FrameLayout {
         content.addView(TvUi.label(a,"Suggestions by FlixMomo · GharTV Review "+BuildConfig.VERSION_CODE,13,TvUi.MINT,true));
         TextView info=TvUi.label(a,"Search above for live channels, films and series. Browse below with your remote.",14,TvUi.MUTED,false);info.setPadding(0,dp(8),0,dp(10));content.addView(info);
         LinearLayout actionRow=new LinearLayout(a);button(actionRow,"Refresh suggestions",host::refresh);button(actionRow,"Open provider page",host::provider);button(actionRow,"Privacy & content use",host::privacy);content.addView(actionRow);
+        progress=new android.widget.ProgressBar(a,null,android.R.attr.progressBarStyleHorizontal);progress.setIndeterminate(true);progress.setVisibility(GONE);progress.setImportantForAccessibility(IMPORTANT_FOR_ACCESSIBILITY_NO);content.addView(progress,new LinearLayout.LayoutParams(-1,dp(5)));
         status=TvUi.label(a,"Loading suggestions from the provider…",13,TvUi.MUTED,false);status.setPadding(0,dp(12),0,dp(12));content.addView(status);
         grid=new LinearLayout(a);grid.setOrientation(LinearLayout.VERTICAL);content.addView(grid);
+        // Child rows can be added after this outer panel was already laid out.
+        // A scroll must not be necessary to trigger the first image requests.
+        grid.addOnLayoutChangeListener((v,l,t,r,b,ol,ot,or,ob)->schedulePosters());
     }
     void mode(String query){String next=UnifiedSearch.clean(query);if(!next.equals(searchText)){discardSuggestions();searchText=next;}heading.setText(next.isEmpty()?"Your next watch.":"Results for “"+next+"”");}
     JSONObject card(String target){for(JSONObject c:lastCards)if(target.equals(c.optString("url")))return c;return null;}
@@ -158,8 +169,10 @@ final class FilmHomeView extends FrameLayout {
     private int dp(int value){return TvUi.dp(activity,value);}
     private void button(LinearLayout row,String label,Runnable action){Button b=TvUi.button(activity,label,false);b.setId(View.generateViewId());b.setOnClickListener(v->action.run());actions.add(b);LinearLayout.LayoutParams p=new LinearLayout.LayoutParams(-2,dp(40));p.rightMargin=dp(8);row.addView(b,p);}
     static boolean safePoster(String raw){try {Uri u=Uri.parse(raw);return "https".equals(u.getScheme())&&u.getPort()==-1&&u.getUserInfo()==null&&(FlixMomoActivity.providerHost(u.getHost())||"image.tmdb.org".equals(u.getHost()));}catch(Exception e){return false;}}
-    void loading(){status.setText(cardCount==0?"Loading suggestions from the provider…":"Refreshing provider suggestions…");}
-    void unavailable(String reason){status.setText(reason+" Use Refresh or Open provider page. No sample catalogue has been substituted.");}
+    void loading(){loadingData=true;progress.setVisibility(VISIBLE);if(!actions.isEmpty()){actions.get(0).setEnabled(false);actions.get(1).setEnabled(false);}status.setText(cardCount==0?"Loading FlixMomo suggestions… Please wait; you can still search or leave.":"Refreshing FlixMomo suggestions… Your existing cards remain available.");removeCallbacks(loadingDeadline);postDelayed(loadingDeadline,15000);}
+    private void ready(){loadingData=false;removeCallbacks(loadingDeadline);progress.setVisibility(GONE);if(!actions.isEmpty()){actions.get(0).setEnabled(true);actions.get(1).setEnabled(true);}}
+    boolean isLoadingData(){return loadingData;}
+    void unavailable(String reason){ready();status.setText(reason+" Use Refresh or Open provider page. No sample catalogue has been substituted.");}
     int cardCount(){return cardCount;}
     void render(JSONObject snapshot){
         if(snapshot==null)return;
@@ -173,7 +186,8 @@ final class FilmHomeView extends FrameLayout {
             if(!safePoster(image))continue; // No image-less text-tile fallback.
             allowed.add(item);
         }
-        if(allowed.isEmpty()){unavailable("The current page has not supplied any readable poster suggestions yet.");return;}
+        if(allowed.isEmpty()){if(loadingData)return;unavailable("The current page has not supplied any readable poster suggestions yet.");return;}
+        ready();
 
         String next=allowed.toString();if(identity.equals(next)){status.setText(cardCount+" suggestions supplied by FlixMomo · availability is not verified");return;}
         // Do not reset a user's focus while they are browsing an already-rendered set.
@@ -195,6 +209,9 @@ final class FilmHomeView extends FrameLayout {
         }
         if(row!=null&&cardCount%columns!=0)for(int n=cardCount%columns;n<columns;n++)row.addView(new View(activity),new LinearLayout.LayoutParams(0,1,1));
         wireFocus();schedulePosters();
+        // Start the first row without waiting for measured child geometry.
+        // All remaining rows still use bounded viewport scheduling.
+        if(isAttachedToWindow()&&isShown())for(int i=0;i<Math.min(columns,posterTasks.size());i++){PosterTask task=posterTasks.get(i);if(!task.loaded){task.loaded=true;loader.load(task.view,task.url);}}
         status.setText(cardCount+" suggestions supplied by FlixMomo · availability is not verified");
     }
     static String readable(String text){String s=text.trim();if(s.indexOf(' ')>=0)return s;String[] words=s.replace('-',' ').replace('_',' ').split(" ");StringBuilder result=new StringBuilder();for(String word:words){if(word.isEmpty())continue;if(result.length()>0)result.append(' ');result.append(Character.toUpperCase(word.charAt(0))).append(word.substring(1));}return result.toString();}

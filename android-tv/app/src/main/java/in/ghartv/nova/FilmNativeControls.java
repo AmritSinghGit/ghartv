@@ -23,6 +23,7 @@ import java.util.Set;
 /** Original provider posters stay in the one WebView. Only the player tray is native. */
 final class FilmNativeControls {
     interface Host { void navigate(String url); void usePage(); void searchToolbar(); void nativeMode(); void navigationHint(String text);
+        default void mouse(){}
         default boolean pageIsVisible(){return true;}
         default void playerSelected(){} default void actionOutcome(String action,String state){} default void pageObserved(JSONObject data){} default void pageAction(String action){} default void verificationRequired(){}
     }
@@ -58,7 +59,7 @@ final class FilmNativeControls {
         tray=new LinearLayout(a);tray.setOrientation(LinearLayout.VERTICAL);tray.setPadding(dp(12),dp(8),dp(12),dp(8));tray.setBackground(TvUi.rounded(0xee071e29,12,TvUi.MINT,1,a));
         state=TvUi.label(a,"FlixMomo player controls · GharTV Review "+BuildConfig.VERSION_CODE,12,TvUi.TEXT,false);tray.addView(state);
         LinearLayout row=new LinearLayout(a);playButton=add(row,"Play",this::playDefault);add(row,"Players",this::showPlayers);add(row,"Watchlist",()->host.pageAction("watchlist"));add(row,"Not playing",()->next(true));
-        add(row,"Search",()->{hideAll();host.searchToolbar();});add(row,"Use page",()->{hideAll();host.usePage();});add(row,"Hide",this::hideTray);tray.addView(row);
+        add(row,"Search",()->{hideAll();host.searchToolbar();});add(row,"Mouse",()->{hideAll();host.mouse();});add(row,"Hide",this::hideTray);tray.addView(row);
         for(int i=0;i<row.getChildCount();i++){Button b=(Button)row.getChildAt(i);b.setId(View.generateViewId());b.setLayoutParams(new LinearLayout.LayoutParams(0,dp(48),1));trayButtons.add(b);}
         for(int i=0;i<trayButtons.size();i++){Button b=trayButtons.get(i);b.setNextFocusLeftId(trayButtons.get(Math.max(0,i-1)).getId());b.setNextFocusRightId(trayButtons.get(Math.min(trayButtons.size()-1,i+1)).getId());b.setNextFocusUpId(b.getId());b.setNextFocusDownId(b.getId());}
         FrameLayout.LayoutParams tp=new FrameLayout.LayoutParams(-1,-2,Gravity.BOTTOM);tp.setMargins(dp(10),dp(8),dp(10),dp(10));stage.addView(tray,tp);tray.setVisibility(View.GONE);
@@ -79,6 +80,7 @@ final class FilmNativeControls {
     void userInput(){if(tray.getVisibility()==View.VISIBLE){handler.removeCallbacks(hide);if(choiceView.getVisibility()!=View.VISIBLE&&!ownsFocus())handler.postDelayed(hide,6000);}}
     void hideAll(){handler.removeCallbacks(hide);choiceView.setVisibility(View.GONE);tray.setVisibility(View.GONE);}
     private void hideTray(){if(choiceView.getVisibility()!=View.VISIBLE){tray.setVisibility(View.GONE);if(browser!=null&&host.pageIsVisible())browser.requestFocus();}}
+    void refreshState(){probeCount=0;finished();}
     private void showTray(boolean focus){if(!active||!host.pageIsVisible())return;tray.setVisibility(View.VISIBLE);tray.bringToFront();if(focus)((LinearLayout)tray.getChildAt(1)).getChildAt(0).requestFocus();handler.removeCallbacks(hide);if(choiceView.getVisibility()!=View.VISIBLE&&!ownsFocus())handler.postDelayed(hide,6000);if(players.length()==0&&!blocked)finished();}
     private JSONObject decode(String raw) throws Exception {if(raw==null||raw.length()>131072)throw new IllegalArgumentException("Page result too large");Object value=new JSONTokener(raw).nextValue();if(!(value instanceof String))throw new IllegalArgumentException("No page snapshot");return new JSONObject((String)value);}
     private void read(){

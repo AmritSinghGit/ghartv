@@ -18,7 +18,7 @@ class FilmDetailView extends FrameLayout {
     interface Host {void watch();void watchlist();void original();void back();}
     private final Activity activity;private final Host host;
     private final TextView title,subtitle,synopsis,facts,status;
-    private final ImageView poster;private final ScrollView copy;
+    private final ImageView poster;private final ScrollView copy;private final ProgressBar progress;private boolean waiting;
     private final Button watch,watchlist,original,back;
     private final ArrayList<Button> actions=new ArrayList<>();
     private ViewGroup page;private boolean shielding,focusable,touchable;private int descendants,accessibility;
@@ -32,7 +32,7 @@ class FilmDetailView extends FrameLayout {
         body.addView(poster,new LinearLayout.LayoutParams(dp(156),dp(234)));
         LinearLayout info=new LinearLayout(a);info.setOrientation(LinearLayout.VERTICAL);info.setPadding(dp(24),0,0,0);body.addView(info,new LinearLayout.LayoutParams(0,-1,1));
         title=TvUi.label(a,"Loading title…",28,TvUi.TEXT,true);title.setMaxLines(2);info.addView(title);
-        subtitle=TvUi.label(a,"FlixMomo title information",12,TvUi.MINT,false);info.addView(subtitle);
+        subtitle=TvUi.label(a,"FlixMomo title information",12,TvUi.MINT,false);info.addView(subtitle);progress=new ProgressBar(a,null,android.R.attr.progressBarStyleHorizontal);progress.setIndeterminate(true);progress.setVisibility(GONE);info.addView(progress,new LinearLayout.LayoutParams(-1,dp(4)));
         LinearLayout row=new LinearLayout(a);watch=add(row,"Watch now",h::watch);watchlist=add(row,"Watchlist",h::watchlist);original=add(row,"Original page",h::original);back=add(row,"Back",h::back);info.addView(row);
         copy=new ScrollView(a);copy.setFillViewport(false);copy.setFocusable(true);copy.setId(View.generateViewId());copy.setSmoothScrollingEnabled(false);
         LinearLayout text=new LinearLayout(a);text.setOrientation(LinearLayout.VERTICAL);copy.addView(text);info.addView(copy,new LinearLayout.LayoutParams(-1,0,1));
@@ -48,11 +48,11 @@ class FilmDetailView extends FrameLayout {
     @Override public void setVisibility(int v){super.setVisibility(v);if(v==VISIBLE)shield();else restore();}
     private void shield(){if(page==null||getVisibility()!=VISIBLE||shielding)return;focusable=page.isFocusable();touchable=page.isFocusableInTouchMode();descendants=page.getDescendantFocusability();accessibility=page.getImportantForAccessibility();page.clearFocus();page.setDescendantFocusability(ViewGroup.FOCUS_BLOCK_DESCENDANTS);page.setFocusableInTouchMode(false);page.setFocusable(false);page.setImportantForAccessibility(IMPORTANT_FOR_ACCESSIBILITY_NO_HIDE_DESCENDANTS);shielding=true;}
     private void restore(){if(!shielding||page==null)return;page.setDescendantFocusability(descendants);page.setFocusable(focusable);page.setFocusableInTouchMode(touchable);page.setImportantForAccessibility(accessibility);shielding=false;}
-    void begin(String target,JSONObject card){url=target;title.setText(card==null?"Loading title…":FilmHomeView.readable(card.optString("title","Loading title…")));subtitle.setText("FlixMomo · reading this title’s details");synopsis.setText("Reading the provider’s description…");facts.setText("");status.setText("Loading details. Original page is available at any time.");watch.setEnabled(false);watchlist.setEnabled(false);image="";poster.setImageDrawable(null);if(card!=null)art(card.optString("image"));copy.scrollTo(0,0);setVisibility(VISIBLE);bringToFront();original.requestFocus();}
+    void begin(String target,JSONObject card){waiting=true;progress.setVisibility(VISIBLE);url=target;title.setText(card==null?"Loading title…":FilmHomeView.readable(card.optString("title","Loading title…")));subtitle.setText("FlixMomo · reading this title’s details");synopsis.setText("Reading the provider’s description…");facts.setText(card==null?"":card.optString("metadata"));status.setText("Loading this title from FlixMomo… Watch is enabled when its action is available.");watch.setEnabled(false);watchlist.setEnabled(false);image="";poster.setImageDrawable(null);if(card!=null)art(card.optString("image"));copy.scrollTo(0,0);setVisibility(VISIBLE);bringToFront();original.requestFocus();}
     void followNavigation(String target){if(FilmProviderPolicy.detail(Uri.parse(target)))url=target;}
     void render(JSONObject value){if(value==null||!FilmProviderPolicy.allowed(Uri.parse(value.optString("url"))))return;
         String current=Uri.parse(value.optString("url")).getPath(),expected=Uri.parse(url).getPath();if(current==null||expected==null||!current.replaceAll("/+$", "").equals(expected.replaceAll("/+$", "")))return;
-        String name=value.optString("title");if(name.length()<2||name.length()>180)return;title.setText(name);url=value.optString("url");
+        String name=value.optString("title");if(name.length()<2||name.length()>180)return;waiting=false;progress.setVisibility(GONE);title.setText(name);url=value.optString("url");
         String description=value.optString("synopsis");synopsis.setText(description.isEmpty()?"The provider has not supplied a readable description. Open Original page for the source view.":description);
         StringBuilder lines=new StringBuilder();JSONObject f=value.optJSONObject("facts");if(f!=null)for(String key:new String[]{"Type","Released","Duration","Genres","Language","Status","Provider rating"}){String s=f.optString(key);if(!s.isEmpty()&&s.length()<=180)lines.append(key).append("  ").append(s).append('\n');}
         facts.setText(lines.toString());subtitle.setText("Information supplied by FlixMomo · availability not independently verified");
@@ -63,7 +63,7 @@ class FilmDetailView extends FrameLayout {
     }
     private void art(String source){if(!FilmHomeView.safePoster(source)||source.equals(image))return;image=source;loadArtwork(poster,source);}
     void loadArtwork(ImageView target,String source){Glide.with(activity).load(source).override(312,468).centerCrop().diskCacheStrategy(DiskCacheStrategy.NONE).into(target);}
-    void unavailable(String reason){status.setText(reason+" Original page and Back remain available.");}
+    void unavailable(String reason){waiting=false;progress.setVisibility(GONE);status.setText(reason+" Original page and Back remain available.");}
     boolean handleRemote(KeyEvent e,View focused){int k=e.getKeyCode();if(k!=KeyEvent.KEYCODE_DPAD_LEFT&&k!=KeyEvent.KEYCODE_DPAD_RIGHT&&k!=KeyEvent.KEYCODE_DPAD_DOWN&&k!=KeyEvent.KEYCODE_DPAD_UP)return false;
         if(e.getAction()==KeyEvent.ACTION_UP)return true;if(e.getAction()!=KeyEvent.ACTION_DOWN)return false;
         if(copy.hasFocus()){

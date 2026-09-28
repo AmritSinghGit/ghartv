@@ -33,6 +33,7 @@ public final class RemoteWebCursor extends View {
     public void target(View view){cancel();target=view;}
     public void enable(boolean value){cancel();enabled=value;setVisibility(value?VISIBLE:INVISIBLE);invalidate();}
     public boolean enabled(){return enabled;}
+    public void center(){cancel();state.position(getWidth()/2f,getHeight()/2f);invalidate();}
     public void scrollMode(boolean value){cancel();scrollMode=value;invalidate();}
     public boolean scrolling(){return scrollMode;}
     public void enter(){if(enabled&&target!=null){setVisibility(VISIBLE);bringToFront();invalidate();}}
