@@ -187,7 +187,7 @@ final class FilmHomeView extends FrameLayout {
             String url=item.optString("url"),title=readable(item.optString("title")),meta=item.optString("metadata");
             LinearLayout card=new LinearLayout(activity);card.setOrientation(LinearLayout.VERTICAL);card.setPadding(dp(7),dp(7),dp(7),dp(8));
             TvUi.focusCard(card,TvUi.SURFACE,TvUi.SURFACE_3,12);card.setId(View.generateViewId());card.setDescendantFocusability(ViewGroup.FOCUS_BLOCK_DESCENDANTS);cards.add(card);card.setClickable(true);card.setContentDescription(title+". "+meta);card.setOnClickListener(v->host.open(url));
-            ImageView image=new ImageView(activity);image.setScaleType(ImageView.ScaleType.CENTER_CROP);image.setFocusable(false);image.setContentDescription(title+" poster");
+            ImageView image=new ImageView(activity);image.setImageDrawable(new ColorDrawable(TvUi.SURFACE_2));image.setScaleType(ImageView.ScaleType.CENTER_CROP);image.setFocusable(false);image.setContentDescription(title+" poster");
             card.addView(image,new LinearLayout.LayoutParams(-1,dp(166)));posterTasks.add(new PosterTask(image,item.optString("image")));
             TextView label=TvUi.label(activity,title,14,TvUi.TEXT,true);label.setMaxLines(2);label.setEllipsize(android.text.TextUtils.TruncateAt.END);card.addView(label,new LinearLayout.LayoutParams(-1,dp(40)));
             TextView metadata=TvUi.label(activity,meta.isEmpty()?"FlixMomo catalogue":meta.replace(item.optString("title"),"").trim(),11,TvUi.MUTED,false);metadata.setMaxLines(2);metadata.setEllipsize(android.text.TextUtils.TruncateAt.END);card.addView(metadata,new LinearLayout.LayoutParams(-1,dp(31)));
