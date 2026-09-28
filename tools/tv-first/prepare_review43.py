@@ -34,7 +34,7 @@ def prepare():
     private final List<PosterTask> posterTasks=new ArrayList<>();
     private boolean posterPass;
     private void schedulePosters(){
-        if(posterPass||posterTasks.isEmpty()||getVisibility()!=VISIBLE)return;
+        if(posterTasks==null||posterPass||posterTasks.isEmpty()||getVisibility()!=VISIBLE)return;
         posterPass=true;postOnAnimation(()->{posterPass=false;loadNearbyPosters();});
     }
     private void loadNearbyPosters(){

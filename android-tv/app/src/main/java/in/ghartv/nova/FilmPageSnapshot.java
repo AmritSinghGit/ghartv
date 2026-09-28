@@ -39,7 +39,8 @@ final class FilmPageSnapshot {
           return playerRead.choices.map(p=>({...p,...elements.get(p.id)}));
         }
         """).replace("__GHARTV_HOSTS__",FilmProviderPolicy.hostsJavascript());
-    static String read(){return "(()=>{"+CORE+FilmDetailSnapshot.JS+"""
+    static String read(){return FilmSnapshotCache.wrap(fullRead());}
+    static String fullRead(){return "(()=>{"+CORE+FilmDetailSnapshot.JS+"""
         const results=[],seen=new Set();
         Array.from(document.querySelectorAll('a[href]')).slice(0,900).forEach(a=>{
           if(results.length>=60||!visible(a))return;

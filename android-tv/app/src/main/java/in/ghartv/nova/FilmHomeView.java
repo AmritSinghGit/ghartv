@@ -46,10 +46,36 @@ final class FilmHomeView extends FrameLayout {
     private boolean savedFocusable,savedTouchFocusable;
     private int savedDescendants,savedAccessibility;
     private boolean pageBlocked;
+    private static final class PosterTask {
+        final ImageView view;final String url;boolean loaded;
+        PosterTask(ImageView view,String url){this.view=view;this.url=url;}
+    }
+    private final List<PosterTask> posterTasks=new ArrayList<>();
+    private boolean posterPass;
+    private void schedulePosters(){
+        if(posterTasks==null||posterPass||posterTasks.isEmpty()||getVisibility()!=VISIBLE)return;
+        posterPass=true;postOnAnimation(()->{posterPass=false;loadNearbyPosters();});
+    }
+    private void loadNearbyPosters(){
+        if(!isShown()||getHeight()==0)return;
+        int[] origin=new int[2],position=new int[2];getLocationInWindow(origin);
+        int top=origin[1]-dp(260),bottom=origin[1]+getHeight()+dp(260);
+        for(PosterTask task:posterTasks){
+            if(task.loaded||task.view.getHeight()==0)continue;
+            task.view.getLocationInWindow(position);
+            if(position[1]+task.view.getHeight()>=top&&position[1]<=bottom){task.loaded=true;loader.load(task.view,task.url);}
+        }
+    }
+    private void clearPosters(){
+        for(PosterTask task:posterTasks)if(task.loaded&&!activity.isDestroyed())Glide.with(activity).clear(task.view);
+        posterTasks.clear();
+    }
+    @Override protected void onSizeChanged(int w,int h,int oldw,int oldh){super.onSizeChanged(w,h,oldw,oldh);schedulePosters();}
+
 
     void setToolbarAnchor(View anchor){toolbarAnchor=anchor;if(anchor.getId()==View.NO_ID)anchor.setId(View.generateViewId());wireFocus();}
     void bindUnderlyingPage(ViewGroup page){restorePage();underlyingPage=page;syncPageFocus();}
-    @Override public void setVisibility(int visibility){super.setVisibility(visibility);syncPageFocus();}
+    @Override public void setVisibility(int visibility){super.setVisibility(visibility);syncPageFocus();if(visibility==VISIBLE)schedulePosters();}
     private void syncPageFocus(){
         if(underlyingPage==null)return;
         if(getVisibility()==VISIBLE&&!pageBlocked){
@@ -118,6 +144,7 @@ final class FilmHomeView extends FrameLayout {
         setBackground(TvUi.gradient(0xff09282e,TvUi.BG,0,Color.TRANSPARENT,0,a));
         scroll=new ScrollView(a);scroll.setFocusable(false);scroll.setDescendantFocusability(ViewGroup.FOCUS_AFTER_DESCENDANTS);scroll.setSmoothScrollingEnabled(false);scroll.setFillViewport(true);addView(scroll,new FrameLayout.LayoutParams(-1,-1));
         content=new LinearLayout(a);content.setOrientation(LinearLayout.VERTICAL);content.setPadding(dp(24),dp(18),dp(24),dp(24));scroll.addView(content);
+        scroll.getViewTreeObserver().addOnScrollChangedListener(this::schedulePosters);
         heading=TvUi.label(a,"Your next watch.",30,TvUi.TEXT,true);content.addView(heading);
         content.addView(TvUi.label(a,"Suggestions by FlixMomo · GharTV Review "+BuildConfig.VERSION_CODE,13,TvUi.MINT,true));
         TextView info=TvUi.label(a,"Search above for live channels, films and series. Browse below with your remote.",14,TvUi.MUTED,false);info.setPadding(0,dp(8),0,dp(10));content.addView(info);
@@ -147,11 +174,12 @@ final class FilmHomeView extends FrameLayout {
             allowed.add(item);
         }
         if(allowed.isEmpty()){unavailable("The current page has not supplied any readable poster suggestions yet.");return;}
-        lastCards.clear();lastCards.addAll(allowed);
+
         String next=allowed.toString();if(identity.equals(next)){status.setText(cardCount+" suggestions supplied by FlixMomo · availability is not verified");return;}
         // Do not reset a user's focus while they are browsing an already-rendered set.
         if(grid.hasFocus()&&cardCount>0){status.setText("Browsing "+cardCount+" suggestions · Refresh loads the latest set");return;}
-        identity=next;grid.removeAllViews();cards.clear();cardCount=0;
+        lastCards.clear();lastCards.addAll(allowed);
+        identity=next;clearPosters();grid.removeAllViews();cards.clear();cardCount=0;
         columns=activity.getResources().getConfiguration().screenWidthDp>=900?5:4;
         LinearLayout row=null;
         for(JSONObject item:allowed){
@@ -160,15 +188,15 @@ final class FilmHomeView extends FrameLayout {
             LinearLayout card=new LinearLayout(activity);card.setOrientation(LinearLayout.VERTICAL);card.setPadding(dp(7),dp(7),dp(7),dp(8));
             TvUi.focusCard(card,TvUi.SURFACE,TvUi.SURFACE_3,12);card.setId(View.generateViewId());card.setDescendantFocusability(ViewGroup.FOCUS_BLOCK_DESCENDANTS);cards.add(card);card.setClickable(true);card.setContentDescription(title+". "+meta);card.setOnClickListener(v->host.open(url));
             ImageView image=new ImageView(activity);image.setScaleType(ImageView.ScaleType.CENTER_CROP);image.setFocusable(false);image.setContentDescription(title+" poster");
-            card.addView(image,new LinearLayout.LayoutParams(-1,dp(166)));loader.load(image,item.optString("image"));
+            card.addView(image,new LinearLayout.LayoutParams(-1,dp(166)));posterTasks.add(new PosterTask(image,item.optString("image")));
             TextView label=TvUi.label(activity,title,14,TvUi.TEXT,true);label.setMaxLines(2);label.setEllipsize(android.text.TextUtils.TruncateAt.END);card.addView(label,new LinearLayout.LayoutParams(-1,dp(40)));
             TextView metadata=TvUi.label(activity,meta.isEmpty()?"FlixMomo catalogue":meta.replace(item.optString("title"),"").trim(),11,TvUi.MUTED,false);metadata.setMaxLines(2);metadata.setEllipsize(android.text.TextUtils.TruncateAt.END);card.addView(metadata,new LinearLayout.LayoutParams(-1,dp(31)));
             LinearLayout.LayoutParams p=new LinearLayout.LayoutParams(0,dp(260),1);p.setMargins(dp(4),dp(4),dp(4),dp(4));row.addView(card,p);cardCount++;
         }
         if(row!=null&&cardCount%columns!=0)for(int n=cardCount%columns;n<columns;n++)row.addView(new View(activity),new LinearLayout.LayoutParams(0,1,1));
-        wireFocus();
+        wireFocus();schedulePosters();
         status.setText(cardCount+" suggestions supplied by FlixMomo · availability is not verified");
     }
     static String readable(String text){String s=text.trim();if(s.indexOf(' ')>=0)return s;String[] words=s.replace('-',' ').replace('_',' ').split(" ");StringBuilder result=new StringBuilder();for(String word:words){if(word.isEmpty())continue;if(result.length()>0)result.append(' ');result.append(Character.toUpperCase(word.charAt(0))).append(word.substring(1));}return result.toString();}
-    void discardSuggestions(){boolean focused=grid.hasFocus();identity="";cardCount=0;lastCards.clear();grid.removeAllViews();cards.clear();wireFocus();if(focused)focusRefresh();}
+    void discardSuggestions(){boolean focused=grid.hasFocus();identity="";cardCount=0;lastCards.clear();clearPosters();grid.removeAllViews();cards.clear();wireFocus();if(focused)focusRefresh();}
 }
