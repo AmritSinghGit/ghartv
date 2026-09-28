@@ -27,17 +27,17 @@ jobs:
           python - <<'PY'
           import hashlib,json,os,subprocess,tempfile
           from pathlib import Path
-          root=Path.cwd();parts=sorted(root.glob('tools/tv-first/review41.patch.*'))
+          root=Path.cwd();parts=sorted(root.glob('tools/tv-first/review42.patch.*'))
           def git(*a):return subprocess.check_output(['git',*a],text=True).strip()
           if parts:
-            assert len(parts)==4
+            assert len(parts)==3
             patch=''.join(p.read_text() for p in parts).encode()
-            assert hashlib.sha256(patch).hexdigest()=='9674b6e8ccccc8323db99a80170052c70d90ddb50eaf6548328829d97ff0e0aa'
-            manifest=root/'tools/tv-first/review41-files.json';records=json.loads(manifest.read_text());assert len(records)==11
+            assert hashlib.sha256(patch).hexdigest()=='d0b808a2619212d4969c20a9af0645711173dd2c2ee657dde7618ee0e916b1c9'
+            manifest=root/'tools/tv-first/review42-files.json';records=json.loads(manifest.read_text());assert len(records)==16
             for item in records:
               name=item['path'];p=root/name
               assert not name.startswith('/') and '..' not in Path(name).parts and not p.is_symlink()
-              assert name.startswith(('android-tv/','tools/tv-first/','tools/provider-access/')) or name=='REVIEW41.md'
+              assert name.startswith(('android-tv/','tools/tv-first/','tools/provider-access/')) or name=='REVIEW42.md'
               assert (hashlib.sha256(p.read_bytes()).hexdigest() if p.is_file() else None)==item['before'],name+' changed; preserved'
             with tempfile.NamedTemporaryFile() as f:
               f.write(patch);f.flush();subprocess.run(['git','apply','--check','--unidiff-zero',f.name],check=True)
@@ -52,7 +52,7 @@ jobs:
             assert set(git('diff','--cached','--name-only').splitlines())==set(paths)
             subprocess.run(['git','config','user.name','GharTV verified source expansion'],check=True)
             subprocess.run(['git','config','user.email','41898282+github-actions[bot]@users.noreply.github.com'],check=True)
-            subprocess.run(['git','commit','-m','fix(ghartv): Review41 scoped TLS cancellation and consented diagnostic delivery'],check=True)
+            subprocess.run(['git','commit','-m','fix(ghartv): Review42 media start, native controls, real metadata and bounded clock preflight'],check=True)
             subprocess.run(['git','push','origin','HEAD:refs/heads/codex/ghartv-remove-auto-preview'],check=True)
           source=git('rev-parse','HEAD')
           with open(os.environ['GITHUB_OUTPUT'],'a') as f:f.write('source_sha='+source+'\n')
@@ -74,6 +74,7 @@ jobs:
           python tools/tv-first/check_contract.py
           python tools/provider-access/generate_android_players.py --check
           node --test tools/provider-access/player-options.test.mjs
+          python tools/tv-first/test_review_clock.py
           mkdir -p "$RUNNER_TEMP/nova-contract"
           javac -d "$RUNNER_TEMP/nova-contract" android-tv/app/src/main/java/in/ghartv/nova/PreviewGate.java tools/tv-first/PreviewGateSmoke.java android-tv/app/src/main/java/in/ghartv/nova/RemoteCursorState.java tools/tv-first/RemoteCursorSmoke.java
           java -cp "$RUNNER_TEMP/nova-contract" PreviewGateSmoke
@@ -111,7 +112,7 @@ jobs:
           cd android-tv
           chmod +x gradlew
           ./gradlew --no-daemon --max-workers=2 assembleRelease assembleDebug assembleDebugAndroidTest
-          cp app/build/outputs/apk/release/app-release-unsigned.apk /tmp/ghartv-candidate/GharTV-code41-review-unsigned.apk
+          cp app/build/outputs/apk/release/app-release-unsigned.apk /tmp/ghartv-candidate/GharTV-code42-review-unsigned.apk
       - name: Isolated Android36 test device, not the owner runtime
         run: |
           set -euo pipefail
@@ -146,14 +147,14 @@ jobs:
           set -euo pipefail
           adb -s emulator-5580 install -r android-tv/app/build/outputs/apk/debug/app-debug.apk
           adb -s emulator-5580 install -r android-tv/app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk
-          adb -s emulator-5580 shell am instrument -w -r -e class in.ghartv.nova.RemoteWebCursorTest,in.ghartv.nova.FilmNativeControlsTest,in.ghartv.nova.DiscoverExperienceTest,in.ghartv.nova.Review38RegressionTest,in.ghartv.nova.Review39ExperienceTest,in.ghartv.nova.Review40PlaybackTest,in.ghartv.nova.Review41ConnectionTelemetryTest in.ghartv.nova.test/androidx.test.runner.AndroidJUnitRunner | tee /tmp/ghartv-candidate/proof/android-tests.txt
-          grep -q 'OK (88 tests)' /tmp/ghartv-candidate/proof/android-tests.txt
+          adb -s emulator-5580 shell am instrument -w -r -e class in.ghartv.nova.RemoteWebCursorTest,in.ghartv.nova.FilmNativeControlsTest,in.ghartv.nova.DiscoverExperienceTest,in.ghartv.nova.Review38RegressionTest,in.ghartv.nova.Review39ExperienceTest,in.ghartv.nova.Review40PlaybackTest,in.ghartv.nova.Review41ConnectionTelemetryTest,in.ghartv.nova.Review42RegressionTest in.ghartv.nova.test/androidx.test.runner.AndroidJUnitRunner | tee /tmp/ghartv-candidate/proof/android-tests.txt
+          grep -q 'OK (100 tests)' /tmp/ghartv-candidate/proof/android-tests.txt
           adb -s emulator-5580 pull /sdcard/Android/data/in.ghartv.nova/files/review40-owned-playback-fixture.png /tmp/ghartv-candidate/proof/retained-owned-playback.png
-      - name: Package compiled41 with the unchanged original signing and runtime flow
-        run: python tools/tv-first/package_review41.py
+      - name: Package compiled42 with the unchanged original signing and runtime flow
+        run: python tools/tv-first/package_review42.py
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: ghartv-code41-owner-review
+          name: ghartv-code42-owner-review
           path: /tmp/ghartv-candidate/
           retention-days: 14

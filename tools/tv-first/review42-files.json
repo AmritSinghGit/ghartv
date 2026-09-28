@@ -1,0 +1,18 @@
+[
+  {"path":"REVIEW42.md","before":null,"after":"a047910c642add10b92cea8c985d4ce7c325a5aead1f638cc57ef662d32fb32f"},
+  {"path":"android-tv/app/build.gradle.kts","before":"4412419fa6ac09a83a7e6dee707f1193b7dabb22576b3129003a88ea78451ee1","after":"d31c69b296cd460a0039b25a3665822b71cc654085c4edcf5279ce1d609637a3"},
+  {"path":"android-tv/app/src/androidTest/java/in/ghartv/nova/Review42RegressionTest.java","before":null,"after":"728d38b9056ef5ba2efbcf1c53de9f56704f6e917888d4c4ce7aa6b2cc257aaa"},
+  {"path":"android-tv/app/src/debug/AndroidManifest.xml","before":"474fcb1f09aa876ef913f410c2bcfe9f10901a18a887921ff00f0891f7acd3da","after":"8de75fac348be61dd48d9ee1aec04c05f733dc8f1586e31278d2a932ad070936"},
+  {"path":"android-tv/app/src/debug/java/in/ghartv/nova/Review40HarnessActivity.java","before":"39545ee2e06dcab4b34a00e9fa14a869f3137103a87883c0f28520e67e0c0e96","after":"fd05300051a40d48298e4c725c6beba79fbb544862531e3c89a82ecc643238e1"},
+  {"path":"android-tv/app/src/debug/java/in/ghartv/nova/Review42HarnessActivity.java","before":null,"after":"e20b6e479ca845bfea29fa9c976708ca270acf36007de726942d4e64a000885d"},
+  {"path":"android-tv/app/src/main/java/in/ghartv/nova/FilmDetailSnapshot.java","before":"6c32e27acd40afb6c2c557327ea8a84cc2700a36b71c153277cadbb6bf282626","after":"d6b6cd3de7e2602e85639a81132ebf2f63cd104dc859afe44a892e874c1c7e2d"},
+  {"path":"android-tv/app/src/main/java/in/ghartv/nova/FilmNativeControls.java","before":"b95efe3481fec8e6dd35dd4e2a28670e91cf5bd8d7766bbe61902ef439ea7269","after":"2f0c081e4488af3add2aba33d7e939f6ce392acba72352e8e456d732136978d6"},
+  {"path":"android-tv/app/src/main/java/in/ghartv/nova/FilmPageFocus.java","before":"de0e3488c804db78b6a26454701e358e6dbde3d965e04d97ccc13a2dc27770b5","after":"d76f395f21ae4a1bf626e6731990606f648e7c35a7e77c84894adbb237e43ad4"},
+  {"path":"android-tv/app/src/main/java/in/ghartv/nova/FlixMomoActivity.java","before":"9e40e445f1a5016cdb101cade3c2507f5b3fe78e689a91d7e8bfa3d3b56a82c1","after":"3c1dd5bab2c6fcaa98ba3a6fb50a871f06f587d3080a278b4aaf1f73ac8ca82b"},
+  {"path":"android-tv/app/src/main/java/in/ghartv/nova/NetworkDiagnostics.java","before":"4f174d03e1bbc6a95bedc6206e50152b60760bb4dffd35621801e26d39988a1c","after":"376d785e9ab28edcfdd5d614b00abbe3b403ed1275c8694519fba557377ff077"},
+  {"path":"android-tv/app/src/main/java/in/ghartv/nova/NetworkFailure.java","before":"c46ce548e17980cc51ebeb6cf01e6d009645dcd450d1b299c376294899ca8e89","after":"20803a039570f90064c96d01f0791e65ce772bccfb1237da949196563640962e"},
+  {"path":"tools/tv-first/check_contract.py","before":"8cf00dd58e16c52fc3b89f5f28da009cadca8840ef12b50c94f155269840200d","after":"b8cb0434dd85f6ec9463066f5dc4798eb3d2c2e76f0008878a1c49e9503fb4a2"},
+  {"path":"tools/tv-first/package_review42.py","before":null,"after":"0d66f174f3f62f735258a95321de0abc20df786214afba1cb7359bd0a670b6a6"},
+  {"path":"tools/tv-first/review_clock.py","before":null,"after":"6a1e0c79ff6549a997cbc922db539ff60837a57e3abcb4c3f7f52ca86aa88300"},
+  {"path":"tools/tv-first/test_review_clock.py","before":null,"after":"6574dc55d7147203e4bad7f2112362c984be840db3668b02cf312ce3cbcc75b7"}
+]

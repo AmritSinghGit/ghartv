@@ -1,0 +1,225 @@
+--- /dev/null
++++ b/tools/tv-first/package_review42.py
+@@ -0,0 +1,69 @@
++"""CI-only packaging of the existing owner opener. No owner runtime actions here."""
++import ast,base64,hashlib,io,json,os,subprocess,sys,tempfile,types,zipfile
++from pathlib import Path
++root=Path('/tmp/ghartv-candidate');source=subprocess.check_output(['git','rev-parse','HEAD'],text=True).strip()
++apk=root/'GharTV-code42-review-unsigned.apk';digest=lambda b:hashlib.sha256(b).hexdigest();apk_hash=digest(apk.read_bytes());archive=root/'GHARTV_CODE42_SOURCE.zip'
++with zipfile.ZipFile(archive,'w',zipfile.ZIP_DEFLATED) as z:
++    for raw in subprocess.check_output(['git','ls-files','-z']).split(b'\0'):
++        if not raw:continue
++        name=raw.decode()
++        if Path(name).suffix.lower() not in ('.woff','.woff2','.ttf','.otf'):z.writestr(name,subprocess.check_output(['git','show','HEAD:'+name]))
++zip_hash=digest(archive.read_bytes());buf=io.BytesIO()
++with zipfile.ZipFile(buf,'w',zipfile.ZIP_DEFLATED) as z:z.writestr(apk.name,apk.read_bytes());z.writestr(archive.name,archive.read_bytes())
++bundle=buf.getvalue();old=Path('GHARTV_OPEN_REVIEW.command').read_text();start=old.index("SOURCE='39363ee");end=old.index('SOURCE_ASSET=',start)
++header=("SOURCE="+repr(source)+"\nCODE=42\nVERSION='0.6.0-rc12.3-playback-focus-clock-review'\nAPK_SHA="+repr(apk_hash)+"\nZIP_SHA="+repr(zip_hash)+"\nCERT='40a9d8bf6b1c557b3d6fd02acef075368dd13e28691f207a297202d0d5ec233c'\nTAG='OWNER_REVIEW42_BUNDLED_NOT_PUBLIC_RELEASE'\nif sys.argv[1:] not in ([], ['--candidate','42']):\n    print('Compiled Review42 only. Use --candidate 42. Household publication is not part of review.')\n    raise SystemExit(2)\n")
++entry=(old[:start]+header+old[end:]).replace('import ast, datetime','import base64, ast, datetime',1)
++marker='def artifact(name,sha,tag=TAG):\n'
++block='''    if name in (APK_ASSET,SOURCE_ASSET) and tag==TAG:
++        expected=APK_SHA if name==APK_ASSET else ZIP_SHA
++        if sha!=expected:raise Hold('BUNDLED_ARTIFACT_IDENTITY_MISMATCH')
++        mkdir(CACHE);dest=safe(CACHE/sha)
++        if dest.exists():
++            if not dest.is_file() or digest(dest)!=sha:raise Hold('CACHE_BYTES_CHANGED_PRESERVED')
++            return dest
++        raw=base64.b64decode(BUNDLE_B64,validate=True)
++        if hashlib.sha256(raw).hexdigest()!=BUNDLE_SHA:raise Hold('BUNDLED_REVIEW_CHECKSUM_FAILED')
++        with zipfile.ZipFile(io.BytesIO(raw)) as z:data=z.read(name)
++        if hashlib.sha256(data).hexdigest()!=sha:raise Hold('BUNDLED_FILE_CHECKSUM_FAILED')
++        atomic(dest,data);return dest
++'''
++assert entry.count(marker)==1
++entry=entry.replace(marker,'BUNDLE_SHA='+repr(digest(bundle))+'\nBUNDLE_B64='+repr(base64.b64encode(bundle).decode())+'\n\n'+marker+block)
++# A narrowly bounded preflight on the same named emulator, before Jio starts.
++anchor="    call([adb,'-s',SERIAL,'shell','input','keyevent','KEYCODE_WAKEUP'],10)"
++clock="""    clock_helper=source_module(z,'tools/tv-first/review_clock.py')
++    clock_result=clock_helper.reconcile(adb,SERIAL,AVD,call)
++    R['emulator_clock']=clock_result
++    atomic(RUN/'EMULATOR_CLOCK.json',json.dumps(clock_result,indent=2).encode())
++    print('TV clock: '+clock_result['state']+'; measured offset '+str(clock_result.get('offset_before_seconds','unknown'))+' seconds',flush=True)
++    if clock_result.get('changed') and not R.get('apk_installed_this_run'):
++        call([adb,'-s',SERIAL,'shell','am','force-stop',PACKAGE],10)
++        R['app_restarted_after_clock_correction']=True
++    probe_id='REVIEW42_'+str(int(time.time()))
++"""
++assert entry.count(anchor)==1
++entry=entry.replace(anchor,clock+anchor)
++old_start="result=call([adb,'-s',SERIAL,'shell','am','start','-W','-n',PACKAGE+'/.MainActivity'],30)"
++new_start="result=call([adb,'-s',SERIAL,'shell','am','start','-W','-n',PACKAGE+'/.MainActivity','--es','ghartv_network_probe',probe_id],30)"
++assert entry.count(old_start)==1;entry=entry.replace(old_start,new_start)
++anchor="    R['emulator']='RC'+str(CODE)+'_INSTALLED_BYTES_VERIFIED_AND_FOREGROUND'"
++entry=entry.replace(anchor,"    network=clock_helper.capture_probe(adb,call,probe_id)\n    R['network_probe_status']=network.get('status',network.get('state','UNKNOWN'))\n    for item in network.get('checks',[]): print(item.get('service','service')+': '+item.get('dns','unknown')+' / '+item.get('https','unknown')+' '+item.get('tls_reason',''),flush=True)\n    atomic(RUN/'NETWORK_PROBE.json',json.dumps(network,indent=2).encode())\n"+anchor)
++def rawcode(t):return t.split("<<'PY'\n",1)[1].rsplit('\nPY\n',1)[0]
++def funcs(t):return {n.name:ast.dump(n,include_attributes=False) for n in ast.parse(rawcode(t)).body if isinstance(n,ast.FunctionDef)}
++a,b=funcs(old),funcs(entry);assert a.keys()==b.keys();assert all(a[k]==b[k] for k in a if k not in ('artifact','android_review'))
++command=root/'GHARTV_OPEN_REVIEW.command';command.write_text(entry);subprocess.run(['bash','-n',command],check=True)
++for args in ([],['--candidate','42']):
++    sys.argv=['entry']+args;m=types.ModuleType('entry_check');exec(compile(rawcode(entry),'entry','exec'),m.__dict__);assert m.CODE==42 and m.SOURCE==source
++    with tempfile.TemporaryDirectory() as temp:
++        m.CACHE=Path(temp).resolve();assert m.digest(m.artifact(m.APK_ASSET,m.APK_SHA))==apk_hash;assert m.digest(m.artifact(m.SOURCE_ASSET,m.ZIP_SHA))==zip_hash
++for args in (['--candidate','41'],['--candidate','38'],['--publish']):
++    sys.argv=['entry']+args
++    try:exec(compile(rawcode(entry),'entry','exec'),{'__name__':'not_main'});raise AssertionError('Old/publication mode accepted')
++    except SystemExit as e:assert e.code==2
++manifest={'schema':'ghartv.owner-review42.v1','source':source,'version_code':42,'version':'0.6.0-rc12.3-playback-focus-clock-review','apk':apk.name,'apk_bytes':apk.stat().st_size,'apk_sha256':apk_hash,'source_archive_sha256':zip_hash,'entry_sha256':digest(command.read_bytes()),'entry_bytes':command.stat().st_size,'precompiled':True,'original_local_signing_required':True,'public_release':'HELD','public_feed_changed':False}
++(root/'CANDIDATE.json').write_text(json.dumps(manifest,indent=2)+'\n')
++validation={'schema':'ghartv.review42-validation.v1','source':source,'actual_android_tests_passed':100,'retained_review41_tests':88,'new_review42_tests':12,'all_failed_certificates_cancelled':True,'subresource_scope_preserves_document':True,'complete_collector_ack_required':True,'opt_out_preserved':True,'test_content':'OWNED_LOCAL_PAGES_VIDEO_AND_INTERCEPTED_COLLECTOR_RESPONSES','production_events_injected':False,'authenticated_collector_export_read':False,'owner_mac_or_tv_run':False,'live_provider_playback':False,'analytics_runtime_deployed':False,'same_original_signer_and_tab_functions':True,'android_review_added_bounded_clock_and_network_preflight':True,'public38_unchanged':True,'workflow_run':os.environ['GITHUB_RUN_ID']}
++(root/'VALIDATION.json').write_text(json.dumps(validation,indent=2)+'\n')
++(root/'REVIEW42.md').write_bytes(Path('REVIEW42.md').read_bytes())
++(root/'SHA256SUMS').write_text(''.join(digest(p.read_bytes())+'  '+p.name+'\n' for p in sorted(root.iterdir()) if p.is_file() and p.name!='SHA256SUMS'))
++print(json.dumps(manifest));print(json.dumps(validation))
+--- /dev/null
++++ b/tools/tv-first/review_clock.py
+@@ -0,0 +1,101 @@
++"""Clock preflight for the already-selected GharTV emulator, never a physical TV.
++
++No root, trust-store changes, DNS changes, new emulator or host clock writes.
++The existing opener calls this after its normal AVD identity check.
++"""
++import datetime as dt
++import email.utils
++import json
++import time
++import urllib.request
++
++SERIAL = 'emulator-5580'
++AVD = 'GharTV_Nova_Manual_google_tv_API36'
++REFERENCE_URLS = ('https://api.github.com/repos/AmritSinghGit/ghartv',
++                  'https://ghartv-telemetry.ghartv-47d9a0.workers.dev/health')
++
++class NoRedirect(urllib.request.HTTPRedirectHandler):
++    def redirect_request(self, *args, **kwargs):
++        return None
++
++def reference_time():
++    """Require two HTTPS Date headers to agree with each other AND the Mac."""
++    refs=[]
++    opener=urllib.request.build_opener(NoRedirect())
++    for url in REFERENCE_URLS:
++        started=time.monotonic()
++        request=urllib.request.Request(url+'?ghartv_clock='+str(time.time_ns()),
++            headers={'Cache-Control':'no-cache','User-Agent':'GharTV-owner-clock-preflight/42'})
++        with opener.open(request,timeout=7) as response:
++            if response.status!=200:raise ValueError('REFERENCE_UNAVAILABLE')
++            if int(response.headers.get('Age','0'))>30:raise ValueError('REFERENCE_STALE')
++            value=email.utils.parsedate_to_datetime(response.headers['Date']).timestamp()
++            if time.monotonic()-started>10:raise ValueError('REFERENCE_TOO_SLOW')
++            refs.append((value,time.monotonic()))
++    now=time.monotonic()
++    epochs=[v+now-m for v,m in refs]
++    midpoint=sum(epochs)/2
++    if max(epochs)-min(epochs)>60 or abs(midpoint-time.time())>120:
++        raise ValueError('MAC_CLOCK_NOT_CORROBORATED')
++    return midpoint
++
++def reconcile(adb, serial, avd, call, reference=reference_time):
++    result={'schema':'ghartv.emulator-clock.v1','state':'NOT_CHECKED','changed':False,
++            'physical_tv_touched':False,'certificate_checks_changed':False}
++    if serial!=SERIAL or avd!=AVD:
++        result['state']='TARGET_REJECTED';return result
++    def shell(*args):return call([adb,'-s',serial,'shell',*args],10,False)
++    try:
++        name=call([adb,'-s',serial,'emu','avd','name'],8,False)
++        names=[s.strip() for s in name.stdout.splitlines() if s.strip() not in ('','OK')]
++        if name.returncode!=0 or names!=[AVD] or shell('getprop','ro.kernel.qemu').stdout.strip()!='1':
++            result['state']='TARGET_REJECTED';return result
++        read=shell('date','+%s')
++        if read.returncode!=0 or not read.stdout.strip().isdigit():
++            result['state']='TV_CLOCK_UNREADABLE';return result
++        before=int(read.stdout.strip());host=time.time();skew=round(before-host)
++        result.update(offset_before_seconds=skew,tv_epoch_before=before,host_epoch_observed=int(host))
++        if abs(skew)<=120:
++            result['state']='CLOCK_ALIGNED';return result
++        # Do not auto-rewrite a wildly different unknown date. Seven days covers
++        # resume/snapshot drift; anything larger needs explicit date review.
++        if abs(skew)>7*86400:
++            result['state']='CLOCK_REQUIRES_MANUAL_REVIEW';return result
++        try:target=reference()
++        except Exception:
++            result['state']='CLOCK_REFERENCE_UNVERIFIED_NO_CHANGE';return result
++        if abs(target-time.time())>120:
++            result['state']='CLOCK_REFERENCE_UNVERIFIED_NO_CHANGE';return result
++        result['reference']='TWO_HTTPS_DATES_AND_MAC_AGREE'
++        # Android's documented shell service, no adb root or permission changes.
++        write=shell('cmd','alarm','set-time',str(round(target*1000)))
++        result['set_time_exit']=write.returncode
++        if write.returncode!=0 or any(x in (write.stdout+write.stderr).lower() for x in ('exception','denied','not permitted','unable','failed','unknown command')):
++            result['state']='CLOCK_SET_NOT_PERMITTED';return result
++        checked=shell('date','+%s')
++        if checked.returncode!=0 or not checked.stdout.strip().isdigit():
++            result['state']='CLOCK_READBACK_REQUIRED';return result
++        result['offset_after_seconds']=round(int(checked.stdout.strip())-time.time())
++        result['changed']=abs(result['offset_after_seconds'])<=10
++        result['state']='EMULATOR_CLOCK_CORRECTED' if result['changed'] else 'CLOCK_READBACK_FAILED'
++        return result
++    except Exception:
++        result['state']='CLOCK_CHECK_FAILED';return result
++
++def capture_probe(adb, call, probe_id):
++    """Read only this app's fixed-schema diagnostic tag; no system-wide log export."""
++    if not probe_id.startswith('REVIEW42_') or not probe_id.replace('_','').isalnum():
++        return {'state':'PROBE_ID_REJECTED'}
++    pid=call([adb,'-s',SERIAL,'shell','pidof','in.ghartv.nova'],8,False).stdout.strip()
++    if not pid.isdigit():return {'state':'APP_PID_NOT_CONFIRMED'}
++    for _ in range(7):
++        log=call([adb,'-s',SERIAL,'logcat','-d','-v','raw','--pid='+pid,'-t','60','-s','GharTVNetwork:I','*:S'],8,False)
++        for line in reversed(log.stdout.splitlines()):
++            if not line.startswith('GHNET_V1 ') or len(line)>16000:continue
++            try:
++                row=json.loads(line[9:])
++                if row.get('probe_id')==probe_id and row.get('schema')=='ghartv.network-probe.v1':
++                    return row
++            except (ValueError,TypeError):pass
++        time.sleep(2)
++    return {'state':'APP_NETWORK_PROBE_NOT_RECEIVED'}
+--- /dev/null
++++ b/tools/tv-first/test_review_clock.py
+@@ -0,0 +1,46 @@
++import importlib.util
++import subprocess
++import time
++import unittest
++from pathlib import Path
++spec=importlib.util.spec_from_file_location('review_clock',Path(__file__).with_name('review_clock.py'));clock=importlib.util.module_from_spec(spec);spec.loader.exec_module(clock)
++
++class Fake:
++    def __init__(self,offset=0,physical=False,denied=False):self.epoch=time.time()+offset;self.physical=physical;self.denied=denied;self.calls=[]
++    def __call__(self,args,timeout=10,check=False):
++        self.calls.append([str(x) for x in args]);out='';code=0;err=''
++        if args[-3:]==['emu','avd','name']:out=clock.AVD+'\nOK\n'
++        elif args[-2:]==['getprop','ro.kernel.qemu']:out='0' if self.physical else '1'
++        elif args[-2:]==['date','+%s']:out=str(int(self.epoch))+'\n'
++        elif 'set-time' in args:
++            if self.denied:code=1;err='Permission denied'
++            else:self.epoch=int(args[-1])/1000
++        return subprocess.CompletedProcess(args,code,out,err)
++    def writes(self):return [a for a in self.calls if 'set-time' in a]
++class ClockCases(unittest.TestCase):
++    def run_clock(self,f,**kw):return clock.reconcile('/sdk/adb',kw.get('serial',clock.SERIAL),kw.get('avd',clock.AVD),f,kw.get('reference',time.time))
++    def test_aligned_clock_not_mutated(self):
++        f=Fake();r=self.run_clock(f,reference=lambda:(_ for _ in ()).throw(AssertionError('should not probe')));self.assertEqual('CLOCK_ALIGNED',r['state']);self.assertFalse(f.writes())
++    def test_future_clock_corrected_and_read_back(self):
++        f=Fake(11*3600);r=self.run_clock(f);self.assertTrue(r['changed']);self.assertEqual(1,len(f.writes()));self.assertLess(abs(r['offset_after_seconds']),5)
++    def test_past_clock_corrected(self):
++        f=Fake(-13*3600);self.assertTrue(self.run_clock(f)['changed'])
++    def test_other_serial_never_called(self):
++        f=Fake(3600);self.assertEqual('TARGET_REJECTED',self.run_clock(f,serial='physical-device')['state']);self.assertEqual([],f.calls)
++    def test_other_avd_never_called(self):
++        f=Fake(3600);self.assertEqual('TARGET_REJECTED',self.run_clock(f,avd='Another_AVD')['state']);self.assertEqual([],f.calls)
++    def test_physical_properties_refused(self):
++        f=Fake(3600,physical=True);self.assertEqual('TARGET_REJECTED',self.run_clock(f)['state']);self.assertFalse(f.writes())
++    def test_refusal_does_not_escalate(self):
++        f=Fake(3600,denied=True);r=self.run_clock(f);self.assertEqual('CLOCK_SET_NOT_PERMITTED',r['state']);self.assertFalse(r['changed']);self.assertFalse(any('root' in a for a in f.calls))
++    def test_uncorroborated_host_refused(self):
++        f=Fake(3600);r=self.run_clock(f,reference=lambda:time.time()+3000);self.assertEqual('CLOCK_REFERENCE_UNVERIFIED_NO_CHANGE',r['state']);self.assertFalse(f.writes())
++    def test_missing_https_reference_no_change(self):
++        f=Fake(3600);r=self.run_clock(f,reference=lambda:(_ for _ in ()).throw(OSError('TLS')));self.assertFalse(r['changed']);self.assertFalse(f.writes())
++    def test_large_unknown_date_is_not_rewritten(self):
++        f=Fake(30*86400);self.assertEqual('CLOCK_REQUIRES_MANUAL_REVIEW',self.run_clock(f)['state']);self.assertFalse(f.writes())
++    def test_probe_id_rejected_before_logs(self):
++        f=Fake();self.assertEqual('PROBE_ID_REJECTED',clock.capture_probe('/sdk/adb',f,'../private')['state']);self.assertEqual([],f.calls)
++    def test_source_keeps_security_and_device_boundaries(self):
++        s=Path(clock.__file__).read_text();self.assertNotIn('CERT_NONE',s);self.assertNotIn('unverified_context',s);self.assertNotIn("'root'",s);self.assertNotIn('settings put',s);self.assertIn('NoRedirect',s)
++if __name__=='__main__':unittest.main()
