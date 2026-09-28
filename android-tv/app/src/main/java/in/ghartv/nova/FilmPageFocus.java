@@ -16,7 +16,7 @@ final class FilmPageFocus {
         // A focused video is not a text field. Let the already-requested media
         // action reach its existing single-visible-target checks below. Inputs,
         // editable content and ordinary navigation keep the editing behavior.
-        const focusedMediaAction=action==='media'&&active&&!active.isContentEditable&&/^(VIDEO|IFRAME)$/.test(active.tagName);
+        const focusedMediaAction=['media','activate'].includes(action)&&active&&!active.isContentEditable&&/^(VIDEO|IFRAME)$/.test(active.tagName);
         if(editing&&!focusedMediaAction&&!['watch','watchlist','scan','focus','commit'].includes(action))return pack({state:'EDITING'});
         const visible=e=>{let r=e.getBoundingClientRect(),s=getComputedStyle(e);return r.width>1&&r.height>1&&s.display!=='none'&&s.visibility!=='hidden'&&!e.disabled&&e.getAttribute('aria-disabled')!=='true';};
         const dialogs=Array.from(document.querySelectorAll('dialog[open],[role="dialog"],[aria-modal="true"]')).filter(visible);

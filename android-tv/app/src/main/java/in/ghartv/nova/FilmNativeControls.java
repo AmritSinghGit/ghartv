@@ -33,6 +33,9 @@ final class FilmNativeControls {
     private final ScrollView choiceView;
     private final LinearLayout choices,tray;
     private TextView state;
+    private Button playButton;
+    private final java.util.ArrayList<Button> trayButtons=new java.util.ArrayList<>();
+    private int mediaCandidates;
     private WebView browser;
     private JSONArray players=new JSONArray();
     private final Set<String> attempted=new HashSet<>();
@@ -45,7 +48,7 @@ final class FilmNativeControls {
     private int generation,probeCount;
     private boolean active=true,blocked,pending,selectedByViewer,reading,autoNext=true;
     private final Runnable probe=this::read;
-    private final Runnable hide=this::hideTray;
+    private final Runnable hide=()->{if(!ownsFocus())hideTray();};
     private final Runnable slow=()->{if(active&&selectedByViewer){state.setText("Still not playing? Choose Not playing to try another offered player.");showTray(false);}};
     FilmNativeControls(Activity a,FrameLayout stage,View chrome,Host host){
         activity=a;this.chrome=chrome;this.host=host;
@@ -54,14 +57,16 @@ final class FilmNativeControls {
         FrameLayout.LayoutParams cp=new FrameLayout.LayoutParams(dp(360),dp(250),Gravity.END|Gravity.BOTTOM);cp.setMargins(dp(12),dp(12),dp(12),dp(95));stage.addView(choiceView,cp);choiceView.setVisibility(View.GONE);
         tray=new LinearLayout(a);tray.setOrientation(LinearLayout.VERTICAL);tray.setPadding(dp(12),dp(8),dp(12),dp(8));tray.setBackground(TvUi.rounded(0xee071e29,12,TvUi.MINT,1,a));
         state=TvUi.label(a,"FlixMomo player controls · GharTV Review "+BuildConfig.VERSION_CODE,12,TvUi.TEXT,false);tray.addView(state);
-        LinearLayout row=new LinearLayout(a);add(row,"Play",this::playDefault);add(row,"Players",this::showPlayers);add(row,"Watchlist",()->host.pageAction("watchlist"));add(row,"Not playing",()->next(true));
+        LinearLayout row=new LinearLayout(a);playButton=add(row,"Play",this::playDefault);add(row,"Players",this::showPlayers);add(row,"Watchlist",()->host.pageAction("watchlist"));add(row,"Not playing",()->next(true));
         add(row,"Search",()->{hideAll();host.searchToolbar();});add(row,"Use page",()->{hideAll();host.usePage();});add(row,"Hide",this::hideTray);tray.addView(row);
+        for(int i=0;i<row.getChildCount();i++){Button b=(Button)row.getChildAt(i);b.setId(View.generateViewId());b.setLayoutParams(new LinearLayout.LayoutParams(0,dp(48),1));trayButtons.add(b);}
+        for(int i=0;i<trayButtons.size();i++){Button b=trayButtons.get(i);b.setNextFocusLeftId(trayButtons.get(Math.max(0,i-1)).getId());b.setNextFocusRightId(trayButtons.get(Math.min(trayButtons.size()-1,i+1)).getId());b.setNextFocusUpId(b.getId());b.setNextFocusDownId(b.getId());}
         FrameLayout.LayoutParams tp=new FrameLayout.LayoutParams(-1,-2,Gravity.BOTTOM);tp.setMargins(dp(10),dp(8),dp(10),dp(10));stage.addView(tray,tp);tray.setVisibility(View.GONE);
     }
     private int dp(int n){return TvUi.dp(activity,n);}
     private Button add(LinearLayout row,String title,Runnable click){Button b=TvUi.button(activity,title,false);b.setTextSize(13);b.setOnClickListener(v->{handler.removeCallbacks(hide);click.run();});row.addView(b);return b;}
     void attach(WebView web){pageActions.clear();posterActions.clear();pageBusy=false;browser=web;generation++;reading=false;posterBusy=false;postersReady=false;}
-    void started(){pageActions.clear();posterActions.clear();postersReady=false;posterBusy=false;playerTrayAnnounced=false;pageBusy=false;detailFocusApplied=false;generation++;handler.removeCallbacksAndMessages(null);reading=false;pending=false;blocked=false;probeCount=0;players=new JSONArray();snapshotUrl="";playerIdentity="";selectedByViewer=false;selected="";attempted.clear();choiceView.setVisibility(View.GONE);tray.setVisibility(View.GONE);}
+    void started(){pageActions.clear();posterActions.clear();postersReady=false;posterBusy=false;playerTrayAnnounced=false;mediaCandidates=0;pageBusy=false;detailFocusApplied=false;generation++;handler.removeCallbacksAndMessages(null);reading=false;pending=false;blocked=false;probeCount=0;players=new JSONArray();snapshotUrl="";playerIdentity="";selectedByViewer=false;selected="";attempted.clear();choiceView.setVisibility(View.GONE);tray.setVisibility(View.GONE);}
     void finished(){if(active&&!blocked){handler.removeCallbacks(probe);handler.post(probe);}}
     void failure(){pageActions.clear();posterActions.clear();pageBusy=false;postersReady=false;posterBusy=false;blocked=true;generation++;reading=false;pending=false;handler.removeCallbacksAndMessages(null);hideAll();chrome.setVisibility(View.VISIBLE);}
     void pause(){pageActions.clear();posterActions.clear();pageBusy=false;posterBusy=false;active=false;generation++;reading=false;handler.removeCallbacksAndMessages(null);}
@@ -71,10 +76,10 @@ final class FilmNativeControls {
     boolean visible(){return tray.getVisibility()==View.VISIBLE||choiceView.getVisibility()==View.VISIBLE;}
     boolean back(){if(choiceView.getVisibility()==View.VISIBLE){choiceView.setVisibility(View.GONE);showTray(true);return true;}if(tray.getVisibility()==View.VISIBLE){hideTray();return true;}return false;}
     void menu(){if(postersReady){hideAll();host.searchToolbar();}else showTray(true);}
-    void userInput(){if(tray.getVisibility()==View.VISIBLE){handler.removeCallbacks(hide);if(choiceView.getVisibility()!=View.VISIBLE)handler.postDelayed(hide,6000);}}
+    void userInput(){if(tray.getVisibility()==View.VISIBLE){handler.removeCallbacks(hide);if(choiceView.getVisibility()!=View.VISIBLE&&!ownsFocus())handler.postDelayed(hide,6000);}}
     void hideAll(){handler.removeCallbacks(hide);choiceView.setVisibility(View.GONE);tray.setVisibility(View.GONE);}
     private void hideTray(){if(choiceView.getVisibility()!=View.VISIBLE){tray.setVisibility(View.GONE);if(browser!=null&&host.pageIsVisible())browser.requestFocus();}}
-    private void showTray(boolean focus){if(!active||!host.pageIsVisible())return;tray.setVisibility(View.VISIBLE);tray.bringToFront();if(focus)((LinearLayout)tray.getChildAt(1)).getChildAt(0).requestFocus();handler.removeCallbacks(hide);if(choiceView.getVisibility()!=View.VISIBLE)handler.postDelayed(hide,6000);if(players.length()==0&&!blocked)finished();}
+    private void showTray(boolean focus){if(!active||!host.pageIsVisible())return;tray.setVisibility(View.VISIBLE);tray.bringToFront();if(focus)((LinearLayout)tray.getChildAt(1)).getChildAt(0).requestFocus();handler.removeCallbacks(hide);if(choiceView.getVisibility()!=View.VISIBLE&&!ownsFocus())handler.postDelayed(hide,6000);if(players.length()==0&&!blocked)finished();}
     private JSONObject decode(String raw) throws Exception {if(raw==null||raw.length()>131072)throw new IllegalArgumentException("Page result too large");Object value=new JSONTokener(raw).nextValue();if(!(value instanceof String))throw new IllegalArgumentException("No page snapshot");return new JSONObject((String)value);}
     private void read(){
         if(!active||blocked||reading||browser==null||probeCount>=14)return;String url=browser.getUrl();if(url==null||!FlixMomoActivity.allowedTop(Uri.parse(url)))return;
@@ -83,11 +88,11 @@ final class FilmNativeControls {
             if(!active||browser!=source||token!=generation)return;reading=false;
             try{
                 JSONObject data=decode(raw);if(!"SNAPSHOT".equals(data.optString("state"))){if("PROVIDER_VERIFICATION_REQUIRED".equals(data.optString("state"))){failure();host.navigationHint("Complete the provider verification on its page.");host.verificationRequired();}return;}
-                String actual=data.getString("url");if(!actual.equals(source.getUrl())||!FlixMomoActivity.allowedTop(Uri.parse(actual)))return;snapshotUrl=actual;host.pageObserved(data);
+                String actual=data.getString("url");if(!actual.equals(source.getUrl())||!FlixMomoActivity.allowedTop(Uri.parse(actual)))return;snapshotUrl=actual;mediaCandidates=data.optInt("mediaCandidates");host.pageObserved(data);
                 JSONArray found=data.optJSONArray("players");if(found!=null&&found.length()<=48){String identity=actual+":"+found.toString();players=found;detectedPlayers=data.optInt("playerDetectedCount",found.length());playerTruncated=data.optBoolean("playerTruncated");if(!identity.equals(playerIdentity)){playerIdentity=identity;if(choiceView.getVisibility()==View.VISIBLE)renderPlayers();}}
                 if(host.pageIsVisible()&&data.optBoolean("search"))enablePosters(actual);
-                else if(host.pageIsVisible()&&!detailFocusApplied&&source.hasFocus()){detailFocusApplied=true;pageAction("focus");}
-                if(!data.optBoolean("search")&&players.length()>0&&!playerTrayAnnounced&&!selectedByViewer){playerTrayAnnounced=true;state.setText(players.length()+" player choices detected"+(playerTruncated?" · partial list":"")+" · Menu opens controls");showTray(false);}
+                else if(host.pageIsVisible()&&players.length()==0&&!detailFocusApplied&&source.hasFocus()){detailFocusApplied=true;pageAction("focus");}
+                if(!data.optBoolean("search")&&players.length()>0&&!playerTrayAnnounced&&!selectedByViewer){playerTrayAnnounced=true;state.setText(players.length()+" player choices detected"+(playerTruncated?" · partial list":"")+" · Menu opens controls");showTray(!data.optBoolean("mediaPlaying"));}
                 if(selectedByViewer&&SystemClock.elapsedRealtime()-selectedAt>=5000&&autoNext&&data.optBoolean("mediaObservable")&&data.optInt("mediaError")>0&&!pending)next(false);
                 if(probeCount<14){handler.removeCallbacks(probe);handler.postDelayed(probe,1800);}
             }catch(Exception ignored){host.navigationHint("Use the provider page; its player controls could not be read.");}
@@ -121,7 +126,25 @@ final class FilmNativeControls {
             if(token==generation&&!posterActions.isEmpty()&&active&&postersReady){KeyEvent next=posterActions.removeFirst();handler.post(()->posterKey(next));}
         });return true;
     }
-    private void playDefault(){if(players.length()==0){host.pageAction("watch");return;}int index=0;for(int i=0;i<players.length();i++)if(players.optJSONObject(i)!=null&&players.optJSONObject(i).optBoolean("selected")){index=i;break;}select(index);}
+    private void playDefault(){
+        // Play starts the currently loaded media. Re-selecting the same source
+        // recreates many provider iframes and leaves the video paused again.
+        if(mediaCandidates>0){host.pageAction("media");return;}
+        if(players.length()==0){host.pageAction("watch");return;}int index=0;for(int i=0;i<players.length();i++)if(players.optJSONObject(i)!=null&&players.optJSONObject(i).optBoolean("selected")){index=i;break;}select(index);}
+    boolean handleRemote(KeyEvent event,View focused){
+        if(!active||!host.pageIsVisible()||!visible())return false;
+        if(choiceView.getVisibility()==View.VISIBLE)return false;
+        int key=event.getKeyCode();
+        if(key!=KeyEvent.KEYCODE_DPAD_LEFT&&key!=KeyEvent.KEYCODE_DPAD_RIGHT&&key!=KeyEvent.KEYCODE_DPAD_UP&&key!=KeyEvent.KEYCODE_DPAD_DOWN)return false;
+        if(event.getAction()==KeyEvent.ACTION_UP)return true;
+        if(event.getAction()!=KeyEvent.ACTION_DOWN)return false;
+        handler.removeCallbacks(hide);
+        int at=trayButtons.indexOf(focused);
+        if(at<0){playButton.requestFocus();return true;}
+        if(key==KeyEvent.KEYCODE_DPAD_LEFT)at=Math.max(0,at-1);
+        else if(key==KeyEvent.KEYCODE_DPAD_RIGHT)at=Math.min(trayButtons.size()-1,at+1);
+        trayButtons.get(at).requestFocus();return true;
+    }
     private void showPlayers(){probeCount=0;finished();choiceView.setVisibility(View.VISIBLE);choiceView.bringToFront();renderPlayers();}
     private void renderPlayers(){
         String focusLabel="";View focused=choiceView.findFocus();if(focused instanceof Button)focusLabel=((Button)focused).getText().toString();choices.removeAllViews();choices.addView(TvUi.label(activity,"FlixMomo · "+players.length()+" choices"+(playerTruncated?" (partial)":""),18,TvUi.TEXT,true));

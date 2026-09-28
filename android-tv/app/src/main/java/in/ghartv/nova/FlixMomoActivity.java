@@ -134,7 +134,7 @@ public class FlixMomoActivity extends Activity {
             public void searchToolbar(){toolbar();query.requestFocus();}
             public boolean pageIsVisible(){return !homeRequested&&!detailRequested;}
             public void pageObserved(org.json.JSONObject data){if(homeRequested&&homePanel!=null)homePanel.render(data);else if(detailRequested&&detailPanel!=null)detailPanel.render(data.optJSONObject("detail"));else if(!data.optBoolean("search"))liveResults.setVisibility(View.GONE);followPlayback(data);}
-            public void pageAction(String action){if("watch".equals(action))requestWatch();else nativeControls.pageAction(action);}
+            public void pageAction(String action){if("watch".equals(action))requestWatch();else if("media".equals(action)){armPlayback();mediaAttempted=true;nativeControls.pageAction("media");}else nativeControls.pageAction(action);}
             public void playerSelected(){armPlayback();}
             public void actionOutcome(String action,String result){
                 if("watch".equals(action)||"media".equals(action)){
@@ -321,7 +321,7 @@ public class FlixMomoActivity extends Activity {
             if(event.getKeyCode()==KeyEvent.KEYCODE_VOICE_ASSIST){voiceSearch();return true;}
             if(event.getKeyCode()==KeyEvent.KEYCODE_SEARCH){toolbar();query.requestFocus();return true;}
         }
-        if(nativeControls!=null){if(event.getAction()==KeyEvent.ACTION_DOWN)nativeControls.userInput();if(event.getKeyCode()==KeyEvent.KEYCODE_MENU){if(event.getAction()==KeyEvent.ACTION_UP){if(homeRequested){chrome.setVisibility(View.VISIBLE);query.requestFocus();}else nativeControls.menu();}return true;}if(nativeControls.ownsFocus())return super.dispatchKeyEvent(event);if(homePanel!=null&&homePanel.getVisibility()==View.VISIBLE)return super.dispatchKeyEvent(event);if(!cursor.enabled()&&(nativeControls.posterKey(event)||nativeControls.pageKey(event)))return true;}
+        if(nativeControls!=null){if(event.getAction()==KeyEvent.ACTION_DOWN)nativeControls.userInput();if(event.getKeyCode()==KeyEvent.KEYCODE_MENU){if(event.getAction()==KeyEvent.ACTION_UP){if(homeRequested){chrome.setVisibility(View.VISIBLE);query.requestFocus();}else nativeControls.menu();}return true;}if(nativeControls.handleRemote(event,getCurrentFocus()))return true;if(nativeControls.ownsFocus())return super.dispatchKeyEvent(event);if(homePanel!=null&&homePanel.getVisibility()==View.VISIBLE)return super.dispatchKeyEvent(event);if(!cursor.enabled()&&(nativeControls.posterKey(event)||nativeControls.pageKey(event)))return true;}
         if(cursor!=null&&(custom!=null||browser!=null&&browser.hasFocus())&&cursor.handle(event))return true;
         return super.dispatchKeyEvent(event);
     }

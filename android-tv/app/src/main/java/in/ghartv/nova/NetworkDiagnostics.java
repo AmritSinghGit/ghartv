@@ -54,7 +54,8 @@ public final class NetworkDiagnostics {
             JSONArray checks = result.optJSONArray("checks");
             if(checks != null) for(int i=0;i<checks.length();i++) {
                 JSONObject item=checks.optJSONObject(i); if(item==null) continue;
-                text.append(item.optString("service")).append(": ").append(item.optString("dns")).append(" / ").append(item.optString("https")).append('\n');
+                text.append(item.optString("service")).append(": ").append(item.optString("dns")).append(" / ").append(item.optString("https")).append(item.has("tls_reason")?" · "+item.optString("tls_reason"):"").append('\n');
+                if(item.has("clock_offset_seconds"))text.append("  TV minus verified HTTPS time: ").append(item.optLong("clock_offset_seconds")).append(" seconds").append(Math.abs(item.optLong("clock_offset_seconds"))>120?" — check TV date/time":"").append('\n');
             }
             text.append("\nTV clock: ").append(new java.util.Date()).append("\nA date/certificate failure can be caused by the TV clock or the server certificate. Do not disable verification.\n");
             text.append("\nHTTPS reachable does not prove account access or playback.\n\nDiagnostics: ")
@@ -65,7 +66,7 @@ public final class NetworkDiagnostics {
                 .setMessage(text).setPositiveButton("Network settings", (d,w)-> {
                     try {activity.startActivity(new Intent(Settings.ACTION_WIFI_SETTINGS));}
                     catch(Exception e){activity.startActivity(new Intent(Settings.ACTION_SETTINGS));}
-                }).setNeutralButton("Diagnostics & privacy", (d,w)->DiagnosticsDialog.show(activity))
+                }).setNeutralButton("TV date & time", (d,w)->{try{activity.startActivity(new Intent(Settings.ACTION_DATE_SETTINGS));}catch(Exception ignored){}})
                 .setNegativeButton("Close",null).show();
         });
     }
@@ -80,7 +81,7 @@ public final class NetworkDiagnostics {
             }
         } catch(Exception e) {
             String code=NetworkFailure.classify(e);
-            try {if(code.equals("DNS_UNAVAILABLE"))r.put("dns",code);else r.put("https",code);r.put("cause",NetworkFailure.rootType(e));}catch(Exception ignored){}
+            try {if(code.equals("DNS_UNAVAILABLE"))r.put("dns",code);else r.put("https",code);r.put("cause",NetworkFailure.rootType(e));if(code.equals("TLS_FAILED"))r.put("tls_reason",NetworkFailure.tlsReason(e));}catch(Exception ignored){}
         }
         try{r.put("elapsed_ms",SystemClock.elapsedRealtime()-start);}catch(Exception ignored){} return r;
     }
