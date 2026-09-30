@@ -27,6 +27,7 @@ public final class RemoteWebCursor extends View {
     private int clickCode=-1;
     private float clickX,clickY;
     private final Runnable frame=()->tick();
+    private final Runnable idleHide=()->{if(!pressed&&!state.moving())setVisibility(INVISIBLE);};
 
     public RemoteWebCursor(Context context){
         super(context);density=getResources().getDisplayMetrics().density;
@@ -39,10 +40,10 @@ public final class RemoteWebCursor extends View {
     public void center(){cancel();state.position(getWidth()/2f,getHeight()/2f);invalidate();}
     public void scrollMode(boolean value){cancel();scrollMode=value;invalidate();}
     public boolean scrolling(){return scrollMode;}
-    public void enter(){if(enabled&&target!=null){setVisibility(VISIBLE);bringToFront();invalidate();}}
+    public void enter(){if(enabled&&target!=null){removeCallbacks(idleHide);setVisibility(VISIBLE);bringToFront();invalidate();postDelayed(idleHide,2500);}}
     public void leave(){cancel();setVisibility(INVISIBLE);}
     public void cancel(){
-        state.stop();removeCallbacks(frame);scheduled=false;
+        state.stop();removeCallbacks(frame);removeCallbacks(idleHide);scheduled=false;
         if(pressed)touch(MotionEvent.ACTION_CANCEL,SystemClock.uptimeMillis());
         pressed=false;clickCode=-1;invalidate();
     }
@@ -55,6 +56,7 @@ public final class RemoteWebCursor extends View {
     }
     public boolean handle(KeyEvent event){
         if(!enabled||target==null)return false;
+        removeCallbacks(idleHide);postDelayed(idleHide,2500);
         final int key=event.getKeyCode(),dir=direction(key);
         if(event.getAction()==KeyEvent.ACTION_DOWN)userSequence++;
         if(dir!=0){

@@ -153,7 +153,7 @@ final class FilmHomeView extends FrameLayout {
         content=new LinearLayout(a);content.setOrientation(LinearLayout.VERTICAL);content.setPadding(dp(24),dp(18),dp(24),dp(24));scroll.addView(content);
         scroll.getViewTreeObserver().addOnScrollChangedListener(this::schedulePosters);
         heading=TvUi.label(a,"Your next watch.",30,TvUi.TEXT,true);content.addView(heading);
-        content.addView(TvUi.label(a,"Suggestions by FlixMomo · GharTV Review "+BuildConfig.VERSION_CODE,13,TvUi.MINT,true));
+
         TextView info=TvUi.label(a,"Search above for live channels, films and series. Browse below with your remote.",14,TvUi.MUTED,false);info.setPadding(0,dp(8),0,dp(10));content.addView(info);
         LinearLayout actionRow=new LinearLayout(a);button(actionRow,"Refresh suggestions",host::refresh);button(actionRow,"Open provider page",host::provider);button(actionRow,"Privacy & content use",host::privacy);content.addView(actionRow);
         progress=new android.widget.ProgressBar(a,null,android.R.attr.progressBarStyleHorizontal);progress.setIndeterminate(true);progress.setVisibility(GONE);progress.setImportantForAccessibility(IMPORTANT_FOR_ACCESSIBILITY_NO);content.addView(progress,new LinearLayout.LayoutParams(-1,dp(5)));
@@ -211,7 +211,7 @@ final class FilmHomeView extends FrameLayout {
         wireFocus();schedulePosters();
         // Start the first row without waiting for measured child geometry.
         // All remaining rows still use bounded viewport scheduling.
-        if(isAttachedToWindow()&&isShown())for(int i=0;i<Math.min(columns,posterTasks.size());i++){PosterTask task=posterTasks.get(i);if(!task.loaded){task.loaded=true;loader.load(task.view,task.url);}}
+        if(isAttachedToWindow()&&isShown())for(int i=0;i<Math.min(columns*2,posterTasks.size());i++){PosterTask task=posterTasks.get(i);if(!task.loaded){task.loaded=true;loader.load(task.view,task.url);}}
         status.setText(cardCount+" suggestions supplied by FlixMomo · availability is not verified");
     }
     static String readable(String text){String s=text.trim();if(s.indexOf(' ')>=0)return s;String[] words=s.replace('-',' ').replace('_',' ').split(" ");StringBuilder result=new StringBuilder();for(String word:words){if(word.isEmpty())continue;if(result.length()>0)result.append(' ');result.append(Character.toUpperCase(word.charAt(0))).append(word.substring(1));}return result.toString();}

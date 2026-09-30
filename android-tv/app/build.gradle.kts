@@ -13,8 +13,8 @@ android {
         applicationId = "in.ghartv.nova"
         minSdk = 26
         targetSdk = 35
-        versionCode = 46
-        versionName = "0.6.0-rc13-direct-native-pointer-review"
+        versionCode = 47
+        versionName = "0.6.0-rc13.1-cinema-experience-review"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
     buildFeatures { buildConfig = true }

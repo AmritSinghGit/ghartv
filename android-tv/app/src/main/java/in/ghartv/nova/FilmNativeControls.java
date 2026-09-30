@@ -23,7 +23,7 @@ import java.util.Set;
 /** Original provider posters stay in the one WebView. Only the player tray is native. */
 final class FilmNativeControls {
     interface Host { void navigate(String url); void usePage(); void searchToolbar(); void nativeMode(); void navigationHint(String text);
-        default void mouse(){}
+        default void mouse(){} default void fullscreen(){}
         default boolean pageIsVisible(){return true;}
         default void playerSelected(){} default void actionOutcome(String action,String state){} default void pageObserved(JSONObject data){} default void pageAction(String action){} default void verificationRequired(){}
     }
@@ -58,8 +58,8 @@ final class FilmNativeControls {
         FrameLayout.LayoutParams cp=new FrameLayout.LayoutParams(dp(360),dp(250),Gravity.END|Gravity.BOTTOM);cp.setMargins(dp(12),dp(12),dp(12),dp(95));stage.addView(choiceView,cp);choiceView.setVisibility(View.GONE);
         tray=new LinearLayout(a);tray.setOrientation(LinearLayout.VERTICAL);tray.setPadding(dp(12),dp(8),dp(12),dp(8));tray.setBackground(TvUi.rounded(0xee071e29,12,TvUi.MINT,1,a));
         state=TvUi.label(a,"FlixMomo player controls · GharTV Review "+BuildConfig.VERSION_CODE,12,TvUi.TEXT,false);tray.addView(state);
-        LinearLayout row=new LinearLayout(a);playButton=add(row,"Play",this::playDefault);add(row,"Players",this::showPlayers);add(row,"Watchlist",()->host.pageAction("watchlist"));add(row,"Not playing",()->next(true));
-        add(row,"Search",()->{hideAll();host.searchToolbar();});add(row,"Mouse",()->{hideAll();host.mouse();});add(row,"Hide",this::hideTray);tray.addView(row);
+        LinearLayout row=new LinearLayout(a);playButton=add(row,"Play",this::playDefault);add(row,"Sources",this::showPlayers);add(row,"Fullscreen",host::fullscreen);
+        add(row,"Mouse",()->{hideAll();host.mouse();});add(row,"More",()->{hideAll();host.searchToolbar();});add(row,"Hide",this::hideTray);tray.addView(row);
         for(int i=0;i<row.getChildCount();i++){Button b=(Button)row.getChildAt(i);b.setId(View.generateViewId());b.setLayoutParams(new LinearLayout.LayoutParams(0,dp(48),1));trayButtons.add(b);}
         for(int i=0;i<trayButtons.size();i++){Button b=trayButtons.get(i);b.setNextFocusLeftId(trayButtons.get(Math.max(0,i-1)).getId());b.setNextFocusRightId(trayButtons.get(Math.min(trayButtons.size()-1,i+1)).getId());b.setNextFocusUpId(b.getId());b.setNextFocusDownId(b.getId());}
         FrameLayout.LayoutParams tp=new FrameLayout.LayoutParams(-1,-2,Gravity.BOTTOM);tp.setMargins(dp(10),dp(8),dp(10),dp(10));stage.addView(tray,tp);tray.setVisibility(View.GONE);
@@ -147,11 +147,13 @@ final class FilmNativeControls {
         else if(key==KeyEvent.KEYCODE_DPAD_RIGHT)at=Math.min(trayButtons.size()-1,at+1);
         trayButtons.get(at).requestFocus();return true;
     }
+    void openSources(){showPlayers();}
     private void showPlayers(){probeCount=0;finished();choiceView.setVisibility(View.VISIBLE);choiceView.bringToFront();renderPlayers();}
     private void renderPlayers(){
         String focusLabel="";View focused=choiceView.findFocus();if(focused instanceof Button)focusLabel=((Button)focused).getText().toString();choices.removeAllViews();choices.addView(TvUi.label(activity,"FlixMomo · "+players.length()+" choices"+(playerTruncated?" (partial)":""),18,TvUi.TEXT,true));
         if(players.length()==0)choices.addView(TvUi.label(activity,"The provider has not exposed readable choices. Use page remains available.",13,TvUi.MUTED,false));Button first=null,restore=null;
         for(int i=0;i<players.length();i++){final int n=i;JSONObject p=players.optJSONObject(i);if(p==null)continue;String name=p.optString("label");if(!name.matches("(?i)^(player|server|source)\\s*#?\\s*\\d{1,3}$"))continue;String badges=p.optJSONArray("badges")==null?"":p.optJSONArray("badges").toString().replace("[","").replace("]","").replace("\"","");Button b=add(choices,name+(badges.isEmpty()?"":" · "+badges)+(name.equals(selected)?" · selected":attempted.contains(name)?" · tried":""),()->select(n));if(first==null)first=b;if(b.getText().toString().equals(focusLabel))restore=b;}
+        if(players.length()>1)add(choices,"Try next source",()->next(true));
         add(choices,autoNext?"Auto next on media error: on":"Auto next on media error: off",()->{autoNext=!autoNext;renderPlayers();});add(choices,"Close",()->{choiceView.setVisibility(View.GONE);showTray(true);});if(restore!=null)restore.requestFocus();else if(first!=null)first.requestFocus();
     }
     private void select(int index){

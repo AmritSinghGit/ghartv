@@ -53,6 +53,10 @@ final class FilmPageFocus {
           const link=candidates.find(e=>watch(e)&&e.tagName==='A'&&permittedLink(e));
           if(link){const u=new URL(link.getAttribute('href'),here);if(u.href!==here.href&&!u.hash)return pack({state:'NAVIGATE',target:u.href,label:buttonText(link)});}
           let n=candidates.findIndex(watch);if(n<0){const media=candidates.map((e,i)=>({e,i})).filter(x=>/^(VIDEO|IFRAME)$/.test(x.e.tagName));if(media.length===1)n=media[0].i;}return focus(n,true);}
+        if(action==='fullscreen'){
+          const named=candidates.filter(e=>/^(full ?screen|enter full ?screen|expand player)$/i.test(buttonText(e)));
+          return named.length===1?focus(candidates.indexOf(named[0]),true):pack({state:named.length?'AMBIGUOUS_MEDIA':'NOT_FOUND'});
+        }
         if(action==='media'){
           // A provider may put a real play button ABOVE its video/iframe.
           // Only a visible, semantic play control over the one media region is
