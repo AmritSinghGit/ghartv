@@ -370,7 +370,7 @@ public class FlixMomoActivity extends Activity {
         String[] items={"Return to video / website","Connection details","Diagnostics","Privacy & attribution"};
         optionsDialog=new android.app.AlertDialog.Builder(this).setTitle("GharTV · FlixMomo")
             .setMessage(null).setItems(items,(d,n)->{
-                if(n==0)usePage();else if(n==1)showFilmConnection();else if(n==2)DiagnosticsDialog.show(this);else ReviewNotice.show(this,()->{visitCache.clear();if(browser!=null){browser.clearCache(true);browser.clearHistory();}com.bumptech.glide.Glide.get(this).clearMemory();homePanel.discardSuggestions();homeRequested=true;detailRequested=false;detailPanel.setVisibility(View.GONE);homePanel.setVisibility(View.VISIBLE);chrome.setVisibility(View.VISIBLE);homePanel.unavailable("Local film data cleared. Choose Refresh to load again.");});
+                if(n==0)usePage();else if(n==1)showFilmConnection();else if(n==2)DiagnosticsDialog.show(this);else ReviewNotice.show(this,()->{visitCache.clear();if(browser!=null){browser.stopLoading();browser.loadUrl("about:blank");browser.clearCache(true);browser.clearHistory();browser.clearFormData();}nativeControls.failure();com.bumptech.glide.Glide.get(this).clearMemory();homePanel.discardSuggestions();homeRequested=true;detailRequested=false;detailPanel.setVisibility(View.GONE);homePanel.setVisibility(View.VISIBLE);chrome.setVisibility(View.VISIBLE);homePanel.unavailable("Local film data cleared. Choose Refresh to load again.");});
             }).setNegativeButton("Close",null).create();
         optionsDialog.setOnDismissListener(d->{if(custom==null&&chrome.getVisibility()==View.VISIBLE)pageButton.requestFocus();});optionsDialog.show();
     }
@@ -387,9 +387,9 @@ public class FlixMomoActivity extends Activity {
         fullMenu=new LinearLayout(this);fullMenu.setOrientation(LinearLayout.VERTICAL);fullMenu.setPadding(16,10,16,12);fullMenu.setBackgroundColor(0xee071e29);
         fullMenu.addView(TvUi.label(this,"GharTV · Playback by FlixMomo",14,TvUi.MINT,true));
         LinearLayout buttons=new LinearLayout(this);fullMenu.addView(buttons);
-        String[] labels={"Resume","Sources","Mouse","Exit fullscreen"};
+        String[] labels={"Resume","Sources","Exit fullscreen"};
         for(int i=0;i<labels.length;i++){final int item=i;Button b=TvUi.button(this,labels[i],i==0);b.setId(View.generateViewId());buttons.addView(b,new LinearLayout.LayoutParams(0,TvUi.dp(this,48),1));b.setOnClickListener(v->{
-            if(item==0||item==2){fullMenu.setVisibility(View.GONE);mouseActive=true;cursor.enable(true);cursor.target(custom);cursor.enter();custom.requestFocus();}
+            if(item==0){fullMenu.setVisibility(View.GONE);mouseActive=true;cursor.enable(true);cursor.target(custom);cursor.enter();custom.requestFocus();}
             else if(item==1){exitFullScreen();usePage();nativeControls.openSources();}
             else exitFullScreen();
         });}
@@ -407,7 +407,10 @@ public class FlixMomoActivity extends Activity {
             if(key==KeyEvent.KEYCODE_BACK){if(event.getAction()==KeyEvent.ACTION_UP)exitFullScreen();return true;}
             if(key==KeyEvent.KEYCODE_MENU){if(event.getAction()==KeyEvent.ACTION_UP)showFullscreenMenu();return true;}
             if(fullMenu!=null&&fullMenu.getVisibility()==View.VISIBLE)return super.dispatchKeyEvent(event);
-            if(cursor.handle(event))return true;
+            if(cursor.handle(event)){
+                if(event.getAction()==KeyEvent.ACTION_UP&&!event.isCanceled()&&(key==KeyEvent.KEYCODE_DPAD_CENTER||key==KeyEvent.KEYCODE_ENTER))controlTrace.emit(this,"mouse","MOUSE_CLICK_SENT");
+                return true;
+            }
             return super.dispatchKeyEvent(event);
         }
         // Native toolbar focus is authoritative. Mouse/page navigation must not consume its keys.

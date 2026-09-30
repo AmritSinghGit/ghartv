@@ -4,7 +4,7 @@ Owner46 confirmed that movie playback and the mouse work. This preserves those p
 
 One search row and an Options menu replace the always-visible debug/toggle rows. Connection and diagnostics are still accessible. The viewing tray is Play, Sources, Fullscreen, Mouse, More and Hide. Watchlist stays on the title page; trying another source stays in the source chooser. Dynamic source detection remains unchanged.
 
-Actual provider fullscreen occupies the full app window, not the old reduced stage beneath fixed credit/warning text. The fullscreen Menu overlay has Resume, Sources, Mouse and Exit fullscreen, plus FlixMomo attribution. Exit returns focus to Options and disables stale pointer capture; native header buttons can be selected again. The pointer fades after idle and reappears on movement. Neither inactivity nor positioning sends a click.
+Actual provider fullscreen occupies the full app window, not the old reduced stage beneath fixed credit/warning text. The fullscreen Menu overlay has Resume, Sources and Exit fullscreen, plus FlixMomo attribution. Exit returns focus to Options and disables stale pointer capture; native header buttons can be selected again. The pointer fades after idle and reappears on movement. Neither inactivity nor positioning sends a click.
 
 Fullscreen uses a user-initiated, explicit visible provider control when available. A cross-origin player may still require Mouse to reach its own fullscreen button. No iframe inspection, stream extraction, cert bypass, silent playback or new browser engine. This is the same embedded provider player, not native Media3 playback.
 

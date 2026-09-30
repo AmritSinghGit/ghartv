@@ -24,6 +24,12 @@ public class Review47ViewingTest {
         h.player();h.ui(()->{FrameLayout surface=new FrameLayout(h.activity);surface.setBackgroundColor(0xff123456);((FlixMomoActivity)h.activity).enterFullScreen(surface,exits::incrementAndGet);});SystemClock.sleep(180);
     }
     View button(String name){return h.text(h.activity.findViewById(android.R.id.content),name);}
+    void proof(String name)throws Exception{
+        android.graphics.Bitmap shot=androidx.test.platform.app.InstrumentationRegistry.getInstrumentation().getUiAutomation().takeScreenshot();
+        if(shot==null)throw new AssertionError("No test screenshot");
+        java.io.File target=new java.io.File(h.activity.getExternalFilesDir(null),name);
+        try(java.io.FileOutputStream out=new java.io.FileOutputStream(target)){if(!shot.compress(android.graphics.Bitmap.CompressFormat.PNG,100,out))throw new AssertionError("Screenshot failed");}finally{shot.recycle();}
+    }
     @Test public void trueFullscreenHidesAllBrowseCreditAndNotices()throws Exception{
         fullscreen();h.ui(()->{assertEquals(View.GONE,((View)f("browseRoot")).getVisibility());assertFalse(((View)f("credit")).isShown());assertFalse(((View)f("playNotice")).isShown());View host=(View)f("fullHost"),screen=(View)f("screen");assertEquals(screen.getWidth(),host.getWidth());assertEquals(screen.getHeight(),host.getHeight());assertFalse(((FilmNativeControls)f("nativeControls")).visible());});
     }
@@ -80,6 +86,6 @@ public class Review47ViewingTest {
     @Test public void explicitFullscreenActionEntersActualWebViewCustomMode()throws Exception{
         h.player();h.eval("JSON.stringify((()=>{const v=document.querySelector('video');const b=document.createElement('button');b.textContent='Fullscreen';b.onclick=()=>v.requestFullscreen();v.before(b);b.scrollIntoView({block:'center'});return {ok:true}})())");
         h.ui(()->{FilmNativeControls c=(FilmNativeControls)f("nativeControls");c.menu();h.text((View)h.field(c,"tray"),"Fullscreen").requestFocus();});h.press(KeyEvent.KEYCODE_DPAD_CENTER);
-        long end=SystemClock.elapsedRealtime()+5000;boolean[] yes={false};while(SystemClock.elapsedRealtime()<end){h.ui(()->yes[0]=f("custom")!=null);if(yes[0])break;SystemClock.sleep(50);}assertTrue("A trusted click must enter actual provider fullscreen",yes[0]);
+        long end=SystemClock.elapsedRealtime()+5000;boolean[] yes={false};while(SystemClock.elapsedRealtime()<end){h.ui(()->yes[0]=f("custom")!=null);if(yes[0])break;SystemClock.sleep(50);}assertTrue("A trusted click must enter actual provider fullscreen",yes[0]);SystemClock.sleep(300);proof("review47-owned-fullscreen.png");h.press(KeyEvent.KEYCODE_MENU);proof("review47-fullscreen-menu.png");h.press(KeyEvent.KEYCODE_BACK);proof("review47-toolbar-return.png");
     }
 }
