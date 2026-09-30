@@ -37,6 +37,7 @@ public final class NativeFilmPlayerActivity extends Activity {
     private LinearLayout controls;
     private TextView status,timeline;
     private Button pause;
+    private AlertDialog speedDialog;
     private Uri source;
     private boolean playing=true,firstFrame;
     private long position;
@@ -88,9 +89,9 @@ public final class NativeFilmPlayerActivity extends Activity {
         });
         player.setMediaItem(MediaItem.fromUri(source));player.seekTo(Math.max(0,position));player.setPlaybackSpeed(speed);player.prepare();player.setPlayWhenReady(playing);handler.post(tick);
     }
-    private void toggle(){if(player==null)return;if(player.getPlaybackState()==Player.STATE_ENDED)player.seekTo(0);player.setPlayWhenReady(!player.getPlayWhenReady());}
+    private void toggle(){if(player==null)return;if(player.getPlaybackState()==Player.STATE_ENDED){player.seekTo(0);player.play();}else player.setPlayWhenReady(!player.getPlayWhenReady());}
     private void seekBy(long delta){if(player==null)return;if(!player.isCurrentMediaItemSeekable()){status.setText("This media does not currently permit seeking.");return;}long end=player.getDuration(),p=Math.max(0,player.getCurrentPosition()+delta);if(end!=C.TIME_UNSET)p=Math.min(end,p);player.seekTo(p);}
-    private void chooseSpeed(){String[] labels={"0.5×","0.75×","1×","1.25×","1.5×","2×"};float[] values={.5f,.75f,1f,1.25f,1.5f,2f};new AlertDialog.Builder(this).setTitle("Native playback speed").setItems(labels,(d,i)->{speed=values[i];if(player!=null)player.setPlaybackSpeed(speed);}).setNegativeButton("Cancel",null).show();}
+    private void chooseSpeed(){String[] labels={"0.5×","0.75×","1×","1.25×","1.5×","2×"};float[] values={.5f,.75f,1f,1.25f,1.5f,2f};speedDialog=new AlertDialog.Builder(this).setTitle("Native playback speed").setItems(labels,(d,i)->{speed=values[i];if(player!=null)player.setPlaybackSpeed(speed);}).setNegativeButton("Cancel",null).show();}
     @Override public boolean dispatchKeyEvent(KeyEvent event){
         int k=event.getKeyCode();
         if(k==KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE||k==KeyEvent.KEYCODE_MEDIA_PLAY||k==KeyEvent.KEYCODE_MEDIA_PAUSE){if(event.getAction()==KeyEvent.ACTION_UP&&player!=null){if(k==KeyEvent.KEYCODE_MEDIA_PLAY)player.play();else if(k==KeyEvent.KEYCODE_MEDIA_PAUSE)player.pause();else toggle();}return true;}

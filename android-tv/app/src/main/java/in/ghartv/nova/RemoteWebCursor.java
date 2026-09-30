@@ -21,6 +21,9 @@ public final class RemoteWebCursor extends View {
     private View target;
     private boolean enabled=true,scrollMode,scheduled,pressed;
     private long lastFrame,started,downAt;
+    private long userSequence;
+    public long placementToken(){return userSequence;}
+    public boolean aimFraction(float x,float y,long token){if(!enabled||token!=userSequence||!Float.isFinite(x)||!Float.isFinite(y)||x<0||x>1||y<0||y>1)return false;state.position(x*getWidth(),y*getHeight());invalidate();return true;}
     private int clickCode=-1;
     private float clickX,clickY;
     private final Runnable frame=()->tick();
@@ -53,6 +56,7 @@ public final class RemoteWebCursor extends View {
     public boolean handle(KeyEvent event){
         if(!enabled||target==null)return false;
         final int key=event.getKeyCode(),dir=direction(key);
+        if(event.getAction()==KeyEvent.ACTION_DOWN)userSequence++;
         if(dir!=0){
             if(event.getAction()==KeyEvent.ACTION_DOWN){
                 enter();state.setDirection(dir,true);

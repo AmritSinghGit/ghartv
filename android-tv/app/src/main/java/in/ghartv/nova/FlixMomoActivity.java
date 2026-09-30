@@ -117,7 +117,13 @@ public class FlixMomoActivity extends Activity {
         navigation.addView(pageButton);navigation.addView(modeButton);navigation.addView(scrollButton);navigation.addView(retryButton);
         Button connectionButton=TvUi.button(this,"Connection",false),diagnosticsButton=TvUi.button(this,"Diagnostics",false);
         connectionButton.setOnClickListener(v->showFilmConnection());diagnosticsButton.setOnClickListener(v->DiagnosticsDialog.show(this));
-        navigation.addView(connectionButton);navigation.addView(diagnosticsButton);chrome.addView(navigation);
+        navigation.addView(connectionButton);navigation.addView(diagnosticsButton);
+        Button nativeButton=TvUi.button(this,"Native player",false);
+        nativeButton.setOnClickListener(v->new android.app.AlertDialog.Builder(this).setTitle("GharTV native player")
+            .setMessage("Native playback is available for an explicit supported media link offered by a registered provider. An embedded webpage or pointer click does not supply that link. The current FlixMomo iframe has not been verified for native playback. Engine check plays only an owned test clip; it is not a movie result.")
+            .setPositiveButton("Engine check (test clip)",(d,w)->startActivity(NativeFilmPlayerActivity.checkIntent(this)))
+            .setNegativeButton("Return",null).show());
+        navigation.addView(nativeButton);chrome.addView(navigation);
         help=TvUi.label(this,"Original posters · arrows browse · OK opens · Menu shows controls · Cursor is optional",12,TvUi.MUTED,false);chrome.addView(help);
         status=TvUi.label(this,"Provider pages stay in GharTV · direct connection",12,TvUi.MUTED,false);chrome.addView(status);
         root.addView(chrome);
@@ -141,6 +147,9 @@ public class FlixMomoActivity extends Activity {
             public void playerSelected(){armPlayback();}
             public void actionOutcome(String action,String result){
                 controlTrace.emit(FlixMomoActivity.this,action,result);
+                if("TARGET_OBSCURED".equals(result)||"TARGET_CHANGED".equals(result)){
+                    handler.post(()->{if(!isFinishing()&&!homeRequested&&!detailRequested&&!mouseActive)enterMouse();});
+                }
                 if("watch".equals(action)||"media".equals(action)){
                     if("VISUAL_TIMEOUT".equals(result)||"NOT_FOUND".equals(result)||"AMBIGUOUS_MEDIA".equals(result)||"TARGET_OBSCURED".equals(result)||"TARGET_CHANGED".equals(result)){playUntil=0;playMessage("Playback has not started: "+result.replace('_',' ').toLowerCase(java.util.Locale.ROOT)+". Use Original page or another player.");}
                     else if("CLICK_SENT_NOT_PLAYBACK_PROOF".equals(result))playMessage("Play gesture sent. Waiting for observable video progress.");
@@ -193,6 +202,13 @@ public class FlixMomoActivity extends Activity {
         browser.setWebViewClient(new WebViewClient(){
             @Override public boolean shouldOverrideUrlLoading(WebView view,WebResourceRequest request){
                 connection.observe(request.getUrl().toString(),request.isForMainFrame());
+                if(request.isForMainFrame()&&request.hasGesture()&&NativeFilmPlayerActivity.supported(request.getUrl())){
+                    // Handle only an explicit user-selected direct media navigation.
+                    // No reading of iframe internals or browser media requests.
+                    nativeControls.pause();
+                    startActivity(new Intent(FlixMomoActivity.this,NativeFilmPlayerActivity.class).putExtra(NativeFilmPlayerActivity.EXTRA_MEDIA,request.getUrl().toString()));
+                    return true;
+                }
                 if(!request.isForMainFrame()||allowedTop(request.getUrl()))return false;
                 if(request.hasGesture())status.setText("That link opens outside the registered provider. This page was kept open.");return true;
             }
@@ -250,7 +266,22 @@ public class FlixMomoActivity extends Activity {
         controlTrace.begin(this);
         mouseActive=true;playUntil=0;nativeControls.pause();nativeControls.hideAll();usePage();
         cursor.scrollMode(false);cursor.enable(true);cursor.center();cursor.enter();modeButton.setText("Cursor: on");
-        playMessage("Mouse: arrows move · OK clicks · hold an arrow at an edge to scroll · Back/Menu returns to controls");
+        playMessage("Pointer: arrows move · OK clicks · Back/Menu returns. This operates the embedded player, not the native engine.");
+        aimPointerAtMedia();
+    }
+    private void aimPointerAtMedia(){
+        if(browser==null||custom!=null||!mouseActive)return;
+        final WebView page=browser;final String url=page.getUrl();final long token=cursor.placementToken();
+        page.postOnAnimation(()->{
+            if(!mouseActive||page!=browser)return;
+            FilmPointerPosition.read(page,raw->{
+                if(!mouseActive||page!=browser||!java.util.Objects.equals(url,page.getUrl()))return;
+                try{Object parsed=new org.json.JSONTokener(raw).nextValue();if(!(parsed instanceof String))return;
+                    org.json.JSONObject point=new org.json.JSONObject((String)parsed);
+                    if("POSITION_ONLY".equals(point.optString("state")))cursor.aimFraction((float)point.optDouble("x"),(float)point.optDouble("y"),token);
+                }catch(Exception ignored){}
+            });
+        });
     }
     private void leaveMouse(boolean controls){mouseActive=false;cursor.enable(false);modeButton.setText("Cursor: off");nativeControls.resume();if(controls)nativeControls.menu();}
     private void showHome(boolean force){if(mouseActive)leaveMouse(false);playUntil=0;if(playNotice!=null)playNotice.setVisibility(View.GONE);

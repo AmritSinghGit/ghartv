@@ -46,6 +46,7 @@
             android:configChanges="keyboard|keyboardHidden|navigation|orientation|screenSize|smallestScreenSize|uiMode"
             android:exported="false"
             android:screenOrientation="landscape" />
+        <activity android:name=".NativeFilmPlayerActivity" android:exported="false" android:screenOrientation="landscape" />
         <activity android:name=".FlixMomoActivity" android:exported="false" android:screenOrientation="landscape" />
 
         <provider
