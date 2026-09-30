@@ -26,6 +26,7 @@ if 'versionCode = 45' in Path('android-tv/app/build.gradle.kts').read_text():
     native=root+'NativeFilmPlayerActivity.java'
     edit(native,'    private Button pause;','    private Button pause;\n    private AlertDialog speedDialog;')
     edit(native,'new AlertDialog.Builder(this).setTitle("Native playback speed")','speedDialog=new AlertDialog.Builder(this).setTitle("Native playback speed")')
+    edit(native,'if(player.getPlaybackState()==Player.STATE_ENDED)player.seekTo(0);player.setPlayWhenReady(!player.getPlayWhenReady());','if(player.getPlaybackState()==Player.STATE_ENDED){player.seekTo(0);player.play();}else player.setPlayWhenReady(!player.getPlayWhenReady());')
     paths.append(native)
     films=root+'FlixMomoActivity.java'
     edit(films,'        navigation.addView(connectionButton);navigation.addView(diagnosticsButton);chrome.addView(navigation);','''        navigation.addView(connectionButton);navigation.addView(diagnosticsButton);
@@ -50,7 +51,7 @@ if 'versionCode = 45' in Path('android-tv/app/build.gradle.kts').read_text():
         final WebView page=browser;final String url=page.getUrl();final long token=cursor.placementToken();
         page.postOnAnimation(()->{
             if(!mouseActive||page!=browser)return;
-            page.evaluateJavascript(FilmPointerPosition.script(),raw->{
+            FilmPointerPosition.read(page,raw->{
                 if(!mouseActive||page!=browser||!java.util.Objects.equals(url,page.getUrl()))return;
                 try{Object parsed=new org.json.JSONTokener(raw).nextValue();if(!(parsed instanceof String))return;
                     org.json.JSONObject point=new org.json.JSONObject((String)parsed);
@@ -60,7 +61,6 @@ if 'versionCode = 45' in Path('android-tv/app/build.gradle.kts').read_text():
         });
     }
     private void leaveMouse(boolean controls){''')
-    # User remains in control: a failed automatic tap opens a pointer, never a blind click.
     edit(films,'                controlTrace.emit(FlixMomoActivity.this,action,result);','''                controlTrace.emit(FlixMomoActivity.this,action,result);
                 if("TARGET_OBSCURED".equals(result)||"TARGET_CHANGED".equals(result)){
                     handler.post(()->{if(!isFinishing()&&!homeRequested&&!detailRequested&&!mouseActive)enterMouse();});

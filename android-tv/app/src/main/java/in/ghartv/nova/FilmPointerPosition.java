@@ -1,7 +1,13 @@
 package in.ghartv.nova;
 
-/** Geometry for user-controlled pointing only. Never reads media URLs or iframe contents. */
+import android.webkit.WebView;
+import android.webkit.ValueCallback;
+
+/** Fixed geometry reader for user-controlled pointing only.
+ * Never reads media URLs, cookies or iframe contents; no arbitrary script input.
+ */
 final class FilmPointerPosition {
+    static void read(WebView page,ValueCallback<String> callback){page.evaluateJavascript(script(),callback);}
     static String script(){return """
         (()=>{const out=(v)=>JSON.stringify(v);const w=innerWidth,h=innerHeight;
           const region=Array.from(document.querySelectorAll('video,iframe')).map(e=>({e,r:e.getBoundingClientRect(),s:getComputedStyle(e)}))
