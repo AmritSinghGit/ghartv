@@ -21,38 +21,8 @@ jobs:
       - uses: actions/checkout@v5
         with:
           fetch-depth: 0
-      - name: Prepare exact Play-control and diagnostics delta on same branch
-        id: prepare
-        run: |
-          python - <<'PY'
-          import os,json,hashlib,subprocess
-          from pathlib import Path
-          def git(*a):return subprocess.check_output(['git',*a],text=True).strip()
-          patch=Path('tools/tv-first/review45.patch')
-          if patch.exists():
-            assert hashlib.sha256(patch.read_bytes()).hexdigest()=='30f85bf0b5892499760f8bb52b133b405230798385b1946dfee0547d52078337'
-            manifest=Path('tools/tv-first/review45-files.json');records=json.loads(manifest.read_text());assert len(records)==8
-            for item in records:
-              p=Path(item['path']);assert not p.is_absolute() and '..' not in p.parts and not p.is_symlink()
-              assert (hashlib.sha256(p.read_bytes()).hexdigest() if p.is_file() else None)==item['before'],str(p)
-            subprocess.run(['git','apply','--check',str(patch)],check=True)
-            subprocess.run(['git','apply',str(patch)],check=True)
-            for item in records:assert hashlib.sha256(Path(item['path']).read_bytes()).hexdigest()==item['after'],item['path']
-            package=Path('tools/tv-first/package_review45.py')
-            text=Path('tools/tv-first/package_review44.py').read_text().replace('44','45').replace('0.6.0-rc12.5-loading-mouse-review','0.6.0-rc12.6-play-control-evidence-review').replace("'actual_android_tests_passed':122","'actual_android_tests_passed':130").replace("'retained_review43_tests':110","'retained_review44_tests':122").replace("'new_review44_tests':12","'new_review45_tests':8")
-            package.write_text(text)
-            paths=[i['path'] for i in records]+[str(patch),str(manifest),str(package)]
-            patch.unlink();manifest.unlink()
-            subprocess.run(['python','tools/tv-first/check_contract.py'],check=True)
-            changed=set(git('diff','--name-only').splitlines())|set(git('ls-files','--others','--exclude-standard').splitlines());assert changed==set(paths)
-            assert git('ls-remote','origin','refs/heads/codex/ghartv-remove-auto-preview').split()[0]==os.environ['GITHUB_SHA'],'Concurrent work preserved'
-            subprocess.run(['git','add','--',*sorted(paths)],check=True)
-            subprocess.run(['git','config','user.name','GharTV verified source preparation'],check=True)
-            subprocess.run(['git','config','user.email','41898282+github-actions[bot]@users.noreply.github.com'],check=True)
-            subprocess.run(['git','commit','-m','fix(ghartv): Review45 visible Play target and consented outcome evidence'],check=True)
-            subprocess.run(['git','push','origin','HEAD:refs/heads/codex/ghartv-remove-auto-preview'],check=True)
-          with open(os.environ['GITHUB_OUTPUT'],'a') as f:f.write('source_sha='+git('rev-parse','HEAD')+'\n')
-          PY
+      - id: prepare
+        run: python tools/tv-first/prepare_review46.py
   contract:
     needs: source
     runs-on: ubuntu-latest
@@ -77,7 +47,7 @@ jobs:
   candidate:
     needs: [source, contract]
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 23
     env:
       GRADLE_OPTS: '-Dorg.gradle.daemon=false -Dorg.gradle.jvmargs=-Xmx2g'
       ANDROID_USER_HOME: /tmp/ghartv-review-test-android
@@ -96,56 +66,61 @@ jobs:
         with:
           packages: platform-tools
           log-accepted-android-sdk-licenses: false
+      - name: Generate explicitly labelled owned native-engine test media
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/ghartv-candidate/proof android-tv/app/src/main/assets
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq ffmpeg libpulse0 libasound2t64 libnss3 libxcomposite1 libxcursor1 libxi6 libxtst6 libxrandr2 libegl1 libglu1-mesa
+          ffmpeg -nostdin -hide_banner -loglevel error -f lavfi -i testsrc2=size=320x180:rate=24 -t 30 -an -c:v libx264 -preset fast -crf 32 -pix_fmt yuv420p -movflags +faststart android-tv/app/src/main/assets/ghartv-native-check.mp4
+          sha256sum android-tv/app/src/main/assets/ghartv-native-check.mp4 > /tmp/ghartv-candidate/proof/owned-native-media.sha256
       - name: Compile exact release and tests
         run: |
           set -euo pipefail
-          mkdir -p /tmp/ghartv-candidate/proof
           sdkmanager 'platforms;android-36' 'build-tools;36.0.0'
           cd android-tv
           chmod +x gradlew
           ./gradlew --no-daemon --max-workers=2 assembleRelease assembleDebug assembleDebugAndroidTest
-          cp app/build/outputs/apk/release/app-release-unsigned.apk /tmp/ghartv-candidate/GharTV-code45-review-unsigned.apk
-      - name: Isolated cloud Android36, never an owner emulator
+          cp app/build/outputs/apk/release/app-release-unsigned.apk /tmp/ghartv-candidate/GharTV-code46-review-unsigned.apk
+      - name: Isolated cloud Android36, not an owner emulator
         run: |
           set -euo pipefail
           test -e /dev/kvm
           sudo chmod a+rw /dev/kvm
-          sudo apt-get update -qq
-          sudo apt-get install -y -qq libpulse0 libasound2t64 libnss3 libxcomposite1 libxcursor1 libxi6 libxtst6 libxrandr2 libegl1 libglu1-mesa
           sdkmanager 'emulator' 'system-images;android-36;google_apis;x86_64'
           mkdir -p "$ANDROID_USER_HOME" "$ANDROID_AVD_HOME"
           python - <<'PY'
           from pathlib import Path
           import os,subprocess,time,re
           out=Path('/tmp/ghartv-candidate/proof');sdk=Path(os.environ['ANDROID_HOME']);avd=Path(os.environ['ANDROID_AVD_HOME'])/'GHARTV_CLOUD_REVIEW_ONLY.avd'
-          result=subprocess.run(['avdmanager','create','avd','--name','GHARTV_CLOUD_REVIEW_ONLY','--package','system-images;android-36;google_apis;x86_64','--path',str(avd)],input='no\n',capture_output=True,text=True,timeout=45)
-          assert result.returncode==0,result.stdout+result.stderr
-          config=avd/'config.ini';text=re.sub(r'^disk.dataPartition.size=.*$','disk.dataPartition.size=1G',config.read_text(),flags=re.M)
-          if 'disk.dataPartition.size=' not in text:text+='\ndisk.dataPartition.size=1G\n'
-          config.write_text(text)
-          with (out/'test-emulator.log').open('w') as log:proc=subprocess.Popen([str(sdk/'emulator/emulator'),'-avd','GHARTV_CLOUD_REVIEW_ONLY','-port','5580','-no-window','-no-audio','-no-snapshot','-no-boot-anim','-gpu','swiftshader','-feature','-Vulkan','-memory','2048'],stdin=subprocess.DEVNULL,stdout=log,stderr=log,start_new_session=True)
-          deadline=time.monotonic()+180
-          while time.monotonic()<deadline:
-            if proc.poll() is not None:raise RuntimeError('CLOUD_DEVICE_EXITED '+(out/'test-emulator.log').read_text()[-1500:])
-            try:result=subprocess.run(['adb','-s','emulator-5580','shell','getprop','sys.boot_completed'],capture_output=True,text=True,timeout=5)
+          r=subprocess.run(['avdmanager','create','avd','--name','GHARTV_CLOUD_REVIEW_ONLY','--package','system-images;android-36;google_apis;x86_64','--path',str(avd)],input='no\n',capture_output=True,text=True,timeout=45)
+          assert r.returncode==0,r.stdout+r.stderr
+          cfg=avd/'config.ini';t=re.sub(r'^disk.dataPartition.size=.*$','disk.dataPartition.size=1G',cfg.read_text(),flags=re.M)
+          if 'disk.dataPartition.size=' not in t:t+='\ndisk.dataPartition.size=1G\n'
+          cfg.write_text(t)
+          with (out/'test-emulator.log').open('w') as log:p=subprocess.Popen([str(sdk/'emulator/emulator'),'-avd','GHARTV_CLOUD_REVIEW_ONLY','-port','5580','-no-window','-no-audio','-no-snapshot','-no-boot-anim','-gpu','swiftshader','-feature','-Vulkan','-memory','2048'],stdin=subprocess.DEVNULL,stdout=log,stderr=log,start_new_session=True)
+          end=time.monotonic()+180
+          while time.monotonic()<end:
+            if p.poll() is not None:raise RuntimeError('CLOUD_DEVICE_EXITED '+(out/'test-emulator.log').read_text()[-1500:])
+            try:r=subprocess.run(['adb','-s','emulator-5580','shell','getprop','sys.boot_completed'],capture_output=True,text=True,timeout=5)
             except subprocess.TimeoutExpired:time.sleep(1);continue
-            if result.returncode==0 and result.stdout.strip()=='1':break
+            if r.returncode==0 and r.stdout.strip()=='1':break
             time.sleep(2)
           else:raise RuntimeError('CLOUD_DEVICE_TIMEOUT')
           for args in (['wm','size','1280x720'],['wm','density','160'],['settings','put','secure','immersive_mode_confirmations','confirmed'],['input','keyevent','KEYCODE_WAKEUP'],['wm','dismiss-keyguard']):subprocess.run(['adb','-s','emulator-5580','shell']+args,check=True)
           PY
-      - name: Retain122 cases and require real owned-video Play-cover activation
+      - name: Retain130 cases and test the real native Media3 player plus pointer
         run: |
           set -euo pipefail
           adb -s emulator-5580 install -r android-tv/app/build/outputs/apk/debug/app-debug.apk
           adb -s emulator-5580 install -r android-tv/app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk
-          adb -s emulator-5580 shell am instrument -w -r -e class in.ghartv.nova.RemoteWebCursorTest,in.ghartv.nova.FilmNativeControlsTest,in.ghartv.nova.DiscoverExperienceTest,in.ghartv.nova.Review38RegressionTest,in.ghartv.nova.Review39ExperienceTest,in.ghartv.nova.Review40PlaybackTest,in.ghartv.nova.Review41ConnectionTelemetryTest,in.ghartv.nova.Review42RegressionTest,in.ghartv.nova.Review43PerformanceTest,in.ghartv.nova.Review44LoadingMouseTest,in.ghartv.nova.Review45PlayEvidenceTest in.ghartv.nova.test/androidx.test.runner.AndroidJUnitRunner | tee /tmp/ghartv-candidate/proof/android-tests.txt
-          grep -q 'OK (130 tests)' /tmp/ghartv-candidate/proof/android-tests.txt
-      - name: Package compiled owner review with the existing sign-and-open entry
-        run: python tools/tv-first/package_review45.py
+          adb -s emulator-5580 shell am instrument -w -r -e class in.ghartv.nova.RemoteWebCursorTest,in.ghartv.nova.FilmNativeControlsTest,in.ghartv.nova.DiscoverExperienceTest,in.ghartv.nova.Review38RegressionTest,in.ghartv.nova.Review39ExperienceTest,in.ghartv.nova.Review40PlaybackTest,in.ghartv.nova.Review41ConnectionTelemetryTest,in.ghartv.nova.Review42RegressionTest,in.ghartv.nova.Review43PerformanceTest,in.ghartv.nova.Review44LoadingMouseTest,in.ghartv.nova.Review45PlayEvidenceTest,in.ghartv.nova.Review46NativePointerTest in.ghartv.nova.test/androidx.test.runner.AndroidJUnitRunner | tee /tmp/ghartv-candidate/proof/android-tests.txt
+          grep -q 'OK (142 tests)' /tmp/ghartv-candidate/proof/android-tests.txt
+      - name: Package same sign-and-open owner flow
+        run: python tools/tv-first/package_review46.py
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: ghartv-code45-owner-review
+          name: ghartv-code46-owner-review
           path: /tmp/ghartv-candidate/
           retention-days: 14
