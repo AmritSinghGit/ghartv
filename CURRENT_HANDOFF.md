@@ -1,52 +1,52 @@
-# GharTV — Review46 native-engine/direct-link and pointer review
+# GharTV — Review47 recovered and verified, 1 October 2026
 
-OWNER_REVIEW46=COMPILED_142_ANDROID_TESTS_PASSED_INDEPENDENTLY_VERIFIED
-APPLICATION_SOURCE=a8a01004259d57b924f0c523ff2c02784d7392cd
-NATIVE_MEDIA3_ENGINE=IMPLEMENTED_FOR_EXPLICIT_SUPPORTED_MEDIA_LINKS
-NATIVE_FLIXMOMO_IFRAME_HANDOFF=NOT_IMPLEMENTED_OR_VERIFIED
+REVIEW47=COMPILED_160_ANDROID_TESTS_PASSED_OWNER_ACCEPTANCE_PENDING
+APPLICATION_SOURCE=900a213bed2938f8be17dca19f455fc223d06259
+CURRENT_RELEASE_DIRECTION=POLISH_ACCEPTED_EMBEDDED_BROWSER_PLAYER_AND_MOUSE
+NATIVE_EXPERIMENT=RETAIN_CODE_NOT_EXPOSED_IN_THIS_RELEASE
 HOUSEHOLD38=PUBLISHED_UNCHANGED
 
-## Same lane and actual owner acceptance
+## Same lane; latest owner instruction supersedes native-player expansion
 
-Continue AmritSinghGit/ghartv, branch codex/ghartv-remove-auto-preview, PR1, package in.ghartv.nova, normal Nova GharTV_Nova_Manual_google_tv_API36/emulator-5580, web8790 and original signing key. No new product/lane/worktree/emulator/key/runtime. Read managed receipt5687119492, main REVIEW_CANDIDATE.json, branch REVIEW46_EVIDENCE.json and actual update/latest.json separately.
+Continue AmritSinghGit/ghartv, codex/ghartv-remove-auto-preview, PR1, in.ghartv.nova, normal Nova GharTV_Nova_Manual_google_tv_API36/emulator-5580, web8790, original signer. No new lane, worktree, branch, service, emulator or signing identity.
 
-Newest actual native receipt is GHARTV-CYAN-45-20260929T185343Z-37648, app sourceb0ee9cf823df28d24f83b1687271baecca303c6f, signed441e9db39f9fab3b0754042dd11149220870ff1cd6de33cf15c310af607214a3, normal Nova frontmost and Obsidian readback. Owner subsequently reports Play still rejected as target obscured and explicitly requires a movable pointer AND the selected movie in native GharTV player. Guide refresh is OWNER_CONFIRMED_WORKING, preserved here. Launcher REVIEW_READY is not film acceptance.
+Owner46 explicitly confirmed the browser movie finally played and the mouse was good. They want that implementation retained, fewer meaningful controls, no permanent attribution banners over fullscreen video, usable toolbar focus after fullscreen exit, all detected sources still accessible, and bounded preload to reduce waiting. They tested the native engine and chose to defer it for this release: retain its code but do not expose it as the viewing path. Do not interpret this as a request to continue stream extraction or rewrite the accepted live-TV path.
 
-Do not present46 as fulfilling that entire request: the native engine now exists, but the current embedded FlixMomo movie still has no verified native media handoff. A pointer does not convert an opaque browser player into a native media source. Native Media3 test-clip success is not provider movie success.
+Latest managed receipt5687119492 is GHARTV-CYAN-46-20260930T210107Z-73336, sourcea8a01004259d57b924f0c523ff2c02784d7392cd, signed8fdb151485b7dc14e1e2a3e8ea1a576200ac193d8db7f6c64c955210e0512803. It confirms normal Nova and Obsidian readback, not47 installation. User-facing response failures interrupted delivery; their diagnostic cause is unknown. The build itself was not lost and must not be recreated unnecessarily.
 
-## Exact review and one-command delivery
+## Exact recovered completed build
 
-Version0.6.0-rc13-direct-native-pointer-review/code46; application sourcea8a01004259d57b924f0c523ff2c02784d7392cd.
-Unsigned APK6625682bytes, SHA25666a73a54736eb731388b635535648b913a592152fa71cef904f4760525793317.
-Source archive SHA256daaa63a46d0b03072ae0fcb38ea192e85d91ffc5c95d8b8a2697094cc2bcdc91.
-GHARTV_OPEN_REVIEW.command10273476bytes, SHA256420ffe13695c2ecf0c4f3e48bcbdd93621a9cbc73a0ed95ec638ab937b3ef22c.
+Version0.6.0-rc13.1-cinema-experience-review/code47; source900a213bed2938f8be17dca19f455fc223d06259.
+Existing workflow36823119930 completed successfully; candidate job110242861818. Trigger commitdb88c3caed941a99cca0ec8879d12e8c0a6b13fd was expanded to the application source above; do not confuse those identities.
+Artifact11144696080 named ghartv-code47-owner-review,15528932bytes, SHA25606fc9ca69d7fc50819ff159b72178048918843ac4c08791b18d99135bb0cbac9; expires2026-10-15T06:18:26Z.
+APK GharTV-code47-review-unsigned.apk6626642bytes, SHA2564c533d2055d6e2b792c05e81c28980133a22f4a87f92076ecf03853441002fc4.
+Source ZIP SHA256a90427cca2baaffb460f207fbfe947118fe4eb7e39347e8ac888f1e7b46e6068.
+Bundled GHARTV_OPEN_REVIEW.command10299058bytes, SHA256ad8b31c5e1f9fc49eb394faa5b8c84be41ce5c5e260697984133e157b275a37a.
 
-Successful existing workflow36768877865, candidate job110069977996. Artifact11123318573 /ghartv-code46-owner-review15423397bytes, SHA2563464292a5f4600fe8a58bed9575c259660c07385554dfe0cfd55201e671631a2, expires2026-10-14T20:03:14Z. Download exact run/artifact, verify opener, then execute --candidate46. Default also selects46; old/publication modes reject.
+Download that existing Actions run/artifact, verify the opener SHA and run --candidate 47. Default also selects47. No local Gradle build. Fallback GharTV_Review47_Download.zip7788909bytes, SHA256295bac3f8941805d4bc7c4d1d783cec8347eea28d837da1d58dc01db4deb5832 contains GharTV_Review47/GHARTV_OPEN_REVIEW.command and README. The exact APK/source are embedded. Do not run an old Downloads launcher.
 
-Fallback GharTV_Review46_Download.zip7771298bytes, SHA256c6e500cf25045614ac42b68b9f4d6109d312baef2e421b02d23e61800c607517. Extract into Downloads; entry at GharTV_Review46/GHARTV_OPEN_REVIEW.command. Compiled APK/source embedded, no local Gradle. All23 opener function ASTs match45, retaining original signer/certificate verification, same normal Nova, nonstreaming in-place install, bounded clock/network preflight, browser/tab and actual receipt handling. No owner46 signing or run is claimed.
+All23 opener function ASTs match the accepted46 delivery. Original key, certificate verification, same Nova, nonstreaming in-place update, existing bounded clock/network preflight, browser-tab reuse and receipt handling are retained. Required certificate40a9d8bf6b1c557b3d6fd02acef075368dd13e28691f207a297202d0d5ec233c. No uninstall, data clear, separate signing step, scrcpy, owner cleanup or household publishing action.
 
-## What is genuinely implemented
+## Delivered behavior
 
-NativeFilmPlayerActivity is internal/non-exported and contains a Media3 ExoPlayer/PlayerView, no WebView, independent of JioSession. It supports native play/pause, +/-10second seek, speed selection, timeline, remote media buttons, Hide/Menu/Back and decoder release/state restoration on pause/resume.
+The browser is still the media engine. One search row and Options replace persistent debug/toggle rows. Options contains connection, diagnostics and privacy. The video tray has Play, Sources, Fullscreen, Mouse, More and Hide. Watchlist remains on title details, and trying another source stays with Sources. No Native player button or automatic native direct-media handoff in normal viewing; classes/tests remain internally.
 
-Native input is narrowly explicit: a user-gesture main-document navigation to a supported HTTPS .mp4/.webm/.m3u8/.mpd link on an already registered provider origin. Normal TLS stays enabled and browser cookies/credentials are not copied. No iframe contents read, network stream interception, source extraction, DRM bypass or broad CDN-origin expansion. It is NOT a resolver for the embedded movie sources currently displayed by FlixMomo.
+Provider fullscreen now occupies the full app window, not a small stage underneath fixed browsing banners. Menu opens Resume, Sources and Exit fullscreen plus FlixMomo attribution. Back or Exit fullscreen returns to the browsing toolbar with Options focused, clearing stale mouse capture so toolbar controls receive input. Attribution remains in browsing/menu views but does not permanently cover fullscreen video. Mouse clicking is retained; the pointer fades on idle and movement restores it. Idle or auto-positioning never clicks.
 
-Discover has a Native player explanation button. Engine check (test clip) deliberately plays a generated owned30second test-pattern clip to let the owner review native controls. It is never a suggestion, film substitution or advertised working provider movie. The dialog says the actual iframe handoff is unverified.
+Fullscreen uses an explicit visible provider control when available. Some embedded providers may still require Mouse on their own fullscreen button. Do not promise every iframe or one-click fullscreen on every site. No cross-origin inspection, stream extraction, certificate bypass or different playback engine.
 
-When automatic Play reports TARGET_OBSCURED/TARGET_CHANGED, the existing pointer can open without navigating another menu. A typed geometry-only helper centres it on one unambiguous visible media rectangle. The pointer NEVER clicks on entry; user arrows move and OK clicks. Manual input invalidates delayed positioning. Ambiguous regions retain manual positioning. Back/Menu restores existing controls. Pointer-operated provider video still uses embedded playback, clearly labelled.
+Preload is only the first two rows of permitted artwork and existing nearby-row memory loading. Up to12 actually observed title details are retained in this Activity for10minutes; revisits can display these while revalidating the current page. Cached metadata alone cannot enable Watch. No speculative title requests, video preload/download, hidden WebView, browsing-history file, new worker or background service. No measured owner-network speedup is claimed.
 
-## Verification and limitations
+## Verification and limits
 
-All142 actual Android tests passed in232.473seconds, retaining130 and adding12. All12 older Android test files are byte-identical. Native tests require rendered first frame/advancing video clock, remote pause/play, seek, speed dialog1.5x, decoder release/restored paused position and no WebView. Pointer tests require position-only output, no automatic click, user-input precedence and manual ambiguous fallback. URI-policy tests distinguish explicit supported sources from pages and unsafe/unregistered schemes/origins. These tests use owned local media, not the user's selected movie or live provider infrastructure.
+Recovered CI log confirms160/160 Android tests in324.825seconds:142 retained plus18 new fullscreen/menu/exit-focus/pointer/cache tests. All13 older Android test source files are byte-identical. Final source fixes fullscreen action registration and deterministic arrow focus in the fullscreen menu. Real owned media/trusted actions are used for tests; no commercial provider film or owner account.
 
-First source run36768495636 failed the activity no-direct-JavaScript contract. Fixed geometry reading was moved into its dedicated typed helper while retaining the contract. No Android assertions were relaxed. Successful stagingec22bf2fd529a29a5dc6ab284a1789675e5d16e4 was expanded on the same branch to the final application source above.
+This recovery independently downloaded the archive, checked every root SHA256SUMS entry, checked exact embedded APK/source bytes, parsed binary AndroidManifest package/code/version, checked shell/Python syntax and the default/47-versus-old/publication argument guard. All23 opener functions match46. MainActivity, JioApiClient, PlayerActivity and ChannelRepository match46. Native experiment is retained; debug fixtures/retired MovieHub are absent from release. Source ZIP contains no font files.
 
-Downloaded archive, root checksums, embedded APK/source checksums, launcher shell syntax, binary AndroidManifest package/version, native class presence, test class absence and no source font files verified independently in the working container. Owned clip477707bytes SHA256f168ece563329f3e49eedcc74987255d608f37540d104ffcebbb79edd0f44589. Local independent verification is a separate report; bundled CI VALIDATION truthfully had not yet claimed that later local check.
-
-MainActivity, JioApiClient, PlayerActivity and ChannelRepository remain byte-identical to45. This does not certify all live-TV behavior on the owner's TV, but the confirmed guide-refresh code was not changed. Actual current-provider native movie, HTTPS direct-media response, owner46 playback and physical-TV acceptance remain unverified. No new discovery/search fix, arbitrary embedded-player seek/speed, Tor or QR remote was delivered.
+Owned fullscreen and fullscreen-menu screenshots were inspected. The toolbar-return image duplicates the menu screenshot and is not independent visual proof of returning to the toolbar; test focus assertions provide that evidence. Test suite was not rerun in the recovery container. No owner47 execution, live-provider47 fullscreen acceptance, physical-TV check, authenticated collector read or measured responsiveness yet.
 
 ## Continuity and preservation
 
-Evidence-only branch commit6a71318bd027edc1dc96162e75ba35f1897a36ce is not a different application build. Existing Analytics source/runtime and the previously blocked report work are unchanged; do not call Analytics empty or pretend its remaining sample/label/outcome-panel work is solved. Previously blocked stream-interception/extraction approach was not retried or rerouted;46's explicit direct-link/native engine is separate.
+Code and completed build remain in the same branch/PR. Main manifest and this handoff are reconciled to47 without rebuilding the APK. Recovery does not write the Mac's Obsidian vault or prove Memory replication; the established launcher attempts those actual native receipts when run. No user screenshots, credentials or private event rows are published.
 
-No household feed update, public release, telemetry opt-in, private data upload, owner-Mac cleanup, new AVD, reinstall-with-data-clear, cloud Obsidian write or Memory replication claim. Usual launcher mirrors run only when the owner executes it. Current public38 remains separate. Previous45 handoff blob15573370d7a7309460b8aa5dcbb0475b6cf3fdfd and manifest e70dce84da87f48400413991d23f79a01350e62f remain in Git history.
+Live-TV guide refresh was owner-confirmed and its core code remains unchanged. Analytics runtime and its pending report work remain unchanged. Actual update/latest.json still advertises household38; no47 rollout approval. Do not promote47 under38's approval. Earlier46 handoff blobc4fa9dbd851963123284a94bba55040fb616063a and manifestc8957ced9c3aed15abbadef423c45ba91a34c3cf remain in Git history.
