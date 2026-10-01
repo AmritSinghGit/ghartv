@@ -19,6 +19,9 @@ public final class RemoteWebCursor extends View {
     private final Paint paint=new Paint(Paint.ANTI_ALIAS_FLAG);
     private final float density;
     private View target;
+    private java.util.function.Consumer<String> observer;
+    public void setObserver(java.util.function.Consumer<String> value){observer=value;}
+    private void observed(String name){if(observer!=null)observer.accept(name);}
     private boolean enabled=true,scrollMode,scheduled,pressed;
     private long lastFrame,started,downAt;
     private long userSequence;
@@ -26,8 +29,9 @@ public final class RemoteWebCursor extends View {
     public boolean aimFraction(float x,float y,long token){if(!enabled||token!=userSequence||!Float.isFinite(x)||!Float.isFinite(y)||x<0||x>1||y<0||y>1)return false;state.position(x*getWidth(),y*getHeight());invalidate();return true;}
     private int clickCode=-1;
     private float clickX,clickY;
+    public static final long IDLE_HIDE_MS=5000;
     private final Runnable frame=()->tick();
-    private final Runnable idleHide=()->{if(!pressed&&!state.moving())setVisibility(INVISIBLE);};
+    private final Runnable idleHide=()->{if(!pressed&&!state.moving()){setVisibility(INVISIBLE);observed("POINTER_FADE");}};
 
     public RemoteWebCursor(Context context){
         super(context);density=getResources().getDisplayMetrics().density;
@@ -40,7 +44,7 @@ public final class RemoteWebCursor extends View {
     public void center(){cancel();state.position(getWidth()/2f,getHeight()/2f);invalidate();}
     public void scrollMode(boolean value){cancel();scrollMode=value;invalidate();}
     public boolean scrolling(){return scrollMode;}
-    public void enter(){if(enabled&&target!=null){removeCallbacks(idleHide);setVisibility(VISIBLE);bringToFront();invalidate();postDelayed(idleHide,2500);}}
+    public void enter(){if(enabled&&target!=null){removeCallbacks(idleHide);boolean hidden=getVisibility()!=VISIBLE;setVisibility(VISIBLE);if(hidden)observed("POINTER_WAKE");bringToFront();invalidate();postDelayed(idleHide,IDLE_HIDE_MS);}}
     public void leave(){cancel();setVisibility(INVISIBLE);}
     public void cancel(){
         state.stop();removeCallbacks(frame);removeCallbacks(idleHide);scheduled=false;
@@ -56,12 +60,21 @@ public final class RemoteWebCursor extends View {
     }
     public boolean handle(KeyEvent event){
         if(!enabled||target==null)return false;
-        removeCallbacks(idleHide);postDelayed(idleHide,2500);
         final int key=event.getKeyCode(),dir=direction(key);
+        boolean relevant=dir!=0||key==KeyEvent.KEYCODE_DPAD_CENTER||key==KeyEvent.KEYCODE_ENTER||key==KeyEvent.KEYCODE_NUMPAD_ENTER||key==KeyEvent.KEYCODE_PAGE_UP||key==KeyEvent.KEYCODE_PAGE_DOWN;
+        if(!relevant)return false;
+        removeCallbacks(idleHide);postDelayed(idleHide,IDLE_HIDE_MS);
         if(event.getAction()==KeyEvent.ACTION_DOWN)userSequence++;
         if(dir!=0){
             if(event.getAction()==KeyEvent.ACTION_DOWN){
                 enter();state.setDirection(dir,true);
+                // A short D-pad tap can finish before the next animation frame.
+                // Apply its first movement now; held keys continue on animation frames.
+                if(event.getRepeatCount()==0){
+                    if(scrollMode)scroll(state.horizontal()*.3f,state.vertical()*.3f);
+                    else {state.advance(.016f,450*density);hover();}
+                    invalidate();
+                }
                 if(!scheduled){started=lastFrame=SystemClock.uptimeMillis();schedule();}
             }else if(event.getAction()==KeyEvent.ACTION_UP){state.setDirection(dir,false);if(!state.moving()){removeCallbacks(frame);scheduled=false;}}
             return true;
@@ -72,7 +85,7 @@ public final class RemoteWebCursor extends View {
                 clickCode=key;clickX=state.x();clickY=state.y();pressed=true;downAt=SystemClock.uptimeMillis();
                 touch(MotionEvent.ACTION_DOWN,downAt);invalidate();
             }else if(event.getAction()==KeyEvent.ACTION_UP && pressed && key==clickCode){
-                touch(event.isCanceled()?MotionEvent.ACTION_CANCEL:MotionEvent.ACTION_UP,SystemClock.uptimeMillis());pressed=false;clickCode=-1;invalidate();
+                touch(event.isCanceled()?MotionEvent.ACTION_CANCEL:MotionEvent.ACTION_UP,SystemClock.uptimeMillis());if(!event.isCanceled())observed("POINTER_CLICK");pressed=false;clickCode=-1;invalidate();
             }
             return true;
         }
@@ -81,6 +94,16 @@ public final class RemoteWebCursor extends View {
             return true;
         }
         return false;
+    }
+    /** Observes a physical mouse/touchpad, without synthesizing a second click. */
+    public void observePointer(MotionEvent e){
+        if(!enabled||target==null)return;
+        int action=e.getActionMasked();
+        if(action!=MotionEvent.ACTION_HOVER_MOVE&&action!=MotionEvent.ACTION_MOVE&&action!=MotionEvent.ACTION_DOWN&&action!=MotionEvent.ACTION_UP&&action!=MotionEvent.ACTION_SCROLL)return;
+        int[] xy=new int[2];getLocationOnScreen(xy);
+        float x=e.getRawX()-xy[0],y=e.getRawY()-xy[1];
+        if(!Float.isFinite(x)||!Float.isFinite(y)||x<0||y<0||x>getWidth()||y>getHeight())return;
+        userSequence++;state.position(x,y);enter();
     }
     private void schedule(){if(!scheduled){scheduled=true;postOnAnimation(frame);}}
     private void tick(){
