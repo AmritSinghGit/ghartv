@@ -406,7 +406,21 @@ public class FlixMomoActivity extends Activity {
             int key=event.getKeyCode();
             if(key==KeyEvent.KEYCODE_BACK){if(event.getAction()==KeyEvent.ACTION_UP)exitFullScreen();return true;}
             if(key==KeyEvent.KEYCODE_MENU){if(event.getAction()==KeyEvent.ACTION_UP)showFullscreenMenu();return true;}
-            if(fullMenu!=null&&fullMenu.getVisibility()==View.VISIBLE)return super.dispatchKeyEvent(event);
+            if(fullMenu!=null&&fullMenu.getVisibility()==View.VISIBLE){
+                // Fullscreen's custom WebView surface must not receive menu arrows.
+                // Resolve them here instead of depending on ViewRoot fallback focus.
+                if(key==KeyEvent.KEYCODE_DPAD_LEFT||key==KeyEvent.KEYCODE_DPAD_RIGHT||key==KeyEvent.KEYCODE_DPAD_UP||key==KeyEvent.KEYCODE_DPAD_DOWN){
+                    if(event.getAction()==KeyEvent.ACTION_DOWN){
+                        LinearLayout row=(LinearLayout)fullMenu.getChildAt(1);
+                        int at=0;for(int i=0;i<row.getChildCount();i++)if(row.getChildAt(i).hasFocus()){at=i;break;}
+                        if(key==KeyEvent.KEYCODE_DPAD_LEFT)at=Math.max(0,at-1);
+                        else if(key==KeyEvent.KEYCODE_DPAD_RIGHT)at=Math.min(row.getChildCount()-1,at+1);
+                        row.getChildAt(at).requestFocus();
+                    }
+                    return true;
+                }
+                return super.dispatchKeyEvent(event);
+            }
             if(cursor.handle(event)){
                 if(event.getAction()==KeyEvent.ACTION_UP&&!event.isCanceled()&&(key==KeyEvent.KEYCODE_DPAD_CENTER||key==KeyEvent.KEYCODE_ENTER))controlTrace.emit(this,"mouse","MOUSE_CLICK_SENT");
                 return true;

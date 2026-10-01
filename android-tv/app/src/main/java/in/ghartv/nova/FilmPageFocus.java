@@ -16,8 +16,8 @@ final class FilmPageFocus {
         // A focused video is not a text field. Let the already-requested media
         // action reach its existing single-visible-target checks below. Inputs,
         // editable content and ordinary navigation keep the editing behavior.
-        const focusedMediaAction=['media','activate'].includes(action)&&active&&!active.isContentEditable&&/^(VIDEO|IFRAME)$/.test(active.tagName);
-        if(editing&&!focusedMediaAction&&!['watch','watchlist','scan','focus','commit'].includes(action))return pack({state:'EDITING'});
+        const focusedMediaAction=['media','activate','fullscreen'].includes(action)&&active&&!active.isContentEditable&&/^(VIDEO|IFRAME)$/.test(active.tagName);
+        if(editing&&!focusedMediaAction&&!['watch','watchlist','scan','focus','commit','fullscreen'].includes(action))return pack({state:'EDITING'});
         const visible=e=>{let r=e.getBoundingClientRect(),s=getComputedStyle(e);return r.width>1&&r.height>1&&s.display!=='none'&&s.visibility!=='hidden'&&!e.disabled&&e.getAttribute('aria-disabled')!=='true';};
         const dialogs=Array.from(document.querySelectorAll('dialog[open],[role="dialog"],[aria-modal="true"]')).filter(visible);
         const root=dialogs.length?dialogs[dialogs.length-1]:document;
@@ -93,7 +93,7 @@ final class FilmPageFocus {
         })()
         """;
     static String script(String action) {
-        switch(action) {case "media":case "commit":case "scan":case "focus":case "left":case "right":case "up":case "down":case "activate":case "watch":case "watchlist":break;
+        switch(action) {case "fullscreen":case "media":case "commit":case "scan":case "focus":case "left":case "right":case "up":case "down":case "activate":case "watch":case "watchlist":break;
             default:throw new IllegalArgumentException("Unsupported page action");}
         return JS.replace("__ACTION__", "'"+action+"'").replace("__GHARTV_HOSTS__",FilmProviderPolicy.hostsJavascript());
     }

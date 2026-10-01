@@ -182,7 +182,7 @@ final class FilmNativeControls {
     }
     private void executePageAction(String action){
         final WebView source=browser;final int token=generation;pageBusy=true;
-        if("media".equals(action)){hideAll();source.requestFocus();}
+        if("media".equals(action)||"fullscreen".equals(action)){hideAll();source.requestFocus();}
         source.evaluateJavascript(FilmPageFocus.script(action),raw->{
             if(!active||source!=browser||token!=generation)return;
             try{JSONObject result=decode(raw);String response=result.optString("state");
