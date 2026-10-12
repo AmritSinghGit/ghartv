@@ -13,7 +13,7 @@ function checkedRelease(value){
   if(!r.ok)throw Error('Unavailable');const text=await r.text();if(text.length>32768)throw Error('Too large');
   const release=checkedRelease(JSON.parse(text));byId('download-apk').href=release.url;byId('version-label').textContent='GharTV Nova · '+release.name;
   status.textContent='Latest available download checked. Android will ask you to confirm installation.';
- }catch{status.textContent='The latest download check is unavailable. The button uses the saved release from 18 September 2026.';}
+ }catch{status.textContent='The latest download check is unavailable. The button uses the saved Review48 release from 12 October 2026.';}
 })();
 byId('copy-link').addEventListener('click',async()=>{
  const status=byId('share-status');status.hidden=false;
