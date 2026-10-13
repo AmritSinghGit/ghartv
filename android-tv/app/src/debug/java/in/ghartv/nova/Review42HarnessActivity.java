@@ -1,7 +1,9 @@
 package in.ghartv.nova;
 
 /** Owned local regression fixture. No external account, media or TLS bypass. */
-public final class Review42HarnessActivity extends FlixMomoActivity {
+public class Review42HarnessActivity extends FlixMomoActivity {
+    // Historical parsed-control regressions; Review51PointerHarness tests the production default.
+    @Override protected boolean pointerFirstBrowsing(){return false;}
     private final java.util.Map<String,byte[]> pages=new java.util.concurrent.ConcurrentHashMap<>();
     private boolean installed;
     @Override protected FilmHomeView createHomePanel(FilmHomeView.Host h){return new FilmHomeView(this,h,(v,u)->v.setImageDrawable(new android.graphics.drawable.ColorDrawable(0xff164e60)));}

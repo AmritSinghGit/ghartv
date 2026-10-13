@@ -1,0 +1,14 @@
+# GharTV Review51 — pointer-first page and shared search
+
+Existing original GharTV lane, same PR1 branch, package, original signing and normal Nova emulator. Base6d49bd9933b183e955b44adc9a045ab41853b967. Owner asked for pointer-first instead of unreliable parsed movie/episode playability decisions. No QR remote, native stream extraction or second browser runtime.
+
+## Production change
+Selecting an observed film/series opens its actual registered provider page with the remote pointer already active. Arrow keys move/edge-scroll; OK clicks the visible control. The provider owns episodes and source selection. Parsed details, Watch ambiguity gates, automatic retry loops and the lower native playback tray are not in this production path. A compact Review51/navigation hint is shown in browsing, not over fullscreen video. Menu opens explicit pointer/search/back/reload/connection controls. Back from a title returns to retained cards; Back from the player follows page history. Provider text inputs yield to the Android keyboard; Back restores pointer. Fullscreen F/Back keeps pointer ownership. Security/TLS/origin protections remain unchanged; no automatic trust of provider migration banners.
+
+## Shared search and microphone
+The typed and recognized query uses the same existing live-guide plus film route. Live matches require all query tokens, Unicode scripts preserved, plus exact channel numbers; this avoids unrelated live matches for movie titles. Recognition uses the installed Android speech UI first. If no UI exists but a speech service is installed, a one-shot fallback explicitly asks the user to Listen and grants RECORD_AUDIO only via Android permission. Cancel/lifecycle/20second timeout destroys the recognizer. GharTV stores no audio, partial transcripts or raw microphone logs. Service/network/language failures remain explicit with Type search fallback. No speech model is downloaded and no speech accuracy on the owner's TV is claimed by controlled tests.
+
+## Verification scope
+Historical parsed-components tests retain their assertions and explicitly select legacy behavior through debug-only harness overrides. Those tests are not proof of the new default. New Review51PointerSearchTest exercises the real default card -> original page -> trusted pointer click -> owned video path; default-false availability rejection is not substituted. The version-label assertion tracks BuildConfig rather than freezing the UI at50. Record actual CI results before any claim of a passing build. Controlled media/transcript injection is not live provider or real microphone recognition.
+
+Public household50 is a separate exact-byte owner authorization; Review51 rollout is held until its review. Original source checkout, live-TV API/player/repository, app data and release lineage remain protected. No fresh private telemetry read, QR pairing server or native-film engine promotion.

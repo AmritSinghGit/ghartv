@@ -2,6 +2,8 @@ package in.ghartv.nova;
 
 /** Test-only media and HTML. Inherits the production Activity, callbacks and input handling. */
 public final class Review40HarnessActivity extends FlixMomoActivity {
+    // Historical parsed-control regressions; Review51PointerHarness tests the production default.
+    @Override protected boolean pointerFirstBrowsing(){return false;}
     public int loads;
     static String ownedClip(){return CLIP;}
     private final java.util.concurrent.ConcurrentHashMap<String,byte[]> fixturePages=new java.util.concurrent.ConcurrentHashMap<>();

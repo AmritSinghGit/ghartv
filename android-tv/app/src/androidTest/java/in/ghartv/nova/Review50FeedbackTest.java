@@ -69,7 +69,7 @@ public class Review50FeedbackTest {
         full();h.ui(()->{h.web.getWebChromeClient().onHideCustomView();h.web.requestFocus();});SystemClock.sleep(150);h.ui(()->assertTrue(((View)f("pageButton")).hasFocus()));
     }
     @Test public void oneViewerVersionIdentityAndTechnicalVersionOnlyInDetails()throws Exception{
-        assertEquals("Review 50",ReviewDisplay.label());assertEquals("GharTV Films · Review 50",ReviewDisplay.films());assertTrue(ReviewDisplay.technical().contains(BuildConfig.VERSION_NAME));assertFalse(ReviewDisplay.title().contains("rc14"));
+        assertEquals("Review "+BuildConfig.VERSION_CODE,ReviewDisplay.label());assertEquals("GharTV Films · Review "+BuildConfig.VERSION_CODE,ReviewDisplay.films());assertTrue(ReviewDisplay.technical().contains(BuildConfig.VERSION_NAME));assertFalse(ReviewDisplay.title().contains("rc14"));
         h.player();h.ui(()->{invoke("toolbar");assertNotNull(h.text((View)f("chrome"),ReviewDisplay.films()));invoke("showOptions");assertTrue(((android.app.AlertDialog)f("optionsDialog")).isShowing());});
     }
     @Test public void realProviderFullscreenCallbackThenFDoesNotReloadOwnedVideo()throws Exception{

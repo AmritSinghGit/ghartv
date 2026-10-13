@@ -39,14 +39,42 @@ final class UnifiedSearch {
     static void voice(Activity activity){
         String language=activity.getSharedPreferences(AppConfig.PREFS,Activity.MODE_PRIVATE).getString(LANGUAGE,"auto");
         try{activity.startActivityForResult(voiceIntent(language),VOICE);}
-        catch(ActivityNotFoundException|SecurityException e){Toast.makeText(activity,"Voice is unavailable on this TV. Type instead.",Toast.LENGTH_LONG).show();dialog(activity);}
+        catch(ActivityNotFoundException e){InAppVoiceSearch.offer(activity,language);}
+        catch(SecurityException e){unavailable(activity,"Android did not allow the speech service to open. Type search is still available.");}
     }
     static String voiceText(int request,int result,Intent data){
         if(request!=VOICE||result!=Activity.RESULT_OK||data==null)return "";
         ArrayList<String> words=data.getStringArrayListExtra(RecognizerIntent.EXTRA_RESULTS);if(words==null)return "";
-        for(String word:words){String q=clean(word);if(valid(q))return q;}return "";
+        return firstResult(words);
     }
-    static void dialog(Activity activity){dialog(activity,"");}
+    static String firstResult(java.util.List<String> words){
+        if(words!=null)for(String word:words){String q=clean(word);if(valid(q))return q;}return "";
+    }
+    static void unavailable(Activity activity,String message){
+        if(activity.isFinishing())return;
+        new AlertDialog.Builder(activity).setTitle("Voice search unavailable")
+            .setMessage(message).setPositiveButton("Type search",(d,w)->dialog(activity))
+            .setNeutralButton("Language",(d,w)->chooseVoice(activity))
+            .setNegativeButton("Close",null).show();
+    }
+    static void chooseVoice(Activity activity){
+        new AlertDialog.Builder(activity).setTitle("Search language · installed speech service")
+            .setItems(LABELS,(d,which)->{activity.getSharedPreferences(AppConfig.PREFS,Activity.MODE_PRIVATE).edit().putString(LANGUAGE,TAGS[which]).apply();voice(activity);})
+            .setNegativeButton("Type instead",(d,w)->dialog(activity)).show();
+    }
+    static String normalize(String value){
+        return java.text.Normalizer.normalize(clean(value),java.text.Normalizer.Form.NFKC).toLowerCase(java.util.Locale.ROOT)
+            .replaceAll("[^\\p{L}\\p{N}\\p{M}]+"," ").trim().replaceAll(" +"," ");
+    }
+    static java.util.List<Channel> channels(java.util.List<Channel> all,String text){
+        java.util.List<Channel> out=new java.util.ArrayList<>();String term=normalize(text);if(term.isEmpty()||all==null)return out;
+        String[] words=term.split(" +");
+        for(Channel c:all){String hay=normalize(c.name+" "+c.language+" "+c.category+" "+c.nowTitle+" "+c.nextTitle);boolean ok=true;
+            for(String word:words)if(!hay.contains(word)){ok=false;break;}
+            if(ok||c.displayNumber().equals(term)||String.valueOf(c.number).equals(term))out.add(c);
+        }return out;
+    }
+    static void dialog(Activity activity){dialog(activity,activity.getIntent().getStringExtra(QUERY));}
     private static void dialog(Activity activity,String initial){
         EditText input=new EditText(activity);input.setSingleLine(true);input.setText(initial);input.setHint("Channel, film or series");input.setImeOptions(EditorInfo.IME_ACTION_SEARCH);
         AlertDialog dialog=new AlertDialog.Builder(activity).setTitle("Search GharTV · type or speak")

@@ -150,7 +150,10 @@ public final class MainActivity extends Activity implements ChannelNavigator.Lis
         super.onPause();
     }
 
+    @Override public void onRequestPermissionsResult(int r,String[] p,int[] g){super.onRequestPermissionsResult(r,p,g);InAppVoiceSearch.permission(this,r,g);}
+    @Override protected void onStop(){InAppVoiceSearch.stopped(this);super.onStop();}
     @Override protected void onDestroy() {
+        InAppVoiceSearch.close(this);
         if (pendingEpgLoad != null) mainHandler.removeCallbacks(pendingEpgLoad);
         mainHandler.removeCallbacks(clockTicker);
         if (heroPreviewController != null) heroPreviewController.release();

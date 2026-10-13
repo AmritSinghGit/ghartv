@@ -2,6 +2,8 @@ package in.ghartv.nova;
 
 /** Local, owned fixture pages. Production lifecycle and input routing are not overridden. */
 public final class Review39HarnessActivity extends FlixMomoActivity {
+    // Historical parsed-control regressions; Review51PointerHarness tests the production default.
+    @Override protected boolean pointerFirstBrowsing(){return false;}
     public int pageLoads;
     private void image(android.widget.ImageView target){android.graphics.Bitmap b=android.graphics.Bitmap.createBitmap(156,234,android.graphics.Bitmap.Config.ARGB_8888);android.graphics.Canvas c=new android.graphics.Canvas(b);android.graphics.Paint p=new android.graphics.Paint();p.setColor(0xff12576b);c.drawRect(0,0,156,234,p);p.setColor(0xff89edc4);p.setTextSize(15);c.drawText("OWNED",36,92,p);c.drawText("TEST IMAGE",20,125,p);target.setImageBitmap(b);}
     @Override protected FilmHomeView createHomePanel(FilmHomeView.Host host){return new FilmHomeView(this,host,(target,url)->image(target));}

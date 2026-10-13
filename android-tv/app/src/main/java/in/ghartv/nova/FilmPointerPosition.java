@@ -8,6 +8,9 @@ import android.webkit.ValueCallback;
  */
 final class FilmPointerPosition {
     static void read(WebView page,ValueCallback<String> callback){page.evaluateJavascript(script(),callback);}
+    static void editor(WebView page,ValueCallback<String> callback){
+        page.evaluateJavascript("Boolean(document.activeElement && (document.activeElement.matches('input:not([type=button]):not([type=submit]),textarea') || document.activeElement.isContentEditable))",callback);
+    }
     static String script(){return """
         (()=>{const out=(v)=>JSON.stringify(v);const w=innerWidth,h=innerHeight;
           const region=Array.from(document.querySelectorAll('video,iframe')).map(e=>({e,r:e.getBoundingClientRect(),s:getComputedStyle(e)}))

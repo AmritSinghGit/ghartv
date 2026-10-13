@@ -3,6 +3,8 @@ package in.ghartv.nova;
 /** Debug-only page loader. All production Activity layout/lifecycle/key dispatch
  * runs unchanged; only the network navigation is replaced with local fixture HTML. */
 public final class DiscoverFocusHarnessActivity extends FlixMomoActivity {
+    // Historical parsed-control regressions; Review51PointerHarness tests the production default.
+    @Override protected boolean pointerFirstBrowsing(){return false;}
     public int pageLoads;
     @Override protected FilmHomeView createHomePanel(FilmHomeView.Host host){
         return new FilmHomeView(this,host,(target,url)->{
