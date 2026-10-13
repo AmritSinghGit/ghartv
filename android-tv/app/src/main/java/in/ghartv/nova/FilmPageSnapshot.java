@@ -74,6 +74,11 @@ final class FilmPageSnapshot {
         if(index<0||index>=48)throw new IllegalArgumentException("Invalid player index");
         return "(()=>{"+CORE+"if(location.href!=="+JSONObject.quote(pageUrl)+")return JSON.stringify({state:'STALE_PAGE'});"+
             "const list=players(),p=list.find(x=>x.label==="+JSONObject.quote(label)+");if(!p)return JSON.stringify({state:'PLAYER_CHANGED'});"+
+            """
+            const media=Array.from(document.querySelectorAll('video,audio')).slice(0,24);
+            for(const v of media){v.pause();v.removeAttribute('src');for(const s of v.querySelectorAll('source'))s.remove();v.load();}
+            for(const f of Array.from(document.querySelectorAll('iframe')).slice(0,32).filter(e=>visible(e)&&e.getBoundingClientRect().width>=160&&e.getBoundingClientRect().height>=90)){f.setAttribute('src','about:blank');f.removeAttribute('srcdoc');}
+            """+
             "if(p.kind==='select'){p.element.selectedIndex=p.option;p.element.dispatchEvent(new Event('change',{bubbles:true}));}else{p.element.click();}"+
             "return JSON.stringify({state:'SELECTION_REQUESTED',label:p.label});})()";
     }

@@ -67,7 +67,7 @@ class FilmDetailView extends FrameLayout {
     }
     private void art(String source){if(!FilmHomeView.safePoster(source)||source.equals(image))return;image=source;loadArtwork(poster,source);}
     void loadArtwork(ImageView target,String source){Glide.with(activity).load(source).override(312,468).centerCrop().diskCacheStrategy(DiskCacheStrategy.NONE).into(target);}
-    void unavailable(String reason){waiting=false;progress.setVisibility(GONE);status.setText(reason+" Original page and Back remain available.");}
+    void unavailable(String reason){watch.setEnabled(false);watchlist.setEnabled(false);waiting=false;progress.setVisibility(GONE);status.setText(reason+" Original page and Back remain available.");}
     boolean handleRemote(KeyEvent e,View focused){int k=e.getKeyCode();if(k!=KeyEvent.KEYCODE_DPAD_LEFT&&k!=KeyEvent.KEYCODE_DPAD_RIGHT&&k!=KeyEvent.KEYCODE_DPAD_DOWN&&k!=KeyEvent.KEYCODE_DPAD_UP)return false;
         if(e.getAction()==KeyEvent.ACTION_UP)return true;if(e.getAction()!=KeyEvent.ACTION_DOWN)return false;
         if(copy.hasFocus()){

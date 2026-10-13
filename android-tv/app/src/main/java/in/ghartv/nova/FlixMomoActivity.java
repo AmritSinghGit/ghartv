@@ -49,6 +49,22 @@ public class FlixMomoActivity extends Activity {
     private EditText query;
     private TextView status,help,playNotice;
     private boolean attemptObservable;
+    private FilmPlaybackMonitor startMonitor;
+    private long detailBegan,detailUsableMs=-1,detailPreviewMs=-1;
+    private final Runnable detailWait=()->{if(detailRequested&&detailUsableMs<0&&detailPanel!=null)detailPanel.unavailable("Title information has not arrived. Retry the original page or return to results.");};
+    private void observeDetail(org.json.JSONObject data){
+        org.json.JSONObject detail=data.optJSONObject("detail");
+        if(detailRequested&&detail!=null&&detail.optBoolean("watch")&&detailUsableMs<0){
+            detailUsableMs=Math.max(0,android.os.SystemClock.elapsedRealtime()-detailBegan);
+            handler.removeCallbacks(detailWait);
+        }
+    }
+    org.json.JSONObject performanceEvidence(){
+        org.json.JSONObject d=startMonitor==null?new org.json.JSONObject():startMonitor.evidence();
+        try{d.put("details_usable_ms",detailUsableMs<0?org.json.JSONObject.NULL:detailUsableMs);d.put("cached_preview_ms",detailPreviewMs<0?org.json.JSONObject.NULL:detailPreviewMs);}catch(Exception ignored){}
+        return d;
+    }
+
     private long playUntil,playAfter;private boolean mediaAttempted;private double lastMediaTime=-1;
     private Button pageButton,modeButton,scrollButton,retryButton;
     private LinearLayout chrome,browseRoot,fullMenu;
@@ -155,9 +171,9 @@ public class FlixMomoActivity extends Activity {
             public void fullscreen(){inputEpoch++;noteInput("FULLSCREEN_REQUEST");nativeControls.pageAction("fullscreen");}
             public void mouse(){enterMouse();}
             public boolean pageIsVisible(){return !homeRequested&&!detailRequested&&custom==null&&!(chrome.getVisibility()==View.VISIBLE&&chrome.hasFocus());}
-            public void pageObserved(org.json.JSONObject data){visitCache.put(data.optJSONObject("detail"));if(homeRequested&&homePanel!=null)homePanel.render(data);else if(detailRequested&&detailPanel!=null)detailPanel.render(data.optJSONObject("detail"));else if(!data.optBoolean("search"))liveResults.setVisibility(View.GONE);followPlayback(data);}
+            public void pageObserved(org.json.JSONObject data){observeDetail(data);visitCache.put(data.optJSONObject("detail"));if(homeRequested&&homePanel!=null)homePanel.render(data);else if(detailRequested&&detailPanel!=null)detailPanel.render(data.optJSONObject("detail"));else if(!data.optBoolean("search"))liveResults.setVisibility(View.GONE);followPlayback(data);}
             public void pageAction(String action){if("watch".equals(action))requestWatch();else if("media".equals(action)){armPlayback();mediaAttempted=true;nativeControls.pageAction("media");}else nativeControls.pageAction(action);}
-            public void playerSelected(){armPlayback();}
+            public void playerSelected(){if(startMonitor!=null)startMonitor.selected();armPlayback();}
             public void actionOutcome(String action,String result){
                 controlTrace.emit(FlixMomoActivity.this,action,result);
                 noteInput(result);
@@ -191,6 +207,20 @@ public class FlixMomoActivity extends Activity {
             public void original(){usePage();}
             public void back(){returnToCards();}
         });stage.addView(detailPanel,new FrameLayout.LayoutParams(-1,-1));
+        startMonitor=new FilmPlaybackMonitor(this,new FilmPlaybackMonitor.Host(){
+            public WebView page(){return browser;}
+            public boolean samePlaybackScreen(){return !homeRequested&&!detailRequested&&!isFinishing();}
+            public boolean next(){return nativeControls.tryNextPlayer();}
+            public void sources(){if(custom!=null)exitFullScreen();usePage();nativeControls.openSources();}
+            public void cancelPage(){
+                playUntil=0;handler.removeCallbacks(playDeadline);inputEpoch++;nativeControls.pause();
+                if(custom!=null)exitFullScreen();if(mouseActive)leaveMouse(false);
+                if(browser!=null){browser.stopLoading();browser.loadUrl("about:blank");}
+                detailRequested=false;detailPanel.setVisibility(View.GONE);homeRequested=true;homePanel.setVisibility(View.VISIBLE);homePanel.bringToFront();chrome.setVisibility(View.VISIBLE);homePanel.focusRefresh();
+            }
+            public void changed(String state){if("FIRST_FRAME_AND_PROGRESS".equals(state))playNotice.setVisibility(View.GONE);controlTrace.emit(FlixMomoActivity.this,"media",state.equals("FIRST_FRAME_AND_PROGRESS")?"CLOCK_ADVANCED":"UNCONFIRMED");}
+        });
+        browseRoot.addView(startMonitor.panel,browseRoot.indexOfChild(stage),new LinearLayout.LayoutParams(-1,-2));
         homePanel.setToolbarAnchor(pageButton);
         query.setOnFocusChangeListener((v,focused)->{if(focused)cursor.leave();});
         search.setOnClickListener(v->search());voice.setOnClickListener(v->voiceSearch());browse.setOnClickListener(v->showHome(false));guide.setOnClickListener(v->finish());
@@ -256,10 +286,14 @@ public class FlixMomoActivity extends Activity {
                     nativeControls.finished();
                 }
             }
-            @Override public void onReceivedHttpError(WebView view,WebResourceRequest request,WebResourceResponse response){if(request.isForMainFrame())fail("Provider returned HTTP "+response.getStatusCode()+". Your search is kept. Use Retry or Browse.");}
+            @Override public void onReceivedHttpError(WebView view,WebResourceRequest request,WebResourceResponse response){if(request.isForMainFrame())fail("Provider returned HTTP "+response.getStatusCode()+". Your search is kept. Use Retry or Browse.");
+                else{if(startMonitor!=null)startMonitor.requestFailure("Embedded HTTP "+response.getStatusCode());filmFailure("film_resource_http","HTTP_"+response.getStatusCode());}}
             @Override public void onReceivedSslError(WebView view,SslErrorHandler handler,SslError error){certificateFailure(handler::cancel,error);}
             @Override public void onReceivedError(WebView view,WebResourceRequest request,android.webkit.WebResourceError error){
-                if(!request.isForMainFrame())return;
+                if(!request.isForMainFrame()){
+                    if(startMonitor!=null)startMonitor.requestFailure("Embedded request error "+error.getErrorCode());
+                    filmFailure("film_resource","WEBVIEW_ERROR_"+error.getErrorCode());return;
+                }
                 filmFailure("film_navigation","WEBVIEW_ERROR_"+error.getErrorCode());
                 switch(error.getErrorCode()){
                     case WebViewClient.ERROR_FAILED_SSL_HANDSHAKE:fail("TLS handshake failed for the main page. Open Connection to check this TV; security checks remain enabled.");break;
@@ -283,6 +317,7 @@ public class FlixMomoActivity extends Activity {
     }
 
     private void enterMouse(){
+        if(startMonitor!=null)startMonitor.pause();
         if(custom!=null){resumeFullscreenPointer();return;}
         inputEpoch++;noteInput("POINTER_ENTER");
         controlTrace.begin(this);
@@ -306,7 +341,7 @@ public class FlixMomoActivity extends Activity {
         });
     }
     private void leaveMouse(boolean controls){inputEpoch++;noteInput("POINTER_EXIT");mouseActive=false;cursor.enable(false);modeButton.setText("Cursor: off");nativeControls.resume();if(controls)nativeControls.menu();}
-    private void showHome(boolean force){credit.setVisibility(View.VISIBLE);if(mouseActive)leaveMouse(false);playUntil=0;if(playNotice!=null)playNotice.setVisibility(View.GONE);
+    private void showHome(boolean force){if(startMonitor!=null)startMonitor.leave();credit.setVisibility(View.VISIBLE);if(mouseActive)leaveMouse(false);playUntil=0;if(playNotice!=null)playNotice.setVisibility(View.GONE);
         detailRequested=false;if(detailPanel!=null)detailPanel.setVisibility(View.GONE);homeRequested=true;nativeSearch="";homePanel.mode("");liveGeneration++;liveResults.setVisibility(View.GONE);query.setText("");chrome.setVisibility(View.VISIBLE);
         cursor.enable(false);modeButton.setText("Cursor: off");nativeControls.hideAll();homePanel.setVisibility(View.VISIBLE);homePanel.bringToFront();
         if(force)homePanel.discardSuggestions();
@@ -332,16 +367,16 @@ public class FlixMomoActivity extends Activity {
         controlTrace.emit(this,"media",attemptObservable?"UNCONFIRMED":"IFRAME_UNOBSERVABLE");
         playUntil=0;playMessage(attemptObservable?"Playback did not reach an observed start. Use Mouse or another player.":"This player does not expose playback status to GharTV. Use Mouse if Play did not start it.");
     };
-    private void playMessage(String text){playNotice.setText(text);playNotice.setVisibility(custom==null&&homeRequested?View.VISIBLE:View.GONE);}
-    private void armPlayback(){inputEpoch++;noteInput("PLAY_REQUEST");controlTrace.begin(this);attemptObservable=false;handler.removeCallbacks(playDeadline);handler.postDelayed(playDeadline,20000);playUntil=android.os.SystemClock.elapsedRealtime()+20000;playAfter=android.os.SystemClock.elapsedRealtime()+700;mediaAttempted=false;lastMediaTime=-1;playMessage("Opening FlixMomo playback…");}
+    private void playMessage(String text){playNotice.setText(text);playNotice.setVisibility(custom==null&&(!homeRequested||loading)?View.VISIBLE:View.GONE);}
+    private void armPlayback(){if(startMonitor!=null)startMonitor.begin();inputEpoch++;noteInput("PLAY_REQUEST");controlTrace.begin(this);attemptObservable=false;handler.removeCallbacks(playDeadline);if(startMonitor==null)handler.postDelayed(playDeadline,20000);playUntil=android.os.SystemClock.elapsedRealtime()+20000;playAfter=android.os.SystemClock.elapsedRealtime()+700;mediaAttempted=false;lastMediaTime=-1;playMessage("Opening FlixMomo playback…");}
     private void requestWatch(){filmEvent("film_watch_request");armPlayback();usePage();nativeControls.pageAction("watch");}
     private void followPlayback(org.json.JSONObject data){
         if(playUntil==0||homeRequested||detailRequested)return;
         long now=android.os.SystemClock.elapsedRealtime();
-        if(data.optBoolean("mediaPlaying")&&data.optDouble("mediaTime")>lastMediaTime&&lastMediaTime>=0){playMessage("Video is playing in FlixMomo’s embedded player.");filmEvent("film_playback_ready");controlTrace.emit(this,"media","CLOCK_ADVANCED");playUntil=0;return;}
+        if((startMonitor==null||startMonitor.healthy())&&data.optBoolean("mediaPlaying")&&data.optDouble("mediaTime")>lastMediaTime&&lastMediaTime>=0){playMessage("Video is playing in FlixMomo’s embedded player.");filmEvent("film_playback_ready");controlTrace.emit(this,"media","CLOCK_ADVANCED");playUntil=0;return;}
         if(data.optBoolean("mediaObservable"))attemptObservable=true;
         if(data.optBoolean("mediaObservable"))lastMediaTime=data.optDouble("mediaTime");
-        if(now>playUntil){playDeadline.run();return;}
+        if(now>playUntil){if(startMonitor==null)playDeadline.run();else playUntil=0;return;}
         org.json.JSONArray offered=data.optJSONArray("players");
         boolean playbackPage=!FilmProviderPolicy.detail(Uri.parse(data.optString("url")))||(offered!=null&&offered.length()>0)||data.optBoolean("mediaObservable");
         if(!loading&&!mediaAttempted&&now>=playAfter&&playbackPage&&data.optInt("mediaCandidates")==1){
@@ -354,18 +389,21 @@ public class FlixMomoActivity extends Activity {
     private static boolean privateHost(String host){String h=host.toLowerCase(java.util.Locale.ROOT);return h.equals("localhost")||h.endsWith(".localhost")||h.endsWith(".local")||h.endsWith(".internal")||h.contains(":")||h.matches("(?i)(127\\..*|10\\..*|192\\.168\\..*|169\\.254\\..*|172\\.(1[6-9]|2[0-9]|3[01])\\..*|0\\..*)");}
     private String providerOrigin(){String url=browser==null?lastRequested:browser.getUrl();Uri uri=Uri.parse(url==null?HOME:url);return allowedTop(uri)?"https://"+uri.getHost():"https://flixmomo.app";}
     private void openDetail(String url){
+        if(startMonitor!=null)startMonitor.leave();
+        detailBegan=android.os.SystemClock.elapsedRealtime();detailUsableMs=detailPreviewMs=-1;
+        handler.removeCallbacks(detailWait);handler.postDelayed(detailWait,20000);
         if(mouseActive)leaveMouse(false);
         filmEvent("film_detail_open");
         if(!FilmProviderPolicy.detail(Uri.parse(url))){navigate(url,true);return;}
         org.json.JSONObject card=homePanel.card(url);homeRequested=false;homePanel.setVisibility(View.GONE);liveResults.setVisibility(View.GONE);
-        detailRequested=true;nativeControls.hideAll();cursor.enable(false);chrome.setVisibility(View.GONE);detailPanel.begin(url,card);detailPanel.preview(visitCache.get(url));navigate(url,false);
+        detailRequested=true;nativeControls.hideAll();cursor.enable(false);chrome.setVisibility(View.GONE);detailPanel.begin(url,card);org.json.JSONObject cached=visitCache.get(url);detailPanel.preview(cached);if(cached!=null)detailPreviewMs=android.os.SystemClock.elapsedRealtime()-detailBegan;navigate(url,false);
     }
-    private void returnToCards(){detailRequested=false;detailPanel.setVisibility(View.GONE);homeRequested=true;homePanel.setVisibility(View.VISIBLE);homePanel.bringToFront();chrome.setVisibility(View.VISIBLE);homePanel.focusRefresh();
+    private void returnToCards(){if(startMonitor!=null)startMonitor.leave();handler.removeCallbacks(detailWait);detailRequested=false;detailPanel.setVisibility(View.GONE);homeRequested=true;homePanel.setVisibility(View.VISIBLE);homePanel.bringToFront();chrome.setVisibility(View.VISIBLE);homePanel.focusRefresh();
         // Already-observed cards remain usable on Back, without another provider-page load.
         // Selecting a card or explicitly refreshing still navigates to that current source.
         if(homePanel.cardCount()==0){homePanel.loading();navigate(providerOrigin()+(!nativeSearch.isEmpty()?"/search?q="+Uri.encode(nativeSearch):"/"),false);}
     }
-    private void search(){if(mouseActive)leaveMouse(false);playUntil=0;playNotice.setVisibility(View.GONE);String text=UnifiedSearch.clean(query.getText().toString());if(!UnifiedSearch.valid(text)){status.setText("Enter 2–120 characters.");return;}
+    private void search(){if(startMonitor!=null)startMonitor.leave();if(mouseActive)leaveMouse(false);playUntil=0;playNotice.setVisibility(View.GONE);String text=UnifiedSearch.clean(query.getText().toString());if(!UnifiedSearch.valid(text)){status.setText("Enter 2–120 characters.");return;}
         filmEvent("film_search");detailRequested=false;detailPanel.setVisibility(View.GONE);homeRequested=true;nativeSearch=text;homePanel.mode(text);homePanel.discardSuggestions();homePanel.setVisibility(View.VISIBLE);homePanel.bringToFront();nativeControls.hideAll();cursor.enable(false);showLiveResults(text);homePanel.loading();navigate(providerOrigin()+"/search?q="+Uri.encode(text),false);homePanel.focusRefresh();
     }
     private void navigate(String url,boolean page){if(!allowedTop(Uri.parse(url))){fail("Only the registered provider can open here.");return;}hideKeyboard();lastRequested=url;connection.begin(url);connectionWarning="";networkNotice.setVisibility(View.GONE);if(browser==null){fail("Provider browser stopped. Press Retry to reopen it.");return;}loadProviderPage(url);if(page)usePage();}
@@ -396,8 +434,8 @@ public class FlixMomoActivity extends Activity {
     }
     private void showInteractionLog(){
         new android.app.AlertDialog.Builder(this).setTitle("Recent interaction log")
-            .setMessage(reviewJournal.summary()).setPositiveButton("Save locally",(d,w)->{
-                boolean ok=reviewJournal.save(this);
+            .setMessage(performanceEvidence().toString()+"\n\n"+reviewJournal.summary()).setPositiveButton("Save locally",(d,w)->{
+                boolean ok=reviewJournal.save(this,performanceEvidence());
                 android.widget.Toast.makeText(this,ok?"Technical log saved locally; not uploaded":"Local save failed",android.widget.Toast.LENGTH_LONG).show();
             }).setNegativeButton("Close",null).show();
     }
@@ -438,6 +476,7 @@ public class FlixMomoActivity extends Activity {
 
     @Override public boolean dispatchKeyEvent(KeyEvent event){
         int navigation=event.getKeyCode();
+        if(startMonitor!=null&&event.getAction()==KeyEvent.ACTION_DOWN&&(navigation==KeyEvent.KEYCODE_BACK||navigation==KeyEvent.KEYCODE_MEDIA_PAUSE))startMonitor.pause();
         if(navigation==KeyEvent.KEYCODE_BACK||navigation==KeyEvent.KEYCODE_MENU){
             boolean isBack=navigation==KeyEvent.KEYCODE_BACK;
             if(event.getAction()==KeyEvent.ACTION_DOWN){if(event.getRepeatCount()==0){if(isBack)backHeld=true;else menuHeld=true;}return true;}
@@ -454,6 +493,7 @@ public class FlixMomoActivity extends Activity {
             }
             return true;
         }
+        if(startMonitor!=null&&startMonitor.ownsFocus())return super.dispatchKeyEvent(event);
         if(custom!=null){
             int key=event.getKeyCode();
             if(key==KeyEvent.KEYCODE_BACK){if(event.getAction()==KeyEvent.ACTION_UP)exitFullScreen();return true;}
@@ -549,7 +589,7 @@ public class FlixMomoActivity extends Activity {
         else if(mouseActive&&(custom==null||fullMenu==null||fullMenu.getVisibility()!=View.VISIBLE))cursor.enter();
     }
     @Override protected void onSaveInstanceState(Bundle state){state.putBoolean("home",homeRequested);state.putString("query",query.getText().toString());state.putString("url",lastRequested);super.onSaveInstanceState(state);}
-    @Override protected void onPause(){EngagementTracker.stop(this);handler.removeCallbacks(playDeadline);playUntil=0;if(nativeControls!=null)nativeControls.pause();if(cursor!=null)cursor.cancel();handler.removeCallbacks(slowLoad);if(browser!=null)browser.onPause();super.onPause();}
+    @Override protected void onPause(){if(startMonitor!=null)startMonitor.pause();handler.removeCallbacks(detailWait);EngagementTracker.stop(this);handler.removeCallbacks(playDeadline);playUntil=0;if(nativeControls!=null)nativeControls.pause();if(cursor!=null)cursor.cancel();handler.removeCallbacks(slowLoad);if(browser!=null)browser.onPause();super.onPause();}
     @Override protected void onResume(){super.onResume();EngagementTracker.start(this,"discover");if(nativeControls!=null&&!mouseActive&&custom==null)nativeControls.resume();if(browser!=null)browser.onResume();}
-    @Override protected void onDestroy(){liveGeneration++;liveExecutor.shutdownNow();if(nativeControls!=null)nativeControls.destroy();handler.removeCallbacksAndMessages(null);if(cursor!=null)cursor.leave();exitFullScreen();if(browser!=null){browser.stopLoading();stage.removeView(browser);browser.destroy();browser=null;}super.onDestroy();}
+    @Override protected void onDestroy(){if(startMonitor!=null)startMonitor.leave();liveGeneration++;liveExecutor.shutdownNow();if(nativeControls!=null)nativeControls.destroy();handler.removeCallbacksAndMessages(null);if(cursor!=null)cursor.leave();exitFullScreen();if(browser!=null){browser.stopLoading();stage.removeView(browser);browser.destroy();browser=null;}super.onDestroy();}
 }

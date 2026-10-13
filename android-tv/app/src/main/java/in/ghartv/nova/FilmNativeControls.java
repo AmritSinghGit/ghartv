@@ -46,8 +46,8 @@ final class FilmNativeControls {
     private final java.util.ArrayDeque<KeyEvent> posterActions=new java.util.ArrayDeque<>();
     private int detectedPlayers;private boolean playerTruncated;
     private long lastPosterKey,selectedAt;
-    private int generation,probeCount;
-    private boolean active=true,blocked,pending,selectedByViewer,reading,autoNext=true;
+    private int generation,probeCount;private long probeBegan=SystemClock.elapsedRealtime();
+    private boolean active=true,blocked,pending,selectedByViewer,reading,autoNext=false;
     private final Runnable probe=this::read;
     private final Runnable hide=()->{if(!ownsFocus())hideTray();};
     private final Runnable slow=()->{if(active&&selectedByViewer){state.setText("Still not playing? Choose Not playing to try another offered player.");showTray(false);}};
@@ -66,12 +66,12 @@ final class FilmNativeControls {
     }
     private int dp(int n){return TvUi.dp(activity,n);}
     private Button add(LinearLayout row,String title,Runnable click){Button b=TvUi.button(activity,title,false);b.setTextSize(13);b.setOnClickListener(v->{handler.removeCallbacks(hide);click.run();});row.addView(b);return b;}
-    void attach(WebView web){pageActions.clear();posterActions.clear();pageBusy=false;browser=web;generation++;reading=false;posterBusy=false;postersReady=false;}
-    void started(){pageActions.clear();posterActions.clear();postersReady=false;posterBusy=false;playerTrayAnnounced=false;mediaCandidates=0;pageBusy=false;detailFocusApplied=false;generation++;handler.removeCallbacksAndMessages(null);reading=false;pending=false;blocked=false;probeCount=0;players=new JSONArray();snapshotUrl="";playerIdentity="";selectedByViewer=false;selected="";attempted.clear();choiceView.setVisibility(View.GONE);tray.setVisibility(View.GONE);}
+    void attach(WebView web){probeBegan=SystemClock.elapsedRealtime();pageActions.clear();posterActions.clear();pageBusy=false;browser=web;generation++;reading=false;posterBusy=false;postersReady=false;}
+    void started(){pageActions.clear();posterActions.clear();postersReady=false;posterBusy=false;playerTrayAnnounced=false;mediaCandidates=0;pageBusy=false;detailFocusApplied=false;generation++;handler.removeCallbacksAndMessages(null);reading=false;pending=false;blocked=false;probeCount=0;probeBegan=SystemClock.elapsedRealtime();players=new JSONArray();snapshotUrl="";playerIdentity="";selectedByViewer=false;selected="";attempted.clear();choiceView.setVisibility(View.GONE);tray.setVisibility(View.GONE);}
     void finished(){if(active&&!blocked){handler.removeCallbacks(probe);handler.post(probe);}}
     void failure(){pageActions.clear();posterActions.clear();pageBusy=false;postersReady=false;posterBusy=false;blocked=true;generation++;reading=false;pending=false;handler.removeCallbacksAndMessages(null);hideAll();chrome.setVisibility(View.VISIBLE);}
     void pause(){pageActions.clear();posterActions.clear();pageBusy=false;posterBusy=false;active=false;generation++;reading=false;handler.removeCallbacksAndMessages(null);}
-    void resume(){active=true;if(browser!=null&&!blocked){probeCount=0;finished();}}
+    void resume(){probeBegan=SystemClock.elapsedRealtime();active=true;if(browser!=null&&!blocked){probeCount=0;finished();}}
     void destroy(){pause();browser=null;}
     boolean ownsFocus(){return choiceView.hasFocus()||tray.hasFocus();}
     boolean visible(){return tray.getVisibility()==View.VISIBLE||choiceView.getVisibility()==View.VISIBLE;}
@@ -81,11 +81,11 @@ final class FilmNativeControls {
     void suppressAutomaticTray(){playerTrayAnnounced=true;handler.removeCallbacks(hide);handler.removeCallbacks(slow);}
     void hideAll(){handler.removeCallbacks(hide);choiceView.setVisibility(View.GONE);tray.setVisibility(View.GONE);}
     private void hideTray(){if(choiceView.getVisibility()!=View.VISIBLE){tray.setVisibility(View.GONE);if(browser!=null&&host.pageIsVisible())browser.requestFocus();}}
-    void refreshState(){probeCount=0;finished();}
+    void refreshState(){probeCount=0;probeBegan=SystemClock.elapsedRealtime();finished();}
     private void showTray(boolean focus){if(!active||!host.pageIsVisible())return;tray.setVisibility(View.VISIBLE);tray.bringToFront();if(focus)((LinearLayout)tray.getChildAt(1)).getChildAt(0).requestFocus();handler.removeCallbacks(hide);if(choiceView.getVisibility()!=View.VISIBLE&&!ownsFocus())handler.postDelayed(hide,6000);if(players.length()==0&&!blocked)finished();}
     private JSONObject decode(String raw) throws Exception {if(raw==null||raw.length()>131072)throw new IllegalArgumentException("Page result too large");Object value=new JSONTokener(raw).nextValue();if(!(value instanceof String))throw new IllegalArgumentException("No page snapshot");return new JSONObject((String)value);}
     private void read(){
-        if(!active||blocked||reading||browser==null||probeCount>=14)return;String url=browser.getUrl();if(url==null||!FlixMomoActivity.allowedTop(Uri.parse(url)))return;
+        if(!active||blocked||reading||browser==null||(probeCount>=48||SystemClock.elapsedRealtime()-probeBegan>25000))return;String url=browser.getUrl();if(url==null||!FlixMomoActivity.allowedTop(Uri.parse(url)))return;
         final int token=generation;final WebView source=browser;reading=true;probeCount++;
         source.evaluateJavascript(FilmPageSnapshot.read(),raw->{
             if(!active||browser!=source||token!=generation)return;reading=false;
@@ -97,7 +97,7 @@ final class FilmNativeControls {
                 else if(host.pageIsVisible()&&players.length()==0&&!detailFocusApplied&&source.hasFocus()){detailFocusApplied=true;pageAction("focus");}
                 if(!data.optBoolean("search")&&players.length()>0&&!playerTrayAnnounced&&!selectedByViewer&&!pageBusy){playerTrayAnnounced=true;state.setText(players.length()+" player choices detected"+(playerTruncated?" · partial list":"")+" · Menu opens controls");showTray(!data.optBoolean("mediaPlaying"));}
                 if(selectedByViewer&&SystemClock.elapsedRealtime()-selectedAt>=5000&&autoNext&&data.optBoolean("mediaObservable")&&data.optInt("mediaError")>0&&!pending)next(false);
-                if(probeCount<14){handler.removeCallbacks(probe);handler.postDelayed(probe,1800);}
+                if(probeCount<48){handler.removeCallbacks(probe);long age=SystemClock.elapsedRealtime()-probeBegan;handler.postDelayed(probe,age<3000?200:age<10000?650:1800);}
             }catch(Exception ignored){host.navigationHint("Use the provider page; its player controls could not be read.");}
         });
     }
@@ -149,6 +149,17 @@ final class FilmNativeControls {
         trayButtons.get(at).requestFocus();return true;
     }
     void openSources(){showPlayers();}
+    boolean tryNextPlayer(){
+        if(!active||blocked||pending||browser==null||players.length()==0)return false;
+        if(selected.isEmpty()){
+            JSONObject current=null;
+            for(int i=0;i<players.length();i++)if(players.optJSONObject(i)!=null&&players.optJSONObject(i).optBoolean("selected"))current=players.optJSONObject(i);
+            if(current==null)current=players.optJSONObject(0);
+            if(current!=null)attempted.add(current.optString("label"));
+        }else attempted.add(selected);
+        for(int i=0;i<players.length();i++){JSONObject p=players.optJSONObject(i);if(p!=null&&!attempted.contains(p.optString("label"))){select(i);return true;}}
+        return false;
+    }
     private void showPlayers(){probeCount=0;finished();choiceView.setVisibility(View.VISIBLE);choiceView.bringToFront();renderPlayers();}
     private void renderPlayers(){
         String focusLabel="";View focused=choiceView.findFocus();if(focused instanceof Button)focusLabel=((Button)focused).getText().toString();choices.removeAllViews();choices.addView(TvUi.label(activity,"FlixMomo · "+players.length()+" choices"+(playerTruncated?" (partial)":""),18,TvUi.TEXT,true));

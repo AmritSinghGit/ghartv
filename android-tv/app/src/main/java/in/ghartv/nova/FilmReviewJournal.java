@@ -45,10 +45,12 @@ final class FilmReviewJournal {
             out.append(row.optLong("elapsed_ms")/1000).append("s · ").append(row.optString("event")).append(" · ").append(row.optString("layer")).append('\n');}
         return out.toString();
     }
-    boolean save(Context context){
+    boolean save(Context context){return save(context,null);}
+    boolean save(Context context,JSONObject performance){
         java.io.File dir=context.getExternalFilesDir(null);if(dir==null)return false;
         try(java.io.FileOutputStream stream=new java.io.FileOutputStream(new java.io.File(dir,"ghartv-review-interactions.json"))){
-            stream.write(snapshot().toString(2).getBytes(java.nio.charset.StandardCharsets.UTF_8));return true;
+            JSONObject receipt=snapshot();if(performance!=null)receipt.put("performance",performance);
+            stream.write(receipt.toString(2).getBytes(java.nio.charset.StandardCharsets.UTF_8));return true;
         }catch(Exception ignored){return false;}
     }
 }

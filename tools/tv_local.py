@@ -78,6 +78,19 @@ def avd_processes():
             found.append((int(parts[0]),cmd))
     return found
 
+def existing_serial(adb):
+    """Resolve this exact named emulator regardless of its assigned console port."""
+    p=call([adb,'devices'],5)
+    if p.returncode:raise Hold('ADB_UNAVAILABLE')
+    matches=[]
+    for serial,status in devices(p.stdout).items():
+        if status!='device':continue
+        name=call([adb,'-s',serial,'emu','avd','name'],5)
+        lines=name.stdout.splitlines()
+        if name.returncode==0 and lines and lines[0].strip()==AVD:matches.append(serial)
+    if len(matches)>1:raise Hold('MULTIPLE_MATCHING_AVDS_PRESERVED')
+    return matches[0] if matches else SERIAL
+
 def verify_target(adb):
     p=call([adb,'-s',SERIAL,'emu','avd','name'])
     names=p.stdout.splitlines()
