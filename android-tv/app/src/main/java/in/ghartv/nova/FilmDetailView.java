@@ -26,7 +26,7 @@ class FilmDetailView extends FrameLayout {
     FilmDetailView(Activity a,Host h){
         super(a);activity=a;host=h;super.setVisibility(GONE);setBackground(TvUi.gradient(0xff092d38,TvUi.BG,0,Color.TRANSPARENT,0,a));
         LinearLayout all=new LinearLayout(a);all.setOrientation(LinearLayout.VERTICAL);all.setPadding(dp(24),dp(18),dp(24),dp(18));addView(all,new LayoutParams(-1,-1));
-        all.addView(TvUi.label(a,"GHARTV  /  FLIXMOMO",14,TvUi.MINT,true));
+        all.addView(TvUi.label(a,ReviewDisplay.details(),14,TvUi.MINT,true));
         LinearLayout body=new LinearLayout(a);LinearLayout.LayoutParams bp=new LinearLayout.LayoutParams(-1,0,1);bp.topMargin=dp(14);all.addView(body,bp);
         poster=new ImageView(a);poster.setScaleType(ImageView.ScaleType.CENTER_CROP);poster.setContentDescription("Title artwork supplied by FlixMomo");
         body.addView(poster,new LinearLayout.LayoutParams(dp(156),dp(234)));

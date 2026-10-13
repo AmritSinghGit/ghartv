@@ -28,7 +28,8 @@ final class FilmPlaybackMonitor {
     private final TextView label;private final ProgressBar progress;
     private final Handler handler=new Handler(Looper.getMainLooper());
     private long token, observedAt,readTicket;private boolean reading,releasing,firstReveal;
-    private boolean controlsOpen;
+    private boolean controlsOpen,userDismissed;
+    private int supportingErrors;
     private int observations;private String lastMessage="",lastError="";
     private final Runnable pulse=this::read;
     FilmPlaybackMonitor(Activity a,Host h){
@@ -45,26 +46,27 @@ final class FilmPlaybackMonitor {
         panel.setVisibility(View.GONE);
     }
     void controlsOpen(boolean open){controlsOpen=open;render();}
-    boolean ownsFocus(){return panel.getVisibility()==View.VISIBLE&&panel.hasFocus();}
+    boolean ownsFocus(){return panel.isShown()&&panel.hasFocus();}
     boolean running(){return budget.running();}
     boolean healthy(){return budget.state==FilmStartBudget.State.PLAYING;}
     void begin(){
         if(budget.running())return;
-        token++;reading=releasing=false;firstReveal=false;observations=0;lastError="";budget.begin(SystemClock.elapsedRealtime());
+        token++;reading=releasing=false;firstReveal=false;userDismissed=false;observations=0;lastError="";supportingErrors=0;budget.begin(SystemClock.elapsedRealtime());
         render();handler.removeCallbacks(pulse);handler.post(pulse);
     }
     void selected(){
-        token++;reading=releasing=false;firstReveal=false;
+        token++;reading=releasing=false;firstReveal=false;userDismissed=false;
         if(!budget.running())budget.begin(SystemClock.elapsedRealtime());else budget.selected(SystemClock.elapsedRealtime());
         render();handler.removeCallbacks(pulse);handler.postDelayed(pulse,250);
     }
     void leave(){token++;handler.removeCallbacksAndMessages(null);reading=releasing=false;if(budget.running())budget.cancel();panel.setVisibility(View.GONE);}
-    void pause(){budget.paused();token++;handler.removeCallbacksAndMessages(null);reading=releasing=false;render();}
+    void pause(){userDismissed=true;budget.paused();token++;handler.removeCallbacksAndMessages(null);reading=releasing=false;render();}
     void requestFailure(String reason){
-        // Non-main-frame failure may be an advertisement or ancillary request.
-        // It is visible evidence, never automatic proof the active film failed.
-        if(!budget.running()||budget.state==FilmStartBudget.State.PLAYING)return;
-        lastError=reason;render();
+        // A failed image, advert or iframe is supporting diagnostic evidence,
+        // not proof of a failed movie. Never put it over the video or retry it.
+        if(reason==null||reason.isEmpty())return;
+        supportingErrors=Math.min(64,supportingErrors+1);
+        lastError=reason.substring(0,Math.min(160,reason.length()));
     }
     void cancel(){
         leave();host.changed("CANCELLED");
@@ -73,6 +75,7 @@ final class FilmPlaybackMonitor {
     }
     void manualNext(){
         if(releasing)return;
+        userDismissed=false;
         if(!budget.running())budget.begin(SystemClock.elapsedRealtime());
         releaseAndNext(false);
     }
@@ -88,7 +91,7 @@ final class FilmPlaybackMonitor {
         if(now-budget.began>=FilmStartBudget.TOTAL_TIMEOUT_MS){budget.state=FilmStartBudget.State.EXHAUSTED;budget.reason="Start budget exhausted; choose a source manually";render();return;}
         reading=true;final long generation=token,request=++readTicket;final String url=page.getUrl();
         // Callback timeout is also bounded. No endless spinner if the renderer stops responding.
-        handler.postDelayed(()->{if(token==generation&&request==readTicket&&reading){reading=false;budget.unavailable("Player observation timed out. Cancel or choose a source.");render();}},1500);
+        handler.postDelayed(()->{if(token==generation&&request==readTicket&&reading){reading=false;budget.unavailable("Playback status unavailable. The video may still play; Menu opens controls.");render();}},3000);
         page.evaluateJavascript(FilmPlaybackProbe.sample(token),raw->{
             if(generation!=token||request!=readTicket||page!=host.page()||!host.samePlaybackScreen())return;
             reading=false;observations++;
@@ -125,10 +128,10 @@ final class FilmPlaybackMonitor {
         });
     }
     private void render(){
-        if(budget.state==FilmStartBudget.State.IDLE||budget.state==FilmStartBudget.State.CANCELLED||budget.state==FilmStartBudget.State.PLAYING||budget.state==FilmStartBudget.State.PAUSED){panel.setVisibility(View.GONE);return;}
+        if(userDismissed||budget.state==FilmStartBudget.State.IDLE||budget.state==FilmStartBudget.State.CANCELLED||budget.state==FilmStartBudget.State.PLAYING||budget.state==FilmStartBudget.State.PAUSED){panel.setVisibility(View.GONE);return;}
         long elapsed=Math.max(0,SystemClock.elapsedRealtime()-budget.sourceBegan);
-        String text=(budget.running()?"Starting source · "+(elapsed/1000)+"s · automatic budget "+budget.attempt+"/"+FilmStartBudget.MAX_ATTEMPTS+"\n":"")+budget.reason;
-        if(!lastError.isEmpty())text+="\n"+lastError+" This may be a supporting resource; it does not prove the film failed.";
+        String text=ReviewDisplay.label()+" · "+(budget.running()?"Starting source · "+(elapsed/1000)+"s · automatic budget "+budget.attempt+"/"+FilmStartBudget.MAX_ATTEMPTS+"\n":"")+budget.reason;
+        // Supporting network errors remain in Options / Recent interaction log, not on video.
         if(!text.equals(lastMessage)){lastMessage=text;label.setText(text);}
         progress.setVisibility(budget.running()?View.VISIBLE:View.GONE);
         panel.setVisibility(controlsOpen?View.GONE:View.VISIBLE);
@@ -137,7 +140,7 @@ final class FilmPlaybackMonitor {
         JSONObject d=new JSONObject();
         try{d.put("engine","embedded_webview");d.put("state",budget.state.name());d.put("attempts",budget.attempt);d.put("observations",observations);
             d.put("first_frame_ms",budget.firstFrameMs<0?JSONObject.NULL:budget.firstFrameMs);d.put("verified_start_ms",budget.proofMs<0?JSONObject.NULL:budget.proofMs);
-            d.put("advancing_interval_required_ms",FilmStartBudget.PROGRESS_INTERVAL_MS);d.put("resource_error",lastError);d.put("observation_scope","top_document_only");}catch(Exception ignored){}
+            d.put("advancing_interval_required_ms",FilmStartBudget.PROGRESS_INTERVAL_MS);d.put("resource_error",lastError);d.put("supporting_resource_errors",supportingErrors);d.put("supporting_error_is_playback_failure",false);d.put("manual_controls_requested",userDismissed);d.put("observation_scope","top_document_only");}catch(Exception ignored){}
         return d;
     }
 }

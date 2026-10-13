@@ -774,7 +774,7 @@ public final class MainActivity extends Activity implements ChannelNavigator.Lis
         }
         long updated = repository.lastUpdatedAt();
         String when = updated <= 0 ? "not downloaded yet" : TvUi.istDateTime(updated);
-        catalogueStatus.setText(String.format(Locale.US, "LIVE  •  %,d channels  •  guide updated %s  •  GharTV %s", allChannels.size(), when, BuildConfig.VERSION_NAME));
+        catalogueStatus.setText(String.format(Locale.US, "LIVE  •  %,d channels  •  guide updated %s  •  %s", allChannels.size(), when, ReviewDisplay.title()));
         catalogueStatus.setTextColor(TvUi.MUTED);
     }
 

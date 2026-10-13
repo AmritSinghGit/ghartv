@@ -74,7 +74,8 @@ public class FlixMomoActivity extends Activity {
     private final FilmVisitCache visitCache=new FilmVisitCache();
     private boolean closingFullscreen;
     private long inputEpoch;
-    private boolean backHeld,menuHeld;
+    private boolean backHeld,menuHeld,fullscreenKeyHeld,escapeHeld;
+    private long keyEventSerial;
     private final FilmReviewJournal reviewJournal=new FilmReviewJournal();
     private void noteInput(String event){
         String layer=custom!=null?(fullMenu!=null&&fullMenu.getVisibility()==View.VISIBLE?"FULLSCREEN_MENU":"FULLSCREEN"):
@@ -99,7 +100,7 @@ public class FlixMomoActivity extends Activity {
     }
     private void showFilmConnection(){
         String version="unknown";try{android.content.pm.PackageInfo p=WebView.getCurrentWebViewPackage();if(p!=null)version=p.versionName;}catch(Exception ignored){}
-        String message=connectionDetail+"\n\nTV time: "+new java.util.Date()+"\nAndroid: "+android.os.Build.VERSION.RELEASE+" · WebView: "+version+"\n\nCertificate checks stay on. No passwords, cookies or search text are sent by a connection check.";
+        String message=ReviewDisplay.technical()+"\n\n"+connectionDetail+"\n\nTV time: "+new java.util.Date()+"\nAndroid: "+android.os.Build.VERSION.RELEASE+" · WebView: "+version+"\n\nCertificate checks stay on. No passwords, cookies or search text are sent by a connection check.";
         new android.app.AlertDialog.Builder(this).setTitle("FlixMomo connection")
             .setMessage(message).setPositiveButton("Check DNS / HTTPS",(d,w)->NetworkDiagnostics.show(this))
             .setNeutralButton("Registered addresses",(d,w)->chooseFilmOrigin()).setNegativeButton("Close",null).show();
@@ -123,8 +124,9 @@ public class FlixMomoActivity extends Activity {
         connectionDetail=scope.name().replace('_',' ')+" · "+FilmConnectionState.reason(code)+"\n"+FilmConnectionState.origin(url)+"\n"+FilmConnectionState.help(code);
         filmFailure(scope==FilmConnectionState.Scope.SUBRESOURCE?"film_resource_tls":"film_document_tls",FilmConnectionState.reason(code));
         if(scope==FilmConnectionState.Scope.SUBRESOURCE){
-            connectionWarning="An embedded resource was blocked by certificate validation. The main page has not been declared failed. Connection shows details.";
-            networkNotice.setText(connectionWarning);networkNotice.setVisibility(View.VISIBLE);
+            connectionWarning="A supporting request failed certificate validation. Connection has details; this is not a film-playback result.";
+            if(startMonitor!=null)startMonitor.requestFailure("Supporting TLS: "+FilmConnectionState.reason(code));
+            networkNotice.setText(connectionWarning);networkNotice.setVisibility(homeRequested||detailRequested?View.VISIBLE:View.GONE);
         }else{
             networkNotice.setText(connectionDetail);networkNotice.setVisibility(View.VISIBLE);
             fail("Secure connection could not be verified: "+FilmConnectionState.reason(code)+". Open Connection for details; no certificate bypass is available.");
@@ -139,7 +141,7 @@ public class FlixMomoActivity extends Activity {
         LinearLayout root=new LinearLayout(this);browseRoot=root;root.setOrientation(LinearLayout.VERTICAL);root.setBackgroundColor(TvUi.BG);
         root.setPadding(TvUi.dp(this,18),TvUi.dp(this,10),TvUi.dp(this,18),TvUi.dp(this,10));
         chrome=new LinearLayout(this);chrome.setOrientation(LinearLayout.VERTICAL);
-        chrome.addView(TvUi.label(this,"GharTV Films · Review "+BuildConfig.VERSION_CODE,18,TvUi.TEXT,true));
+        chrome.addView(TvUi.label(this,ReviewDisplay.films(),18,TvUi.TEXT,true));
         LinearLayout row=new LinearLayout(this);
         query=new EditText(this);query.setSingleLine(true);query.setTextColor(TvUi.TEXT);query.setHintTextColor(TvUi.MUTED);
         query.setHint("Live channel, film or series");query.setImeOptions(android.view.inputmethod.EditorInfo.IME_ACTION_SEARCH);
@@ -427,7 +429,7 @@ public class FlixMomoActivity extends Activity {
         if(custom!=null){showFullscreenMenu();return;}
         if(mouseActive)leaveMouse(false);nativeControls.hideAll();cursor.enable(false);chrome.setVisibility(View.VISIBLE);
         String[] items={"Return to video / website","Connection details","Diagnostics","Privacy & attribution","Recent interaction log"};
-        optionsDialog=new android.app.AlertDialog.Builder(this).setTitle("GharTV · FlixMomo")
+        optionsDialog=new android.app.AlertDialog.Builder(this).setTitle(ReviewDisplay.details())
             .setMessage(null).setItems(items,(d,n)->{
                 if(n==0)usePage();else if(n==1)showFilmConnection();else if(n==2)DiagnosticsDialog.show(this);else if(n==4)showInteractionLog();else ReviewNotice.show(this,()->{visitCache.clear();if(browser!=null){browser.stopLoading();browser.loadUrl("about:blank");browser.clearCache(true);browser.clearHistory();browser.clearFormData();}nativeControls.failure();com.bumptech.glide.Glide.get(this).clearMemory();homePanel.discardSuggestions();homeRequested=true;detailRequested=false;detailPanel.setVisibility(View.GONE);homePanel.setVisibility(View.VISIBLE);chrome.setVisibility(View.VISIBLE);homePanel.unavailable("Local film data cleared. Choose Refresh to load again.");});
             }).setNegativeButton("Close",null).create();
@@ -447,12 +449,13 @@ public class FlixMomoActivity extends Activity {
     void enterFullScreen(View view,WebChromeClient.CustomViewCallback callback){
         if(custom!=null||isFinishing()){callback.onCustomViewHidden();return;}
         inputEpoch++;noteInput("FULLSCREEN_ENTER");
+        if(startMonitor!=null)startMonitor.pause();
         nativeControls.pause();nativeControls.hideAll();handler.removeCallbacks(playDeadline);playUntil=0;
         custom=view;customCallback=callback;browseRoot.setVisibility(View.GONE);browser.setVisibility(View.GONE);
         fullHost.setVisibility(View.VISIBLE);fullHost.addView(view,new FrameLayout.LayoutParams(-1,-1));
         moveCursor(fullHost);cursor.target(view);mouseActive=true;cursor.enable(true);cursor.center();cursor.enter();
         fullMenu=new LinearLayout(this);fullMenu.setOrientation(LinearLayout.VERTICAL);fullMenu.setPadding(16,10,16,12);fullMenu.setBackgroundColor(0xee071e29);
-        fullMenu.addView(TvUi.label(this,"GharTV · Playback by FlixMomo",14,TvUi.MINT,true));
+        fullMenu.addView(TvUi.label(this,ReviewDisplay.details(),14,TvUi.MINT,true));
         LinearLayout buttons=new LinearLayout(this);fullMenu.addView(buttons);
         String[] labels={"Resume","Sources","Exit fullscreen"};
         for(int i=0;i<labels.length;i++){final int item=i;Button b=TvUi.button(this,labels[i],i==0);b.setId(View.generateViewId());buttons.addView(b,new LinearLayout.LayoutParams(0,TvUi.dp(this,48),1));b.setOnClickListener(v->{
@@ -477,6 +480,21 @@ public class FlixMomoActivity extends Activity {
 
     @Override public boolean dispatchKeyEvent(KeyEvent event){
         int navigation=event.getKeyCode();
+        if(event.getAction()==KeyEvent.ACTION_DOWN)keyEventSerial++;
+        // F already belongs to provider players for entering fullscreen. Capture
+        // it only while actually fullscreen, so ordinary search typing is untouched.
+        if(navigation==KeyEvent.KEYCODE_F&&(custom!=null||fullscreenKeyHeld)&&event.hasNoModifiers()){
+            if(event.getAction()==KeyEvent.ACTION_DOWN){if(event.getRepeatCount()==0)fullscreenKeyHeld=true;return true;}
+            if(event.getAction()==KeyEvent.ACTION_UP){boolean held=fullscreenKeyHeld;fullscreenKeyHeld=false;if(held&&!event.isCanceled()&&custom!=null)exitFullScreen();return true;}
+        }
+        // Escape is a deterministic way back to controls, without going back to
+        // the preceding website. The TV remote retains its existing Back/Menu.
+        if(navigation==KeyEvent.KEYCODE_ESCAPE&&(custom!=null||(!homeRequested&&!detailRequested)||escapeHeld)&&event.hasNoModifiers()){
+            if(event.getAction()==KeyEvent.ACTION_DOWN){if(event.getRepeatCount()==0)escapeHeld=true;return true;}
+            if(event.getAction()==KeyEvent.ACTION_UP){boolean held=escapeHeld;escapeHeld=false;if(held&&!event.isCanceled()){
+                if(custom!=null)exitFullScreen();else if(mouseActive)leaveMouse(true);else{if(startMonitor!=null)startMonitor.pause();usePage();nativeControls.menu();}
+            }return true;}
+        }
         if(startMonitor!=null&&event.getAction()==KeyEvent.ACTION_DOWN&&(navigation==KeyEvent.KEYCODE_BACK||navigation==KeyEvent.KEYCODE_MEDIA_PAUSE))startMonitor.pause();
         if(navigation==KeyEvent.KEYCODE_BACK||navigation==KeyEvent.KEYCODE_MENU){
             boolean isBack=navigation==KeyEvent.KEYCODE_BACK;
@@ -559,8 +577,20 @@ public class FlixMomoActivity extends Activity {
         moveCursor(stage);fullHost.setVisibility(View.GONE);browseRoot.setVisibility(View.VISIBLE);
         mouseActive=false;cursor.enable(false);modeButton.setText("Cursor: off");
         if(browser!=null){browser.setVisibility(View.VISIBLE);cursor.target(browser);}
-        if(callback!=null)callback.onCustomViewHidden();closingFullscreen=false;
-        if(!isFinishing()&&!isDestroyed()){nativeControls.resume();toolbar();}
+        if(startMonitor!=null)startMonitor.pause();
+        try{if(callback!=null)callback.onCustomViewHidden();}finally{closingFullscreen=false;}
+        if(!isFinishing()&&!isDestroyed()){
+            nativeControls.resume();toolbar();
+            final long epoch=inputEpoch,keys=keyEventSerial;
+            // WebView can request focus again after its fullscreen callback.
+            // Restore only if no later user input or navigation has happened.
+            screen.postOnAnimation(()->{
+                if(custom==null&&epoch==inputEpoch&&keys==keyEventSerial&&!isFinishing()&&chrome.getVisibility()==View.VISIBLE){
+                    View focus=getCurrentFocus();
+                    if(focus==null||focus==browser||focus==cursor)pageButton.requestFocus();
+                }
+            });
+        }
     }
     @Override public void onBackPressed(){
         inputEpoch++;
@@ -586,7 +616,7 @@ public class FlixMomoActivity extends Activity {
     @Override public void onWindowFocusChanged(boolean focused){
         super.onWindowFocusChanged(focused);
         if(cursor==null)return;
-        if(!focused){cursor.cancel();backHeld=false;menuHeld=false;}
+        if(!focused){cursor.cancel();backHeld=false;menuHeld=false;fullscreenKeyHeld=false;escapeHeld=false;}
         else if(mouseActive&&(custom==null||fullMenu==null||fullMenu.getVisibility()!=View.VISIBLE))cursor.enter();
     }
     @Override protected void onSaveInstanceState(Bundle state){state.putBoolean("home",homeRequested);state.putString("query",query.getText().toString());state.putString("url",lastRequested);super.onSaveInstanceState(state);}

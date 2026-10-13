@@ -25,7 +25,8 @@ assert 'onPageFinished' in films and 'if(mainFrameError)' in films
 assert 'postOnAnimation(frame)' in cursor and 'ACTION_CANCEL' in cursor and 'removeCallbacks(frame)' in cursor
 assert 'evaluateJavascript' not in films and 'addJavascriptInterface' not in films
 assert 'renderResults' not in controls and 'resultsView' not in controls
-assert 'posterKey(event)' in films and 'BuildConfig.VERSION_CODE' in films
+assert 'posterKey(event)' in films and 'ReviewDisplay.films()' in films
+assert 'BuildConfig.VERSION_CODE' in (J/'ReviewDisplay.java').read_text()
 assert (J/'FilmPosterNavigation.java').is_file()
 assert 'RecognizerIntent.ACTION_RECOGNIZE_SPEECH' in (J/'UnifiedSearch.java').read_text()
 launcher=(R/'tools/owner_review.command.in').read_text()

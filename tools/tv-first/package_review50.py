@@ -2,10 +2,10 @@
 from pathlib import Path
 import re,json,hashlib
 root=Path('/tmp/ghartv-candidate')
-assert re.search(r'OK \(226 tests\)',(root/'proof/android-tests.txt').read_text())
+assert re.search(r'OK \(242 tests\)',(root/'proof/android-tests.txt').read_text())
 s=Path(__file__).with_name('package_review44.py').read_text()
 s=s.replace('44','50').replace('0.6.0-rc12.5-loading-mouse-review','0.6.0-rc14.1-series-controls-review')
-s=s.replace("'actual_android_tests_passed':122","'actual_android_tests_passed':226").replace("'retained_review43_tests':110","'retained_review49_tests':206").replace("'new_review50_tests':12","'new_review50_tests':20")
+s=s.replace("'actual_android_tests_passed':122","'actual_android_tests_passed':242").replace("'retained_review43_tests':110","'retained_review49_tests':206").replace("'new_review50_tests':12","'new_review50_tests':36")
 anchor='def rawcode(t):'
 injection='''anchor="                sdk=transport.sdk();tools,env=signing_tools(sdk);unsigned=artifact(APK_ASSET,APK_SHA)"
 capture="""                capture_helper=source_module(z,'tools/tv-first/collect_review_interactions.py')
@@ -27,5 +27,6 @@ assert s.count(anchor)==1;s=s.replace(anchor,injection+anchor)
 s=s.replace("('artifact','android_review')","('artifact','android_review','main')")
 exec(compile(s,'package_review50_expanded','exec'),{'__name__':'__main__'})
 p=root/'VALIDATION.json';v=json.loads(p.read_text());v.update(pointer_idle_ms=5000,immediate_dpad_tap=True,paired_back_menu_keys=True,stale_fallback_guard=True,pending_play_coalesced=True,private_local_ui_trace=True,prior_owner_action_sequence_retrieved=False,published49_unchanged=True,native_provider_route='NOT_ENABLED_NO_DOCUMENTED_AUTHORIZED_STREAM_VERIFIED')
+v.update(retained_initial_review50_tests=226,followup_feedback_tests=16,viewer_version_label='Review 50',supporting_errors_diagnostics_only=True,keyboard_fullscreen_exit_tested=True,public49_unchanged=True)
 p.write_text(json.dumps(v,indent=2)+'\n')
 (root/'SHA256SUMS').write_text(''.join(hashlib.sha256(p.read_bytes()).hexdigest()+'  '+p.name+'\n' for p in sorted(root.iterdir()) if p.is_file() and p.name!='SHA256SUMS'))

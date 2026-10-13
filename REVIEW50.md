@@ -9,3 +9,6 @@ Menu toggles the lower control panel. Hide suppresses delayed prompts and backgr
 The same launcher verifies the emulator's Android boot AVD identity; an empty console response no longer selects obsolete5580. No duplicate emulator or data clear.
 
 Expected verification: existing206 Android tests retained plus20 new episode/control cases. Read actual job results; this prose is not a passed-test claim. Controlled Watch-to-owned-player-document timing is not live-provider or first-frame evidence. Review50 signing, installation and owner acceptance remain pending. No household rollout.
+
+## Follow-up included before delivery
+The same undelivered50 now includes the later owner feedback: supporting resource errors are diagnostic-only, manual control/fullscreen dismisses a stale observation notice, hidden panels cannot steal input, F exits actual Android WebView fullscreen and Escape returns to controls. Exit restores Options after a delayed WebView focus request only if there was no new user input. Review50 is the visible label on home, Films, details, startup and menus; the technical package version remains unchanged. No native extraction or new telemetry access. Tests are controlled; actual provider first-frame and physical-TV proof remain separate.
