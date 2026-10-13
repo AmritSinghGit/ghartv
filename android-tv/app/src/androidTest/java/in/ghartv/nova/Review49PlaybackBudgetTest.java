@@ -33,6 +33,7 @@ public class Review49PlaybackBudgetTest {
     @Test public void sourceTransitionResetsFrameProof(){FilmStartBudget b=fresh();b.sample(400,true,false,true,true,false,1,0,false);b.selected(1000);assertEquals(-1,b.firstFrameMs);assertEquals(FilmStartBudget.State.STARTING,b.sample(2500,true,false,false,false,true,0,0,false));}
     @Test public void unavailableStopsAutomation(){FilmStartBudget b=fresh();b.unavailable("Title unavailable");assertEquals(FilmStartBudget.State.MANUAL,b.sample(20000,true,false,false,false,true,0,4,false));}
     private FilmPlaybackMonitor monitor(){return (FilmPlaybackMonitor)h.field(h.activity,"startMonitor");}
+    private String pageUrl(){String[] value={null};h.ui(()->value[0]=h.web.getUrl());return value[0];}
     private void mediaReady()throws Exception{h.player();h.ui(()->monitor().leave());}
     private void playOnce(){h.ui(()->{FilmNativeControls c=(FilmNativeControls)h.field(h.activity,"nativeControls");c.menu();h.text((View)h.field(c,"tray"),"Play").requestFocus();});h.press(KeyEvent.KEYCODE_DPAD_CENTER);}
     private void record(String key,long value)throws Exception{
@@ -51,15 +52,15 @@ public class Review49PlaybackBudgetTest {
         record("play_to_first_frame_observed_ms",monitor().budget.firstFrameMs);record("play_to_verified_advancing_ms",monitor().budget.proofMs);
     }
     @Test public void explicitReleaseStopsVideoBeforeNext()throws Exception{
-        mediaReady();JSONObject out=h.eval(FilmPlaybackProbe.release(h.web.getUrl(),false));assertEquals("RELEASED",out.getString("state"));assertTrue(out.getBoolean("paused"));
+        mediaReady();JSONObject out=h.eval(FilmPlaybackProbe.release(pageUrl(),false));assertEquals("RELEASED",out.getString("state"));assertTrue(out.getBoolean("paused"));
         JSONObject v=h.eval("JSON.stringify({paused:document.querySelector('video').paused,source:document.querySelector('video').getAttribute('src')})");assertTrue(v.getBoolean("paused"));assertTrue(v.isNull("source"));
     }
     @Test public void automaticReleaseRefusesForeignFrame()throws Exception{
-        mediaReady();h.eval("JSON.stringify((()=>{const f=document.createElement('iframe');f.src='about:blank';f.style.cssText='width:400px;height:250px';document.body.append(f);return {ok:true}})())");assertEquals("MANUAL_REQUIRED",h.eval(FilmPlaybackProbe.release(h.web.getUrl(),true)).getString("state"));
+        mediaReady();h.eval("JSON.stringify((()=>{const f=document.createElement('iframe');f.src='about:blank';f.style.cssText='width:400px;height:250px';document.body.append(f);return {ok:true}})())");assertEquals("MANUAL_REQUIRED",h.eval(FilmPlaybackProbe.release(pageUrl(),true)).getString("state"));
     }
     @Test public void cancellationUnloadsProviderAndKeepsCards()throws Exception{
         mediaReady();h.ui(()->{monitor().begin();monitor().cancel();});SystemClock.sleep(200);
-        assertEquals("about:blank",h.web.getUrl());assertEquals(FilmStartBudget.State.CANCELLED,monitor().budget.state);
+        assertEquals("about:blank",pageUrl());assertEquals(FilmStartBudget.State.CANCELLED,monitor().budget.state);
         h.ui(()->assertEquals(View.VISIBLE,((View)h.field(h.activity,"homePanel")).getVisibility()));
     }
     @Test public void progressAndManualControlsRemainAvailable()throws Exception{
