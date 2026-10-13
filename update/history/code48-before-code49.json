@@ -1,0 +1,18 @@
+{
+  "versionCode": 48,
+  "versionName": "0.6.0-rc13.2-input-stability-review",
+  "apkUrl": "https://github.com/AmritSinghGit/ghartv/releases/download/v0.6.0-rc13.2-input-stability-review/GharTV-code48-household-update.apk",
+  "sha256": "68e8c746a035434eef0497267974a5da04c49bcbcfa61670ac5859585e6b3806",
+  "sourceCommit": "d8d6267670f0fb027d01a857569f6d179a927072",
+  "artifactTag": "v0.6.0-rc13.2-input-stability-review",
+  "channel": "production",
+  "publishedAt": "2026-10-12T07:07:57Z",
+  "ownerDecision": "APPROVED_EXACT_CODE48_HOUSEHOLD_PUBLICATION",
+  "ownerRun": "GHARTV-CYAN-48-20261001T110549Z-92092",
+  "distributionMode": "exact-reviewed-signed-apk-no-rebuild",
+  "notes": "Household update: Review48 input stability. Install over the existing app to keep your settings. Update in place; do not uninstall.",
+  "mandatoryUpdateSupported": false,
+  "silentInstallSupported": false,
+  "previousVersionCode": 38,
+  "previousArtifactSha256": "439df956cb8c1a064291fb10db5b7566aaee26772213f7f6aeb5a7a7174aa7e5"
+}
