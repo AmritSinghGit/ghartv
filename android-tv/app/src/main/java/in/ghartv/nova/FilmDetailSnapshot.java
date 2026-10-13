@@ -2,7 +2,7 @@ package in.ghartv.nova;
 
 /** Descriptive title copy only. No media URLs or account data. */
 final class FilmDetailSnapshot {
-    static final String JS="""
+    static final String JS=FilmWatchActions.JS+"""
 
 function detail(){
   if(!/^\\/(movie|tv|show|title)\\/[^/]+/i.test(here.pathname)||/\\/watch(?:\\/|$)/i.test(here.pathname))return null;
@@ -10,7 +10,8 @@ function detail(){
   const excluded=e=>!!e.closest('nav,header,footer,[role="navigation"],[aria-hidden="true"],.recommendations,.related,.similar');
   const label=e=>clean(e.getAttribute('aria-label')||e.innerText||e.textContent||e.value).replace(/^[\\s\\u25b6\\u25ba]+/,'').trim();
   const controls=Array.from(root.querySelectorAll('a[href],button,[role="button"],input[type="button"]')).filter(visible).slice(0,300);
-  const watchControl=controls.find(e=>!excluded(e)&&/^(watch now|play( now)?|start watching|resume watching|watch movie)$/i.test(label(e)));
+  const watchChoices=ghartvWatchChoices(controls);
+  const watchControl=watchChoices.length===1?watchChoices[0]:null;
   const wr=watchControl?.getBoundingClientRect();
   const headings=Array.from(root.querySelectorAll('h1,h2,h3,[role="heading"],[itemprop="name"]')).filter(e=>visible(e)&&!excluded(e)&&clean(e.textContent).length>=2&&clean(e.textContent).length<=180&&!/^(flixmomo|related.*|similar.*|recommended.*|suggested.*|search results.*|trending.*|watch (now|online))$/i.test(clean(e.textContent))).slice(0,35);
   const ranked=headings.map((e,i)=>{const r=e.getBoundingClientRect();return {e,score:wr?Math.abs(r.bottom-wr.top)+Math.abs(r.left-wr.left)*.25+(r.top>wr.bottom?2000:0):(e.tagName==='H1'?0:100)+i};}).sort((a,b)=>a.score-b.score);
@@ -65,7 +66,7 @@ function detail(){
   for(const photo of photos){image=imageUrl(photo.getAttribute('data-src'))||imageUrl(photo.currentSrc)||imageUrl(photo.getAttribute('src'));if(image)break;}
   image=image||imageUrl(original);
   if(!image)for(const e of Array.from(root.querySelectorAll('div,figure')).slice(0,300)){if(!inTitle(e))continue;const r=e.getBoundingClientRect();if(r.width<60||r.height<100||r.width/r.height>.85||Math.abs(r.top-(hr?.top||0))>400)continue;const m=getComputedStyle(e).backgroundImage.match(/^url\\(["']?(.*?)["']?\\)$/);if(m&&(image=imageUrl(m[1])))break;}
-  return {title,synopsis,facts,image,watch:!!watchControl,watchlist:controls.some(e=>/^(add to |remove from )(watchlist|watch list|playlist)$/i.test(label(e))),url:here.href,provider:'FlixMomo',provenance:observed?'provider-visible':structured?'provider-structured':'provider-visible',playbackVerified:false};
+  return {title,synopsis,facts,image,watch:!!watchControl,watch_label:watchControl?ghartvWatchLabel(watchControl):'',watch_ambiguous:watchChoices.length>1,watchlist:controls.some(e=>/^(add to |remove from )(watchlist|watch list|playlist)$/i.test(label(e))),url:here.href,provider:'FlixMomo',provenance:observed?'provider-visible':structured?'provider-structured':'provider-visible',playbackVerified:false};
 }
         """;
 }

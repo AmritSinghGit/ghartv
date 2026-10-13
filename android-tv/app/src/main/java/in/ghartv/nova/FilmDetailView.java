@@ -22,7 +22,7 @@ class FilmDetailView extends FrameLayout {
     private final Button watch,watchlist,original,back;
     private final ArrayList<Button> actions=new ArrayList<>();
     private ViewGroup page;private boolean shielding,focusable,touchable;private int descendants,accessibility;
-    private String url="",image="";
+    private String url="",image="",observedWatchLabel="";
     FilmDetailView(Activity a,Host h){
         super(a);activity=a;host=h;super.setVisibility(GONE);setBackground(TvUi.gradient(0xff092d38,TvUi.BG,0,Color.TRANSPARENT,0,a));
         LinearLayout all=new LinearLayout(a);all.setOrientation(LinearLayout.VERTICAL);all.setPadding(dp(24),dp(18),dp(24),dp(18));addView(all,new LayoutParams(-1,-1));
@@ -48,7 +48,7 @@ class FilmDetailView extends FrameLayout {
     @Override public void setVisibility(int v){super.setVisibility(v);if(v==VISIBLE)shield();else restore();}
     private void shield(){if(page==null||getVisibility()!=VISIBLE||shielding)return;focusable=page.isFocusable();touchable=page.isFocusableInTouchMode();descendants=page.getDescendantFocusability();accessibility=page.getImportantForAccessibility();page.clearFocus();page.setDescendantFocusability(ViewGroup.FOCUS_BLOCK_DESCENDANTS);page.setFocusableInTouchMode(false);page.setFocusable(false);page.setImportantForAccessibility(IMPORTANT_FOR_ACCESSIBILITY_NO_HIDE_DESCENDANTS);shielding=true;}
     private void restore(){if(!shielding||page==null)return;page.setDescendantFocusability(descendants);page.setFocusable(focusable);page.setFocusableInTouchMode(touchable);page.setImportantForAccessibility(accessibility);shielding=false;}
-    void begin(String target,JSONObject card){waiting=true;progress.setVisibility(VISIBLE);url=target;title.setText(card==null?"Loading title…":FilmHomeView.readable(card.optString("title","Loading title…")));subtitle.setText("FlixMomo · reading this title’s details");synopsis.setText("Reading the provider’s description…");facts.setText(card==null?"":card.optString("metadata"));status.setText("Loading this title from FlixMomo… Watch is enabled when its action is available.");watch.setEnabled(false);watchlist.setEnabled(false);image="";poster.setImageDrawable(null);if(card!=null)art(card.optString("image"));copy.scrollTo(0,0);setVisibility(VISIBLE);bringToFront();original.requestFocus();}
+    void begin(String target,JSONObject card){observedWatchLabel="";watch.setText("Watch now");waiting=true;progress.setVisibility(VISIBLE);url=target;title.setText(card==null?"Loading title…":FilmHomeView.readable(card.optString("title","Loading title…")));subtitle.setText("FlixMomo · reading this title’s details");synopsis.setText("Reading the provider’s description…");facts.setText(card==null?"":card.optString("metadata"));status.setText("Loading this title from FlixMomo… Watch is enabled when its action is available.");watch.setEnabled(false);watchlist.setEnabled(false);image="";poster.setImageDrawable(null);if(card!=null)art(card.optString("image"));copy.scrollTo(0,0);setVisibility(VISIBLE);bringToFront();original.requestFocus();}
     void preview(JSONObject cached){
         if(cached==null)return;render(cached);waiting=true;watch.setEnabled(false);watchlist.setEnabled(false);progress.setVisibility(VISIBLE);
         subtitle.setText("FlixMomo · details from this visit, refreshing");status.setText("Checking the current Watch action…");
@@ -60,8 +60,12 @@ class FilmDetailView extends FrameLayout {
         String description=value.optString("synopsis");synopsis.setText(description.isEmpty()?"The provider has not supplied a readable description. Open Original page for the source view.":description);
         StringBuilder lines=new StringBuilder();JSONObject f=value.optJSONObject("facts");if(f!=null)for(String key:new String[]{"Type","Released","Duration","Genres","Language","Status","Provider rating"}){String s=f.optString(key);if(!s.isEmpty()&&s.length()<=180)lines.append(key).append("  ").append(s).append('\n');}
         facts.setText(lines.toString());subtitle.setText("Information supplied by FlixMomo · availability not independently verified");
+        String label=value.optString("watch_label","Watch now");
+        if(label.isEmpty()||label.length()>96)label="Watch now";
+        observedWatchLabel=label;
+        String display=label.toLowerCase(java.util.Locale.ROOT);watch.setText(Character.toUpperCase(display.charAt(0))+display.substring(1));
         boolean wasReady=watch.isEnabled();watch.setEnabled(value.optBoolean("watch"));watchlist.setEnabled(value.optBoolean("watchlist"));art(value.optString("image"));
-        status.setText("Watch uses FlixMomo’s player. Watchlist uses its account; GharTV does not claim a saved item.");
+        status.setText(value.optBoolean("watch_ambiguous")?"Several episode actions are available. Choose the episode on Original page; GharTV will not guess one.":"Watch uses FlixMomo’s player. Watchlist uses its account; GharTV does not claim a saved item.");
         // Do not steal an already chosen action when a later observation arrives.
         if(!wasReady&&watch.isEnabled()&&original.hasFocus())watch.requestFocus();
     }
@@ -80,5 +84,6 @@ class FilmDetailView extends FrameLayout {
         return true;
     }
     private Button primary(){return watch.isEnabled()?watch:original;}
+    String currentWatchLabel(){return observedWatchLabel;}
     String currentTitle(){return title.getText().toString();}
 }

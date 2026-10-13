@@ -42,6 +42,7 @@ jobs:
           node --test tools/provider-access/player-options.test.mjs
           python tools/tv-first/test_review_clock.py
           python tools/tv-first/test_collect_review_interactions.py
+          python tools/tv-first/test_tv_identity.py
           mkdir -p "$RUNNER_TEMP/nova-contract"
           javac -d "$RUNNER_TEMP/nova-contract" android-tv/app/src/main/java/in/ghartv/nova/PreviewGate.java tools/tv-first/PreviewGateSmoke.java android-tv/app/src/main/java/in/ghartv/nova/RemoteCursorState.java tools/tv-first/RemoteCursorSmoke.java
           java -cp "$RUNNER_TEMP/nova-contract" PreviewGateSmoke
@@ -85,7 +86,7 @@ jobs:
           cd android-tv
           chmod +x gradlew
           ./gradlew --no-daemon --max-workers=2 assembleRelease assembleDebug assembleDebugAndroidTest
-          cp app/build/outputs/apk/release/app-release-unsigned.apk /tmp/ghartv-candidate/GharTV-code49-review-unsigned.apk
+          cp app/build/outputs/apk/release/app-release-unsigned.apk /tmp/ghartv-candidate/GharTV-code50-review-unsigned.apk
       - name: Isolated cloud Android36, not an owner emulator
         run: |
           set -euo pipefail
@@ -113,22 +114,23 @@ jobs:
           else:raise RuntimeError('CLOUD_DEVICE_TIMEOUT')
           for args in (['wm','size','1280x720'],['wm','density','160'],['settings','put','secure','immersive_mode_confirmations','confirmed'],['input','keyevent','KEYCODE_WAKEUP'],['wm','dismiss-keyguard']):subprocess.run(['adb','-s','emulator-5580','shell']+args,check=True)
           PY
-      - name: Retain180 cases and verify bounded source budgets, cancellation and first-frame timings
+      - name: Retain206 cases and verify episode Watch and deterministic controls
         run: |
           set -euo pipefail
           adb -s emulator-5580 install -r android-tv/app/build/outputs/apk/debug/app-debug.apk
           adb -s emulator-5580 install -r android-tv/app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk
-          adb -s emulator-5580 shell am instrument -w -r -e class in.ghartv.nova.RemoteWebCursorTest,in.ghartv.nova.FilmNativeControlsTest,in.ghartv.nova.DiscoverExperienceTest,in.ghartv.nova.Review38RegressionTest,in.ghartv.nova.Review39ExperienceTest,in.ghartv.nova.Review40PlaybackTest,in.ghartv.nova.Review41ConnectionTelemetryTest,in.ghartv.nova.Review42RegressionTest,in.ghartv.nova.Review43PerformanceTest,in.ghartv.nova.Review44LoadingMouseTest,in.ghartv.nova.Review45PlayEvidenceTest,in.ghartv.nova.Review46NativePointerTest,in.ghartv.nova.Review47ViewingTest,in.ghartv.nova.Review48InputStabilityTest,in.ghartv.nova.Review49PlaybackBudgetTest in.ghartv.nova.test/androidx.test.runner.AndroidJUnitRunner | tee /tmp/ghartv-candidate/proof/android-tests.txt
-          grep -q 'OK (206 tests)' /tmp/ghartv-candidate/proof/android-tests.txt
+          adb -s emulator-5580 shell am instrument -w -r -e class in.ghartv.nova.RemoteWebCursorTest,in.ghartv.nova.FilmNativeControlsTest,in.ghartv.nova.DiscoverExperienceTest,in.ghartv.nova.Review38RegressionTest,in.ghartv.nova.Review39ExperienceTest,in.ghartv.nova.Review40PlaybackTest,in.ghartv.nova.Review41ConnectionTelemetryTest,in.ghartv.nova.Review42RegressionTest,in.ghartv.nova.Review43PerformanceTest,in.ghartv.nova.Review44LoadingMouseTest,in.ghartv.nova.Review45PlayEvidenceTest,in.ghartv.nova.Review46NativePointerTest,in.ghartv.nova.Review47ViewingTest,in.ghartv.nova.Review48InputStabilityTest,in.ghartv.nova.Review49PlaybackBudgetTest,in.ghartv.nova.Review50SeriesControlsTest in.ghartv.nova.test/androidx.test.runner.AndroidJUnitRunner | tee /tmp/ghartv-candidate/proof/android-tests.txt
+          grep -q 'OK (226 tests)' /tmp/ghartv-candidate/proof/android-tests.txt
           for name in review47-owned-fullscreen.png review47-fullscreen-menu.png review47-toolbar-return.png; do adb -s emulator-5580 pull /sdcard/Android/data/in.ghartv.nova/files/$name /tmp/ghartv-candidate/proof/$name; done
       - name: Collect controlled timing observations
         run: |
           adb -s emulator-5580 pull /sdcard/Android/data/in.ghartv.nova/files/review49-timing.json /tmp/ghartv-candidate/proof/review49-timing.json
+          adb -s emulator-5580 pull /sdcard/Android/data/in.ghartv.nova/files/review50-series-timing.json /tmp/ghartv-candidate/proof/review50-series-timing.json
       - name: Package same sign-and-open owner flow
-        run: python tools/tv-first/package_review49.py
+        run: python tools/tv-first/package_review50.py
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: ghartv-code49-owner-review
+          name: ghartv-code50-owner-review
           path: /tmp/ghartv-candidate/
           retention-days: 14

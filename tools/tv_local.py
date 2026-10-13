@@ -78,23 +78,30 @@ def avd_processes():
             found.append((int(parts[0]),cmd))
     return found
 
+def avd_identity(adb, serial):
+    """Verify the Android boot identity on this emulator transport, not a port guess."""
+    if not re.fullmatch(r'emulator-\d+', serial):return False
+    q=call([adb,'-s',serial,'shell','getprop','ro.kernel.qemu'],5)
+    boot=call([adb,'-s',serial,'shell','getprop','ro.boot.qemu.avd_name'],5)
+    if q.returncode or q.stdout.strip()!='1' or boot.returncode:return False
+    name=boot.stdout.strip()
+    if name:return name==AVD
+    legacy=call([adb,'-s',serial,'emu','avd','name'],5)
+    names=[x.strip() for x in legacy.stdout.splitlines() if x.strip() not in ('','OK')]
+    return legacy.returncode==0 and names==[AVD]
+
 def existing_serial(adb):
-    """Resolve this exact named emulator regardless of its assigned console port."""
     p=call([adb,'devices'],5)
     if p.returncode:raise Hold('ADB_UNAVAILABLE')
-    matches=[]
-    for serial,status in devices(p.stdout).items():
-        if status!='device':continue
-        name=call([adb,'-s',serial,'emu','avd','name'],5)
-        lines=name.stdout.splitlines()
-        if name.returncode==0 and lines and lines[0].strip()==AVD:matches.append(serial)
+    connected=devices(p.stdout)
+    matches=[serial for serial,status in connected.items() if status=='device' and avd_identity(adb,serial)]
     if len(matches)>1:raise Hold('MULTIPLE_MATCHING_AVDS_PRESERVED')
-    return matches[0] if matches else SERIAL
+    if matches:return matches[0]
+    if connected or avd_processes():raise Hold('EXISTING_EMULATOR_IDENTITY_UNCONFIRMED_NO_DUPLICATE')
+    return SERIAL
 
 def verify_target(adb):
-    p=call([adb,'-s',SERIAL,'emu','avd','name'])
-    names=p.stdout.splitlines()
-    if p.returncode or not names or names[0].strip()!=AVD: raise Hold('AVD_IDENTITY_NOT_CONFIRMED')
+    if not avd_identity(adb,SERIAL):raise Hold('AVD_IDENTITY_NOT_CONFIRMED')
 
 def _listen_owners(port):
     """Inspect listeners, not outbound sockets or TCP TIME_WAIT records."""
@@ -164,8 +171,7 @@ def attach_or_start(root,run):
         connected=devices(p.stdout)
         for serial,status in connected.items():
             if status=='device' and serial!=SERIAL:
-                names=call([adb,'-s',serial,'emu','avd','name'],4).stdout.splitlines()
-                if names and names[0].strip()==AVD:
+                if avd_identity(adb,serial):
                     record('SAME_AVD_ON_OTHER_PORT_PRESERVED')
                     raise Hold('NAMED_AVD_RUNNING_ON_OTHER_PORT_PRESERVED')
         if connected.get(SERIAL)=='device':

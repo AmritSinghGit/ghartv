@@ -23,7 +23,7 @@ import java.util.Set;
 /** Original provider posters stay in the one WebView. Only the player tray is native. */
 final class FilmNativeControls {
     interface Host { void navigate(String url); void usePage(); void searchToolbar(); void nativeMode(); void navigationHint(String text);
-        default void mouse(){} default void fullscreen(){}
+        default void mouse(){} default void fullscreen(){} default void controlsVisibility(boolean visible){}
         default boolean pageIsVisible(){return true;}
         default void playerSelected(){} default void actionOutcome(String action,String state){} default void pageObserved(JSONObject data){} default void pageAction(String action){} default void verificationRequired(){}
     }
@@ -37,6 +37,9 @@ final class FilmNativeControls {
     private Button playButton;
     private final java.util.ArrayList<Button> trayButtons=new java.util.ArrayList<>();
     private int mediaCandidates;
+    private boolean dismissedByViewer;
+    private String expectedWatchLabel="";
+    private WebView touchPage;private long touchStarted;private float touchX,touchY;
     private WebView browser;
     private JSONArray players=new JSONArray();
     private final Set<String> attempted=new HashSet<>();
@@ -50,7 +53,7 @@ final class FilmNativeControls {
     private boolean active=true,blocked,pending,selectedByViewer,reading,autoNext=false;
     private final Runnable probe=this::read;
     private final Runnable hide=()->{if(!ownsFocus())hideTray();};
-    private final Runnable slow=()->{if(active&&selectedByViewer){state.setText("Still not playing? Choose Not playing to try another offered player.");showTray(false);}};
+    private final Runnable slow=()->{if(active&&selectedByViewer&&!dismissedByViewer){state.setText("Use Sources to choose another player. Menu toggles these controls.");}};
     FilmNativeControls(Activity a,FrameLayout stage,View chrome,Host host){
         activity=a;this.chrome=chrome;this.host=host;
         choiceView=new ScrollView(a);choiceView.setBackground(TvUi.rounded(TvUi.SURFACE,14,TvUi.MINT,1,a));
@@ -67,22 +70,33 @@ final class FilmNativeControls {
     private int dp(int n){return TvUi.dp(activity,n);}
     private Button add(LinearLayout row,String title,Runnable click){Button b=TvUi.button(activity,title,false);b.setTextSize(13);b.setOnClickListener(v->{handler.removeCallbacks(hide);click.run();});row.addView(b);return b;}
     void attach(WebView web){probeBegan=SystemClock.elapsedRealtime();pageActions.clear();posterActions.clear();pageBusy=false;browser=web;generation++;reading=false;posterBusy=false;postersReady=false;}
-    void started(){pageActions.clear();posterActions.clear();postersReady=false;posterBusy=false;playerTrayAnnounced=false;mediaCandidates=0;pageBusy=false;detailFocusApplied=false;generation++;handler.removeCallbacksAndMessages(null);reading=false;pending=false;blocked=false;probeCount=0;probeBegan=SystemClock.elapsedRealtime();players=new JSONArray();snapshotUrl="";playerIdentity="";selectedByViewer=false;selected="";attempted.clear();choiceView.setVisibility(View.GONE);tray.setVisibility(View.GONE);}
+    void started(){cancelPageTouch();dismissedByViewer=false;expectedWatchLabel="";host.controlsVisibility(false);pageActions.clear();posterActions.clear();postersReady=false;posterBusy=false;playerTrayAnnounced=false;mediaCandidates=0;pageBusy=false;detailFocusApplied=false;generation++;handler.removeCallbacksAndMessages(null);reading=false;pending=false;blocked=false;probeCount=0;probeBegan=SystemClock.elapsedRealtime();players=new JSONArray();snapshotUrl="";playerIdentity="";selectedByViewer=false;selected="";attempted.clear();choiceView.setVisibility(View.GONE);tray.setVisibility(View.GONE);}
     void finished(){if(active&&!blocked){handler.removeCallbacks(probe);handler.post(probe);}}
-    void failure(){pageActions.clear();posterActions.clear();pageBusy=false;postersReady=false;posterBusy=false;blocked=true;generation++;reading=false;pending=false;handler.removeCallbacksAndMessages(null);hideAll();chrome.setVisibility(View.VISIBLE);}
-    void pause(){pageActions.clear();posterActions.clear();pageBusy=false;posterBusy=false;active=false;generation++;reading=false;handler.removeCallbacksAndMessages(null);}
+    void failure(){cancelPageTouch();pageActions.clear();posterActions.clear();pageBusy=false;postersReady=false;posterBusy=false;blocked=true;generation++;reading=false;pending=false;handler.removeCallbacksAndMessages(null);hideAll();chrome.setVisibility(View.VISIBLE);}
+    void pause(){cancelPageTouch();pageActions.clear();posterActions.clear();pageBusy=false;posterBusy=false;active=false;generation++;reading=false;handler.removeCallbacksAndMessages(null);}
     void resume(){probeBegan=SystemClock.elapsedRealtime();active=true;if(browser!=null&&!blocked){probeCount=0;finished();}}
     void destroy(){pause();browser=null;}
     boolean ownsFocus(){return choiceView.hasFocus()||tray.hasFocus();}
     boolean visible(){return tray.getVisibility()==View.VISIBLE||choiceView.getVisibility()==View.VISIBLE;}
     boolean back(){if(choiceView.getVisibility()==View.VISIBLE){choiceView.setVisibility(View.GONE);showTray(true);return true;}if(tray.getVisibility()==View.VISIBLE){hideTray();return true;}return false;}
-    void menu(){if(postersReady){hideAll();host.searchToolbar();}else showTray(true);}
+    // Internal callers explicitly request a panel. User Menu toggles it below.
+    void menu(){dismissedByViewer=false;if(postersReady){hideAll();host.searchToolbar();}else showTray(true);}
+    void toggleMenu(){cancelPageTouch();
+        // A user's Menu action owns the layer; outstanding page callbacks must not
+        // click or reposition after it. Background reads may continue afterwards.
+        pageActions.clear();posterActions.clear();pageBusy=posterBusy=pending=reading=false;
+        generation++;handler.removeCallbacksAndMessages(null);playerTrayAnnounced=true;
+        if(visible()){hideAll();if(browser!=null&&host.pageIsVisible())browser.requestFocus();}
+        else {dismissedByViewer=false;if(postersReady)host.searchToolbar();else showTray(true);}
+        finished();
+    }
+    void pageWatch(String label){if(pageBusy){host.actionOutcome("watch","ACTION_PENDING");return;}expectedWatchLabel=label==null?"":label;pageAction("watch");}
     void userInput(){if(tray.getVisibility()==View.VISIBLE){handler.removeCallbacks(hide);if(choiceView.getVisibility()!=View.VISIBLE&&!ownsFocus())handler.postDelayed(hide,6000);}}
     void suppressAutomaticTray(){playerTrayAnnounced=true;handler.removeCallbacks(hide);handler.removeCallbacks(slow);}
-    void hideAll(){handler.removeCallbacks(hide);choiceView.setVisibility(View.GONE);tray.setVisibility(View.GONE);}
-    private void hideTray(){if(choiceView.getVisibility()!=View.VISIBLE){tray.setVisibility(View.GONE);if(browser!=null&&host.pageIsVisible())browser.requestFocus();}}
+    void hideAll(){dismissedByViewer=true;playerTrayAnnounced=true;handler.removeCallbacks(hide);handler.removeCallbacks(slow);choiceView.setVisibility(View.GONE);tray.setVisibility(View.GONE);host.controlsVisibility(false);}
+    private void hideTray(){dismissedByViewer=true;playerTrayAnnounced=true;handler.removeCallbacks(slow);host.controlsVisibility(false);if(choiceView.getVisibility()!=View.VISIBLE){tray.setVisibility(View.GONE);if(browser!=null&&host.pageIsVisible())browser.requestFocus();}}
     void refreshState(){probeCount=0;probeBegan=SystemClock.elapsedRealtime();finished();}
-    private void showTray(boolean focus){if(!active||!host.pageIsVisible())return;tray.setVisibility(View.VISIBLE);tray.bringToFront();if(focus)((LinearLayout)tray.getChildAt(1)).getChildAt(0).requestFocus();handler.removeCallbacks(hide);if(choiceView.getVisibility()!=View.VISIBLE&&!ownsFocus())handler.postDelayed(hide,6000);if(players.length()==0&&!blocked)finished();}
+    private void showTray(boolean focus){if(!active||!host.pageIsVisible()||(!focus&&dismissedByViewer))return;host.controlsVisibility(true);tray.setVisibility(View.VISIBLE);tray.bringToFront();if(focus)((LinearLayout)tray.getChildAt(1)).getChildAt(0).requestFocus();handler.removeCallbacks(hide);if(choiceView.getVisibility()!=View.VISIBLE&&!ownsFocus())handler.postDelayed(hide,6000);if(players.length()==0&&!blocked)finished();}
     private JSONObject decode(String raw) throws Exception {if(raw==null||raw.length()>131072)throw new IllegalArgumentException("Page result too large");Object value=new JSONTokener(raw).nextValue();if(!(value instanceof String))throw new IllegalArgumentException("No page snapshot");return new JSONObject((String)value);}
     private void read(){
         if(!active||blocked||reading||browser==null||(probeCount>=48||SystemClock.elapsedRealtime()-probeBegan>25000))return;String url=browser.getUrl();if(url==null||!FlixMomoActivity.allowedTop(Uri.parse(url)))return;
@@ -95,7 +109,7 @@ final class FilmNativeControls {
                 JSONArray found=data.optJSONArray("players");if(found!=null&&found.length()<=48){String identity=actual+":"+found.toString();players=found;detectedPlayers=data.optInt("playerDetectedCount",found.length());playerTruncated=data.optBoolean("playerTruncated");if(!identity.equals(playerIdentity)){playerIdentity=identity;if(choiceView.getVisibility()==View.VISIBLE)renderPlayers();}}
                 if(host.pageIsVisible()&&data.optBoolean("search"))enablePosters(actual);
                 else if(host.pageIsVisible()&&players.length()==0&&!detailFocusApplied&&source.hasFocus()){detailFocusApplied=true;pageAction("focus");}
-                if(!data.optBoolean("search")&&players.length()>0&&!playerTrayAnnounced&&!selectedByViewer&&!pageBusy){playerTrayAnnounced=true;state.setText(players.length()+" player choices detected"+(playerTruncated?" · partial list":"")+" · Menu opens controls");showTray(!data.optBoolean("mediaPlaying"));}
+                if(!data.optBoolean("search")&&players.length()>0&&!playerTrayAnnounced&&!selectedByViewer&&!pageBusy&&!dismissedByViewer){playerTrayAnnounced=true;state.setText(players.length()+" player choices detected"+(playerTruncated?" · partial list":"")+" · Menu opens controls");showTray(!data.optBoolean("mediaPlaying"));}
                 if(selectedByViewer&&SystemClock.elapsedRealtime()-selectedAt>=5000&&autoNext&&data.optBoolean("mediaObservable")&&data.optInt("mediaError")>0&&!pending)next(false);
                 if(probeCount<48){handler.removeCallbacks(probe);long age=SystemClock.elapsedRealtime()-probeBegan;handler.postDelayed(probe,age<3000?200:age<10000?650:1800);}
             }catch(Exception ignored){host.navigationHint("Use the provider page; its player controls could not be read.");}
@@ -160,11 +174,11 @@ final class FilmNativeControls {
         for(int i=0;i<players.length();i++){JSONObject p=players.optJSONObject(i);if(p!=null&&!attempted.contains(p.optString("label"))){select(i);return true;}}
         return false;
     }
-    private void showPlayers(){probeCount=0;finished();choiceView.setVisibility(View.VISIBLE);choiceView.bringToFront();renderPlayers();}
+    private void showPlayers(){dismissedByViewer=false;host.controlsVisibility(true);probeCount=0;finished();choiceView.setVisibility(View.VISIBLE);choiceView.bringToFront();renderPlayers();}
     private void renderPlayers(){
-        String focusLabel="";View focused=choiceView.findFocus();if(focused instanceof Button)focusLabel=((Button)focused).getText().toString();choices.removeAllViews();choices.addView(TvUi.label(activity,"FlixMomo · "+players.length()+" choices"+(playerTruncated?" (partial)":""),18,TvUi.TEXT,true));
+        String focusLabel="";View focused=choiceView.findFocus();if(focused instanceof Button)focusLabel=focused.getTag() instanceof String?(String)focused.getTag():((Button)focused).getText().toString();choices.removeAllViews();choices.addView(TvUi.label(activity,"FlixMomo · "+players.length()+" choices"+(playerTruncated?" (partial)":""),18,TvUi.TEXT,true));
         if(players.length()==0)choices.addView(TvUi.label(activity,"The provider has not exposed readable choices. Use page remains available.",13,TvUi.MUTED,false));Button first=null,restore=null;
-        for(int i=0;i<players.length();i++){final int n=i;JSONObject p=players.optJSONObject(i);if(p==null)continue;String name=p.optString("label");if(!name.matches("(?i)^(player|server|source)\\s*#?\\s*\\d{1,3}$"))continue;String badges=p.optJSONArray("badges")==null?"":p.optJSONArray("badges").toString().replace("[","").replace("]","").replace("\"","");Button b=add(choices,name+(badges.isEmpty()?"":" · "+badges)+(name.equals(selected)?" · selected":attempted.contains(name)?" · tried":""),()->select(n));if(first==null)first=b;if(b.getText().toString().equals(focusLabel))restore=b;}
+        for(int i=0;i<players.length();i++){final int n=i;JSONObject p=players.optJSONObject(i);if(p==null)continue;String name=p.optString("label");if(!name.matches("(?i)^(player|server|source)\\s*#?\\s*\\d{1,3}$"))continue;String badges=p.optJSONArray("badges")==null?"":p.optJSONArray("badges").toString().replace("[","").replace("]","").replace("\"","");Button b=add(choices,name+(badges.isEmpty()?"":" · "+badges)+(name.equals(selected)?" · selected":attempted.contains(name)?" · tried":""),()->select(n));b.setTag(name);if(first==null)first=b;if(name.equals(focusLabel)||b.getText().toString().equals(focusLabel))restore=b;}
         if(players.length()>1)add(choices,"Try next source",()->next(true));
         add(choices,autoNext?"Auto next on media error: on":"Auto next on media error: off",()->{autoNext=!autoNext;renderPlayers();});add(choices,"Close",()->{choiceView.setVisibility(View.GONE);showTray(true);});if(restore!=null)restore.requestFocus();else if(first!=null)first.requestFocus();
     }
@@ -174,7 +188,7 @@ final class FilmNativeControls {
         source.evaluateJavascript(FilmPageSnapshot.select(snapshotUrl,index,label),raw->{
             if(!active||browser!=source||generation!=token)return;pending=false;
             try{JSONObject result=decode(raw);if(!"SELECTION_REQUESTED".equals(result.optString("state"))){state.setText("Provider choices changed. Reopen Players to refresh.");probeCount=0;finished();showTray(false);return;}
-                host.nativeMode();selected=label;selectedAt=SystemClock.elapsedRealtime();attempted.add(label);selectedByViewer=true;choiceView.setVisibility(View.GONE);chrome.setVisibility(View.GONE);state.setText(label+" selected · Not playing tries another · playback not verified");showTray(false);handler.removeCallbacks(slow);handler.postDelayed(slow,20000);host.playerSelected();probeCount=0;finished();
+                host.nativeMode();selected=label;selectedAt=SystemClock.elapsedRealtime();attempted.add(label);selectedByViewer=true;choiceView.setVisibility(View.GONE);chrome.setVisibility(View.GONE);state.setText(label+" selected · Menu opens Sources · playback not verified");hideAll();handler.removeCallbacks(slow);host.playerSelected();probeCount=0;finished();
             }catch(Exception e){state.setText("Selection not confirmed. Use page or refresh Players.");showTray(false);}
         });
     }
@@ -185,11 +199,16 @@ final class FilmNativeControls {
         if(pageBusy){
             // A press/repeat while Play is still resolving must not queue a second
             // play toggle or a second fullscreen transition.
-            if("media".equals(action)||"fullscreen".equals(action)){host.actionOutcome(action,"ACTION_PENDING");return;}
+            if("watch".equals(action)||"media".equals(action)||"fullscreen".equals(action)){host.actionOutcome(action,"ACTION_PENDING");return;}
             if(pageActions.size()<8&&(!activate||!pageActions.contains(action)))pageActions.addLast(action);
             host.navigationHint("Finishing the selected action…");return;
         }
         executePageAction(action);
+    }
+    private void cancelPageTouch(){
+        if(touchPage==null)return;WebView page=touchPage;touchPage=null;
+        android.view.MotionEvent cancel=android.view.MotionEvent.obtain(touchStarted,SystemClock.uptimeMillis(),android.view.MotionEvent.ACTION_CANCEL,touchX,touchY,0);
+        cancel.setSource(android.view.InputDevice.SOURCE_TOUCHSCREEN);try{page.dispatchTouchEvent(cancel);}finally{cancel.recycle();}
     }
     private void finishPageAction(int token){
         if(token!=generation)return;pageBusy=false;
@@ -197,8 +216,9 @@ final class FilmNativeControls {
     }
     private void executePageAction(String action){
         final WebView source=browser;final int token=generation;pageBusy=true;
+        final String expected="watch".equals(action)?expectedWatchLabel:"";expectedWatchLabel="";
         if("media".equals(action)||"fullscreen".equals(action)){suppressAutomaticTray();hideAll();source.requestFocus();}
-        source.evaluateJavascript(FilmPageFocus.script(action),raw->{
+        source.evaluateJavascript(FilmPageFocus.script(action,expected),raw->{
             if(!active||source!=browser||token!=generation)return;
             try{JSONObject result=decode(raw);String response=result.optString("state");
                 if(!java.util.Objects.equals(source.getUrl(),result.optString("url"))){finishPageAction(token);return;}
@@ -227,12 +247,12 @@ final class FilmNativeControls {
                                     if(!Double.isFinite(w)||!Double.isFinite(h)||!Double.isFinite(x)||!Double.isFinite(y)||w<=0||h<=0||x<0||x>w||y<0||y>h){finishPageAction(token);return;}
                                     host.actionOutcome(action,"IFRAME".equals(target.optString("tag"))?"TARGET_FRAME":"VIDEO".equals(target.optString("tag"))?"TARGET_VIDEO":"TARGET_CONTROL");
                                     float px=(float)(x*source.getWidth()/w),py=(float)(y*source.getHeight()/h);
-                                    hideAll();source.requestFocus();long time=SystemClock.uptimeMillis();
+                                    hideAll();source.requestFocus();long time=SystemClock.uptimeMillis();touchPage=source;touchStarted=time;touchX=px;touchY=py;
                                     android.view.MotionEvent down=android.view.MotionEvent.obtain(time,time,android.view.MotionEvent.ACTION_DOWN,px,py,0);
                                     down.setSource(android.view.InputDevice.SOURCE_TOUCHSCREEN);try{source.dispatchTouchEvent(down);}finally{down.recycle();}
                                     handler.postDelayed(()->{if(source!=browser||token!=generation)return;
                                         android.view.MotionEvent up=android.view.MotionEvent.obtain(time,SystemClock.uptimeMillis(),android.view.MotionEvent.ACTION_UP,px,py,0);
-                                        up.setSource(android.view.InputDevice.SOURCE_TOUCHSCREEN);try{source.dispatchTouchEvent(up);host.actionOutcome(action,"CLICK_SENT_NOT_PLAYBACK_PROOF");}finally{up.recycle();finishPageAction(token);}
+                                        up.setSource(android.view.InputDevice.SOURCE_TOUCHSCREEN);try{source.dispatchTouchEvent(up);touchPage=null;host.actionOutcome(action,"CLICK_SENT_NOT_PLAYBACK_PROOF");}finally{up.recycle();finishPageAction(token);}
                                     },45);
                                 }catch(Exception error){finishPageAction(token);}
                             });
@@ -243,6 +263,7 @@ final class FilmNativeControls {
                     int key="left".equals(action)?KeyEvent.KEYCODE_DPAD_LEFT:"right".equals(action)?KeyEvent.KEYCODE_DPAD_RIGHT:"up".equals(action)?KeyEvent.KEYCODE_DPAD_UP:"down".equals(action)?KeyEvent.KEYCODE_DPAD_DOWN:KeyEvent.KEYCODE_DPAD_CENTER;
                     source.dispatchKeyEvent(new KeyEvent(KeyEvent.ACTION_DOWN,key));source.dispatchKeyEvent(new KeyEvent(KeyEvent.ACTION_UP,key));
                 }else if("NOT_FOUND".equals(response)||"MEDIA_NOT_READY".equals(response)||"AMBIGUOUS_MEDIA".equals(response)){host.navigationHint("The provider has not exposed an unambiguous control. Original page remains available.");host.actionOutcome(action,response);}
+                else if("AMBIGUOUS_WATCH".equals(response)||"WATCH_ACTION_CHANGED".equals(response)){host.navigationHint("Choose the episode on the current provider page; no stale or ambiguous action was activated.");host.actionOutcome(action,response);}
                 else if("ALREADY_PLAYING".equals(response))host.actionOutcome(action,"ALREADY_PLAYING");
                 else if("FOCUSED".equals(response))host.navigationHint(result.optString("label")+" · arrows move · OK selects · Menu opens controls");
                 else if("VERIFICATION_REQUIRED".equals(response))host.verificationRequired();
@@ -263,5 +284,5 @@ final class FilmNativeControls {
         lastPosterKey=SystemClock.uptimeMillis();pageAction(action);return true;
     }
 
-    private void next(boolean viewer){if(!active||blocked||pending)return;if(!selected.isEmpty())attempted.add(selected);for(int i=0;i<players.length();i++){JSONObject p=players.optJSONObject(i);if(p!=null&&!attempted.contains(p.optString("label"))){state.setText(viewer?"Trying the next player you requested…":"Media error; trying the next offered player…");select(i);return;}}state.setText("No untried player remains. Choose a player or return to search.");autoNext=false;showTray(true);}
+    private void next(boolean viewer){if(!active||blocked||pending)return;if(!selected.isEmpty())attempted.add(selected);for(int i=0;i<players.length();i++){JSONObject p=players.optJSONObject(i);if(p!=null&&!attempted.contains(p.optString("label"))){state.setText(viewer?"Trying the next player you requested…":"Media error; trying the next offered player…");select(i);return;}}state.setText("No untried player remains. Choose a player or return to search.");autoNext=false;if(viewer)showTray(true);}
 }

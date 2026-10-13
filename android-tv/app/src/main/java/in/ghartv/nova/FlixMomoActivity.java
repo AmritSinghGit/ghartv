@@ -169,6 +169,7 @@ public class FlixMomoActivity extends Activity {
             public void navigationHint(String text){help.setText(text);}
             public void searchToolbar(){toolbar();pageButton.requestFocus();}
             public void fullscreen(){inputEpoch++;noteInput("FULLSCREEN_REQUEST");nativeControls.pageAction("fullscreen");}
+            public void controlsVisibility(boolean visible){if(startMonitor!=null)startMonitor.controlsOpen(visible);}
             public void mouse(){enterMouse();}
             public boolean pageIsVisible(){return !homeRequested&&!detailRequested&&custom==null&&!(chrome.getVisibility()==View.VISIBLE&&chrome.hasFocus());}
             public void pageObserved(org.json.JSONObject data){observeDetail(data);visitCache.put(data.optJSONObject("detail"));if(homeRequested&&homePanel!=null)homePanel.render(data);else if(detailRequested&&detailPanel!=null)detailPanel.render(data.optJSONObject("detail"));else if(!data.optBoolean("search"))liveResults.setVisibility(View.GONE);followPlayback(data);}
@@ -183,7 +184,7 @@ public class FlixMomoActivity extends Activity {
                     handler.post(()->{if(epoch==inputEpoch&&custom==null&&!isFinishing()&&!homeRequested&&!detailRequested&&!mouseActive&&chrome.getVisibility()!=View.VISIBLE)enterMouse();});
                 }
                 if("watch".equals(action)||"media".equals(action)){
-                    if("VISUAL_TIMEOUT".equals(result)||"NOT_FOUND".equals(result)||"AMBIGUOUS_MEDIA".equals(result)||"TARGET_OBSCURED".equals(result)||"TARGET_CHANGED".equals(result)){playUntil=0;playMessage("Playback has not started: "+result.replace('_',' ').toLowerCase(java.util.Locale.ROOT)+". Use Original page or another player.");}
+                    if("AMBIGUOUS_WATCH".equals(result)||"WATCH_ACTION_CHANGED".equals(result)||"VISUAL_TIMEOUT".equals(result)||"NOT_FOUND".equals(result)||"AMBIGUOUS_MEDIA".equals(result)||"TARGET_OBSCURED".equals(result)||"TARGET_CHANGED".equals(result)){playUntil=0;playMessage("Playback has not started: "+result.replace('_',' ').toLowerCase(java.util.Locale.ROOT)+". Use Original page or another player.");if(startMonitor!=null)startMonitor.pause();}
                     else if("CLICK_SENT_NOT_PLAYBACK_PROOF".equals(result))playMessage("Play gesture sent. Waiting for observable video progress.");
                 }
             }
@@ -369,7 +370,7 @@ public class FlixMomoActivity extends Activity {
     };
     private void playMessage(String text){playNotice.setText(text);playNotice.setVisibility(custom==null&&(!homeRequested||loading)?View.VISIBLE:View.GONE);}
     private void armPlayback(){if(startMonitor!=null)startMonitor.begin();inputEpoch++;noteInput("PLAY_REQUEST");controlTrace.begin(this);attemptObservable=false;handler.removeCallbacks(playDeadline);if(startMonitor==null)handler.postDelayed(playDeadline,20000);playUntil=android.os.SystemClock.elapsedRealtime()+20000;playAfter=android.os.SystemClock.elapsedRealtime()+700;mediaAttempted=false;lastMediaTime=-1;playMessage("Opening FlixMomo playback…");}
-    private void requestWatch(){filmEvent("film_watch_request");armPlayback();usePage();nativeControls.pageAction("watch");}
+    private void requestWatch(){String expected=detailRequested?detailPanel.currentWatchLabel():"";filmEvent("film_watch_request");armPlayback();usePage();nativeControls.pageWatch(expected);}
     private void followPlayback(org.json.JSONObject data){
         if(playUntil==0||homeRequested||detailRequested)return;
         long now=android.os.SystemClock.elapsedRealtime();
@@ -489,7 +490,7 @@ public class FlixMomoActivity extends Activity {
                 if(mouseActive){leaveMouse(true);return true;}
                 if(chrome.getVisibility()==View.VISIBLE&&chrome.hasFocus()){showOptions();return true;}
                 if(homeRequested||detailRequested){toolbar();return true;}
-                nativeControls.menu();return true;
+                nativeControls.toggleMenu();return true;
             }
             return true;
         }

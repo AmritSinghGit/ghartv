@@ -25,7 +25,9 @@ final class FilmPageFocus {
         function permittedLink(e){if(e.tagName!=='A')return true;try{const u=new URL(e.getAttribute('href'),here);return u.protocol==='https:'&&hosts.includes(u.hostname)&&!u.username&&!u.password&&!u.port;}catch{return false;}}
         const candidates=Array.from(root.querySelectorAll('a[href],button,summary,input:not([type="hidden"]),textarea,select,video,iframe,[role="button"],[role="tab"],[tabindex]'))
         .filter(e=>visible(e)&&permittedLink(e)&&!e.closest('[aria-hidden="true"]')&&(!/^(IFRAME|VIDEO)$/.test(e.tagName)||(e.getBoundingClientRect().width>=160&&e.getBoundingClientRect().height>=90))).filter((e,i,all)=>!all.some((p,j)=>j!==i&&p.contains(e)&&/^(A|BUTTON|SELECT|INPUT|TEXTAREA|SUMMARY)$/.test(p.tagName))).slice(0,180);
-        const watch=e=>/^(watch now|play( now)?|start watching|resume watching|watch movie)$/i.test(buttonText(e));
+        __WATCH_POLICY__
+        const watch=e=>ghartvWatchEnabled(e);
+        const watchExpected=__WATCH_EXPECTED__;
         const watchlist=e=>/^(add to |remove from )?(watchlist|watch list|playlist)$/i.test(label(e));
         if(action==='scan')return pack({state:'READY',count:candidates.length,watch:candidates.some(watch),watchlist:candidates.some(watchlist)});
         if(action==='commit'){
@@ -50,9 +52,16 @@ final class FilmPageFocus {
          return pack({state:tap?'TAP':'FOCUSED',label:label(e),x,y,width:innerWidth,height:innerHeight,tag:e.tagName});
         }
         if(action==='watch'){
-          const link=candidates.find(e=>watch(e)&&e.tagName==='A'&&permittedLink(e));
-          if(link){const u=new URL(link.getAttribute('href'),here);if(u.href!==here.href&&!u.hash)return pack({state:'NAVIGATE',target:u.href,label:buttonText(link)});}
-          let n=candidates.findIndex(watch);if(n<0){const media=candidates.map((e,i)=>({e,i})).filter(x=>/^(VIDEO|IFRAME)$/.test(x.e.tagName));if(media.length===1)n=media[0].i;}return focus(n,true);}
+          const choices=ghartvWatchChoices(candidates);
+          if(choices.length>1)return pack({state:'AMBIGUOUS_WATCH'});
+          const target=choices[0];
+          if(watchExpected&&(!target||ghartvWatchLabel(target).toLowerCase()!==watchExpected.toLowerCase()))return pack({state:'WATCH_ACTION_CHANGED'});
+          if(target){
+            if(target.tagName==='A'){const u=new URL(target.getAttribute('href'),here);if(u.href!==here.href&&!u.hash)return pack({state:'NAVIGATE',target:u.href,label:ghartvWatchLabel(target)});}
+            return focus(candidates.indexOf(target),true);
+          }
+          const media=candidates.map((e,i)=>({e,i})).filter(x=>/^(VIDEO|IFRAME)$/.test(x.e.tagName));
+          return focus(media.length===1?media[0].i:-1,true);}
         if(action==='fullscreen'){
           const named=candidates.filter(e=>/^(full ?screen|enter full ?screen|expand player)$/i.test(buttonText(e)));
           return named.length===1?focus(candidates.indexOf(named[0]),true):pack({state:named.length?'AMBIGUOUS_MEDIA':'NOT_FOUND'});
@@ -92,9 +101,11 @@ final class FilmPageFocus {
         if(best<0)return pack({state:'EDGE'});return focus(best);
         })()
         """;
-    static String script(String action) {
+    static String script(String action) {return script(action, "");}
+    static String script(String action,String expectedWatchLabel) {
+        if(expectedWatchLabel==null||expectedWatchLabel.length()>96)throw new IllegalArgumentException("Invalid observed action");
         switch(action) {case "fullscreen":case "media":case "commit":case "scan":case "focus":case "left":case "right":case "up":case "down":case "activate":case "watch":case "watchlist":break;
             default:throw new IllegalArgumentException("Unsupported page action");}
-        return JS.replace("__ACTION__", "'"+action+"'").replace("__GHARTV_HOSTS__",FilmProviderPolicy.hostsJavascript());
+        return JS.replace("__WATCH_POLICY__",FilmWatchActions.JS).replace("__WATCH_EXPECTED__",org.json.JSONObject.quote(expectedWatchLabel)).replace("__ACTION__", "'"+action+"'").replace("__GHARTV_HOSTS__",FilmProviderPolicy.hostsJavascript());
     }
 }

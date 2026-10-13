@@ -28,6 +28,7 @@ final class FilmPlaybackMonitor {
     private final TextView label;private final ProgressBar progress;
     private final Handler handler=new Handler(Looper.getMainLooper());
     private long token, observedAt,readTicket;private boolean reading,releasing,firstReveal;
+    private boolean controlsOpen;
     private int observations;private String lastMessage="",lastError="";
     private final Runnable pulse=this::read;
     FilmPlaybackMonitor(Activity a,Host h){
@@ -43,6 +44,7 @@ final class FilmPlaybackMonitor {
         bs[0].setOnClickListener(v->cancel());bs[1].setOnClickListener(v->manualNext());bs[2].setOnClickListener(v->host.sources());
         panel.setVisibility(View.GONE);
     }
+    void controlsOpen(boolean open){controlsOpen=open;render();}
     boolean ownsFocus(){return panel.getVisibility()==View.VISIBLE&&panel.hasFocus();}
     boolean running(){return budget.running();}
     boolean healthy(){return budget.state==FilmStartBudget.State.PLAYING;}
@@ -129,7 +131,7 @@ final class FilmPlaybackMonitor {
         if(!lastError.isEmpty())text+="\n"+lastError+" This may be a supporting resource; it does not prove the film failed.";
         if(!text.equals(lastMessage)){lastMessage=text;label.setText(text);}
         progress.setVisibility(budget.running()?View.VISIBLE:View.GONE);
-        panel.setVisibility(View.VISIBLE);
+        panel.setVisibility(controlsOpen?View.GONE:View.VISIBLE);
     }
     JSONObject evidence(){
         JSONObject d=new JSONObject();
