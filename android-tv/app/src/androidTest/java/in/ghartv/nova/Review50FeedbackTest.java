@@ -42,7 +42,7 @@ public class Review50FeedbackTest {
         h.player();h.ui(()->{monitor().leave();monitor().begin();for(int i=0;i<100;i++)monitor().requestFailure("Embedded request error -1");assertEquals(64,monitor().evidence().optInt("supporting_resource_errors"));assertFalse(label().contains("error -1"));});
     }
     @Test public void explicitNewAttemptRestoresOnlyFreshProgress()throws Exception{
-        h.player();h.ui(()->{monitor().leave();monitor().begin();monitor().requestFailure("Old request");monitor().pause();monitor().begin();assertTrue(monitor().panel.isShown());assertFalse(monitor().evidence().optBoolean("manual_controls_requested"));assertEquals("",monitor().evidence().optString("resource_error"));assertTrue(label().startsWith("Review 50"));});
+        h.player();h.ui(()->{monitor().leave();monitor().begin();monitor().requestFailure("Old request");monitor().pause();monitor().begin();assertTrue(monitor().panel.isShown());assertFalse(monitor().evidence().optBoolean("manual_controls_requested"));assertEquals("",monitor().evidence().optString("resource_error"));assertTrue(label().startsWith(ReviewDisplay.label()));});
     }
     @Test public void hiddenParentCannotOwnMonitorFocus()throws Exception{
         h.player();h.ui(()->{monitor().leave();monitor().begin();h.text(monitor().panel,"Cancel").requestFocus();assertTrue(monitor().ownsFocus());((View)f("browseRoot")).setVisibility(View.GONE);assertFalse(monitor().ownsFocus());});
