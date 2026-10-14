@@ -44,12 +44,17 @@ public class Review44LoadingMouseTest {
   ready[0]=false;end=SystemClock.elapsedRealtime()+5000;while(SystemClock.elapsedRealtime()<end){ui(()->ready[0]=text((View)field(activity,"detailPanel"),"Watch now").isEnabled());if(ready[0])break;SystemClock.sleep(40);}assertTrue(ready[0]);
   ui(()->text((View)field(activity,"detailPanel"),"Watch now").requestFocus());press(KeyEvent.KEYCODE_DPAD_CENTER);
   end=SystemClock.elapsedRealtime()+6000;while(SystemClock.elapsedRealtime()<end){if(eval("JSON.stringify({p:location.pathname})").optString("p").equals("/watch/lantern"))break;SystemClock.sleep(40);}assertEquals("/watch/lantern",eval("JSON.stringify({p:location.pathname})").getString("p"));
-  // Later tests modify this owned player or request another action. A fixed sleep
-  // can overlap the initial auto-Play/observation/scroll; require its real completion.
+  // Preload may stop the observation budget at PAUSED before the real Play tap.
+  // Wait for the one media action and layout observation to settle, plus actual
+  // owned-video progress; a stopped monitor is not itself proof of playback.
   long playbackEnd=SystemClock.elapsedRealtime()+7000;JSONObject playback=new JSONObject();boolean[] settled={false};
   while(SystemClock.elapsedRealtime()<playbackEnd){
    playback=eval("JSON.stringify({time:document.querySelector('video').currentTime,paused:document.querySelector('video').paused})");
-   ui(()->settled[0]=(Long)field(activity,"playUntil")==0L&&!(Boolean)field(field(activity,"nativeControls"),"pageBusy")&&((FilmPlaybackMonitor)field(activity,"startMonitor")).healthy()&&activity.hasWindowFocus());
+   ui(()->{
+    FilmPlaybackMonitor monitor=(FilmPlaybackMonitor)field(activity,"startMonitor");
+    settled[0]=(Boolean)field(activity,"mediaAttempted")&&!(Boolean)field(field(activity,"nativeControls"),"pageBusy")
+      &&!monitor.running()&&(!monitor.healthy()||(Long)field(activity,"playUntil")==0L)&&activity.hasWindowFocus();
+   });
    if(settled[0]&&playback.optDouble("time")>.35&&!playback.optBoolean("paused"))break;SystemClock.sleep(30);
   }
   String[] diagnostic={""};if(!settled[0]||playback.optDouble("time")<=.35||playback.optBoolean("paused")){
