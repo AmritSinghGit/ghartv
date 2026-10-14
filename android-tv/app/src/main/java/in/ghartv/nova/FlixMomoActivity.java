@@ -34,6 +34,17 @@ import java.io.ByteArrayInputStream;
  * No result replacement, stream extraction, security weakening or private-log upload. */
 public class FlixMomoActivity extends Activity {
     private static final String HOME=FilmProviderPolicy.HOME;
+    static final String PROVIDER_PREFERENCES="ghartv.film-provider-origin";
+    static String preferredProviderHome(android.content.Context context){
+        String saved=context.getSharedPreferences(PROVIDER_PREFERENCES,MODE_PRIVATE).getString("home",null);
+        String registered=FilmProviderPolicy.registeredHome(saved);
+        return registered==null?HOME:registered;
+    }
+    protected String initialProviderHome(){return preferredProviderHome(this);}
+    private void rememberProviderHome(String url){
+        String root=FilmProviderPolicy.pageHome(url);
+        if(root!=null&&!isFinishing()&&!isDestroyed())getSharedPreferences(PROVIDER_PREFERENCES,MODE_PRIVATE).edit().putString("home",root).apply();
+    }
     
     protected WebView browser;
     // Production entry opens the original page. The older parsed-controls path is
@@ -113,16 +124,35 @@ public class FlixMomoActivity extends Activity {
             .setNeutralButton("Registered addresses",(d,w)->chooseFilmOrigin()).setNegativeButton("Close",null).show();
     }
     private void chooseFilmOrigin(){
-        final String[] roots={"https://flixmomo.app/","https://flixmomo.st/","https://flixmomo.bet/","TV date and time settings"};
+        final String[] roots={FilmProviderPolicy.HOME,"https://flixmomo.app/","https://flixmomo.st/","TV date and time settings"};
         new android.app.AlertDialog.Builder(this).setTitle("Open an already registered address")
             .setItems(roots,(d,index)->{if(index==3){try{startActivity(new Intent(android.provider.Settings.ACTION_DATE_SETTINGS));}catch(Exception ignored){}return;}new android.app.AlertDialog.Builder(this).setTitle("Use "+roots[index]+"?")
                 .setMessage("This starts a fresh navigation to an address already registered in this build. Your current search will be sent to it. Normal certificate checks apply. No cookies or passwords are copied between domains.")
-                .setPositiveButton("Open",(confirm,which)->{String text=UnifiedSearch.clean(query.getText().toString());
-                    playUntil=0;playNotice.setVisibility(View.GONE);detailRequested=false;detailPanel.setVisibility(View.GONE);
-                    homeRequested=true;nativeSearch=UnifiedSearch.valid(text)?text:"";homePanel.mode(nativeSearch);homePanel.discardSuggestions();homePanel.loading();homePanel.setVisibility(View.VISIBLE);homePanel.bringToFront();
-                    nativeControls.hideAll();cursor.enable(false);chrome.setVisibility(View.VISIBLE);
-                    navigate(roots[index]+(nativeSearch.isEmpty()?"":"search?q="+Uri.encode(nativeSearch)),false);homePanel.focusRefresh();})
+                .setPositiveButton("Open",(confirm,which)->selectProviderOrigin(roots[index]))
                 .setNegativeButton("Cancel",null).show();}).setNegativeButton("Close",null).show();
+    }
+    private void resumeCatalogueMode(){
+        pointerPage=false;pageEditor=false;pointerTitleOrigin="";
+        if(mouseActive)leaveMouse(false);else cursor.enable(false);
+        nativeControls.resume();credit.setText(FilmProviderPolicy.CREDIT);credit.setVisibility(View.VISIBLE);
+    }
+    void selectProviderOrigin(String value){
+        String root=FilmProviderPolicy.registeredHome(value);if(root==null)return;
+        if(custom!=null)exitFullScreen();
+        resumeCatalogueMode();if(startMonitor!=null)startMonitor.leave();
+        handler.removeCallbacks(detailWait);handler.removeCallbacks(playDeadline);
+        String text=UnifiedSearch.clean(query.getText().toString());
+        playUntil=0;playNotice.setVisibility(View.GONE);detailRequested=false;detailPanel.setVisibility(View.GONE);
+        homeRequested=true;nativeSearch=UnifiedSearch.valid(text)?text:"";homePanel.mode(nativeSearch);homePanel.discardSuggestions();homePanel.loading();homePanel.setVisibility(View.VISIBLE);homePanel.bringToFront();
+        nativeControls.hideAll();chrome.setVisibility(View.VISIBLE);
+        rememberProviderHome(root);
+        navigate(root+(nativeSearch.isEmpty()?"":"search?q="+Uri.encode(nativeSearch)),false);homePanel.focusRefresh();
+    }
+    private void catalogueResourceFailure(Uri uri,String reason){
+        // A catalogue dependency failure is not a movie-playback failure. Do not
+        // substitute data, copy API keys, proxy the request or weaken TLS.
+        if(homeRequested&&homePanel!=null&&uri!=null&&"api.themoviedb.org".equals(uri.getHost()))
+            homePanel.unavailable("The provider page opened, but its catalogue service could not be reached ("+reason+"). Page reachability is not catalogue readiness.");
     }
     void certificateFailure(Runnable cancel,SslError error){
         cancel.run(); // The failed resource is NEVER trusted or loaded.
@@ -143,7 +173,7 @@ public class FlixMomoActivity extends Activity {
     private final Runnable slowLoad=()->{if(loading&&!mainFrameError){status.setText("Still connecting. Retry is available; playback is not verified.");if(homeRequested&&homePanel!=null)homePanel.unavailable("The provider is taking longer than expected.");}};
 
     @Override public void onCreate(Bundle saved){
-        super.onCreate(saved);Telemetry.screen(this,"discover");filmEvent("discover_open");getWindow().getDecorView().setSystemUiVisibility(5894);
+        super.onCreate(saved);lastRequested=initialProviderHome();Telemetry.screen(this,"discover");filmEvent("discover_open");getWindow().getDecorView().setSystemUiVisibility(5894);
         screen=new FrameLayout(this);
         LinearLayout root=new LinearLayout(this);browseRoot=root;root.setOrientation(LinearLayout.VERTICAL);root.setBackgroundColor(TvUi.BG);
         root.setPadding(TvUi.dp(this,18),TvUi.dp(this,10),TvUi.dp(this,18),TvUi.dp(this,10));
@@ -286,7 +316,7 @@ public class FlixMomoActivity extends Activity {
             @Override public void onPageFinished(WebView view,String url){
                 loading=false;handler.removeCallbacks(slowLoad);if(mainFrameError){pageReady=false;return;}
                 if("/dummy".equals(Uri.parse(url).getPath())){fail("FlixMomo declined this session. No provider protection was changed.");return;}
-                pageReady=allowedTop(Uri.parse(url));if(pageReady){status.setText(homeRequested?"Loading FlixMomo suggestions…":detailRequested?"Loading title information…":"Original page loaded · Menu shows GharTV controls");if(!mouseActive&&!pointerPage)nativeControls.finished();if(pointerPage&&!pageEditor)resumePagePointer(false);}
+                pageReady=allowedTop(Uri.parse(url));if(pageReady){if(java.util.Objects.equals(url,view.getUrl()))rememberProviderHome(url);status.setText(homeRequested?"Loading FlixMomo suggestions…":detailRequested?"Loading title information…":"Original page loaded · Menu shows GharTV controls");if(!mouseActive&&!pointerPage)nativeControls.finished();if(pointerPage&&!pageEditor)resumePagePointer(false);}
             }
             @Override public void doUpdateVisitedHistory(WebView view,String url,boolean reload){
                 if(!loading&&allowedTop(Uri.parse(url))&&!java.util.Objects.equals(lastRequested,url)){
@@ -297,12 +327,12 @@ public class FlixMomoActivity extends Activity {
                 }
             }
             @Override public void onReceivedHttpError(WebView view,WebResourceRequest request,WebResourceResponse response){if(request.isForMainFrame())fail("Provider returned HTTP "+response.getStatusCode()+". Your search is kept. Use Retry or Browse.");
-                else{if(startMonitor!=null)startMonitor.requestFailure("Embedded HTTP "+response.getStatusCode());filmFailure("film_resource_http","HTTP_"+response.getStatusCode());}}
+                else{if(startMonitor!=null)startMonitor.requestFailure("Embedded HTTP "+response.getStatusCode());filmFailure("film_resource_http","HTTP_"+response.getStatusCode());catalogueResourceFailure(request.getUrl(),"HTTP "+response.getStatusCode());}}
             @Override public void onReceivedSslError(WebView view,SslErrorHandler handler,SslError error){certificateFailure(handler::cancel,error);}
             @Override public void onReceivedError(WebView view,WebResourceRequest request,android.webkit.WebResourceError error){
                 if(!request.isForMainFrame()){
                     if(startMonitor!=null)startMonitor.requestFailure("Embedded request error "+error.getErrorCode());
-                    filmFailure("film_resource","WEBVIEW_ERROR_"+error.getErrorCode());return;
+                    filmFailure("film_resource","WEBVIEW_ERROR_"+error.getErrorCode());catalogueResourceFailure(request.getUrl(),"network error "+error.getErrorCode());return;
                 }
                 filmFailure("film_navigation","WEBVIEW_ERROR_"+error.getErrorCode());
                 switch(error.getErrorCode()){
@@ -351,7 +381,7 @@ public class FlixMomoActivity extends Activity {
         });
     }
     private void leaveMouse(boolean controls){inputEpoch++;noteInput("POINTER_EXIT");mouseActive=false;cursor.enable(false);modeButton.setText("Cursor: off");nativeControls.resume();if(controls)nativeControls.menu();}
-    private void showHome(boolean force){pointerPage=false;pageEditor=false;if(startMonitor!=null)startMonitor.leave();credit.setVisibility(View.VISIBLE);if(mouseActive)leaveMouse(false);playUntil=0;if(playNotice!=null)playNotice.setVisibility(View.GONE);
+    private void showHome(boolean force){resumeCatalogueMode();if(startMonitor!=null)startMonitor.leave();playUntil=0;if(playNotice!=null)playNotice.setVisibility(View.GONE);
         detailRequested=false;if(detailPanel!=null)detailPanel.setVisibility(View.GONE);homeRequested=true;nativeSearch="";homePanel.mode("");liveGeneration++;liveResults.setVisibility(View.GONE);query.setText("");chrome.setVisibility(View.VISIBLE);
         cursor.enable(false);modeButton.setText("Cursor: off");nativeControls.hideAll();homePanel.setVisibility(View.VISIBLE);homePanel.bringToFront();
         if(force)homePanel.discardSuggestions();
@@ -393,11 +423,21 @@ public class FlixMomoActivity extends Activity {
             mediaAttempted=true;playMessage("Starting the provider’s visible player…");nativeControls.pageAction("media");
         }
     }
-    private void fail(String message){if(playUntil>0){playUntil=0;playMessage(message);}if(nativeControls!=null)nativeControls.failure();mainFrameError=true;pageReady=false;loading=false;handler.removeCallbacks(slowLoad);status.setText(message);if(homeRequested&&homePanel!=null)homePanel.unavailable(message);if(detailRequested&&detailPanel!=null)detailPanel.unavailable(message);}
+    private void fail(String message){
+        if(playUntil>0){playUntil=0;playMessage(message);}if(nativeControls!=null)nativeControls.failure();mainFrameError=true;pageReady=false;loading=false;handler.removeCallbacks(slowLoad);status.setText(message);
+        if(homeRequested&&homePanel!=null)homePanel.unavailable(message);
+        else if(detailRequested&&detailPanel!=null)detailPanel.unavailable(message);
+        else if(networkNotice!=null){networkNotice.setText(message);networkNotice.setVisibility(View.VISIBLE);}
+    }
     static boolean providerHost(String host){return FilmProviderPolicy.host(host);}
     static boolean allowedTop(Uri uri){return FilmProviderPolicy.allowed(uri);}
     private static boolean privateHost(String host){String h=host.toLowerCase(java.util.Locale.ROOT);return h.equals("localhost")||h.endsWith(".localhost")||h.endsWith(".local")||h.endsWith(".internal")||h.contains(":")||h.matches("(?i)(127\\..*|10\\..*|192\\.168\\..*|169\\.254\\..*|172\\.(1[6-9]|2[0-9]|3[01])\\..*|0\\..*)");}
-    private String providerOrigin(){String url=browser==null?lastRequested:browser.getUrl();Uri uri=Uri.parse(url==null?HOME:url);return allowedTop(uri)?"https://"+uri.getHost():"https://flixmomo.app";}
+    private String providerOrigin(){
+        String root=FilmProviderPolicy.pageHome(browser==null?lastRequested:browser.getUrl());
+        if(root==null)root=FilmProviderPolicy.pageHome(lastRequested);
+        if(root==null)root=initialProviderHome();
+        return root.substring(0,root.length()-1);
+    }
     private void openDetail(String url){
         if(startMonitor!=null)startMonitor.leave();
         detailBegan=android.os.SystemClock.elapsedRealtime();detailUsableMs=detailPreviewMs=-1;
@@ -408,12 +448,12 @@ public class FlixMomoActivity extends Activity {
         org.json.JSONObject card=homePanel.card(url);homeRequested=false;homePanel.setVisibility(View.GONE);liveResults.setVisibility(View.GONE);
         detailRequested=true;nativeControls.hideAll();cursor.enable(false);chrome.setVisibility(View.GONE);detailPanel.begin(url,card);org.json.JSONObject cached=visitCache.get(url);detailPanel.preview(cached);if(cached!=null)detailPreviewMs=android.os.SystemClock.elapsedRealtime()-detailBegan;navigate(url,false);
     }
-    private void returnToCards(){pointerPage=false;pageEditor=false;if(mouseActive)leaveMouse(false);if(startMonitor!=null)startMonitor.leave();handler.removeCallbacks(detailWait);detailRequested=false;detailPanel.setVisibility(View.GONE);homeRequested=true;homePanel.setVisibility(View.VISIBLE);homePanel.bringToFront();chrome.setVisibility(View.VISIBLE);homePanel.focusRefresh();
+    private void returnToCards(){resumeCatalogueMode();if(startMonitor!=null)startMonitor.leave();handler.removeCallbacks(detailWait);detailRequested=false;detailPanel.setVisibility(View.GONE);homeRequested=true;homePanel.setVisibility(View.VISIBLE);homePanel.bringToFront();chrome.setVisibility(View.VISIBLE);homePanel.focusRefresh();
         // Already-observed cards remain usable on Back, without another provider-page load.
         // Selecting a card or explicitly refreshing still navigates to that current source.
         if(homePanel.cardCount()==0){homePanel.loading();navigate(providerOrigin()+(!nativeSearch.isEmpty()?"/search?q="+Uri.encode(nativeSearch):"/"),false);}
     }
-    private void search(){pointerPage=false;pageEditor=false;if(startMonitor!=null)startMonitor.leave();if(mouseActive)leaveMouse(false);playUntil=0;playNotice.setVisibility(View.GONE);String text=UnifiedSearch.clean(query.getText().toString());if(!UnifiedSearch.valid(text)){status.setText("Enter 2–120 characters.");return;}
+    private void search(){resumeCatalogueMode();if(startMonitor!=null)startMonitor.leave();playUntil=0;playNotice.setVisibility(View.GONE);String text=UnifiedSearch.clean(query.getText().toString());if(!UnifiedSearch.valid(text)){status.setText("Enter 2–120 characters.");return;}
         filmEvent("film_search");detailRequested=false;detailPanel.setVisibility(View.GONE);homeRequested=true;nativeSearch=text;homePanel.mode(text);homePanel.discardSuggestions();homePanel.setVisibility(View.VISIBLE);homePanel.bringToFront();nativeControls.hideAll();cursor.enable(false);showLiveResults(text);homePanel.loading();navigate(providerOrigin()+"/search?q="+Uri.encode(text),false);homePanel.focusRefresh();
     }
     private void navigate(String url,boolean page){if(!allowedTop(Uri.parse(url))){fail("Only the registered provider can open here.");return;}hideKeyboard();lastRequested=url;connection.begin(url);connectionWarning="";networkNotice.setVisibility(View.GONE);if(browser==null){fail("Provider browser stopped. Press Retry to reopen it.");return;}loadProviderPage(url);if(page)usePage();}

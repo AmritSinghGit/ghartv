@@ -2,6 +2,7 @@ package in.ghartv.nova;
 
 /** Test-only media and HTML. Inherits the production Activity, callbacks and input handling. */
 public final class Review40HarnessActivity extends FlixMomoActivity {
+    @Override protected String initialProviderHome(){return "https://flixmomo.app/";}
     // Historical parsed-control regressions; Review51PointerHarness tests the production default.
     @Override protected boolean pointerFirstBrowsing(){return false;}
     public int loads;

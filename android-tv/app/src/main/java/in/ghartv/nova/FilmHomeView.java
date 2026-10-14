@@ -37,6 +37,7 @@ final class FilmHomeView extends FrameLayout {
     private final TextView status;
     private final android.widget.ProgressBar progress;
     private boolean loadingData;
+    private String unavailableReason="";
     private final Runnable loadingDeadline=()->{if(loadingData)unavailable("The provider is taking longer to supply suggestions.");};
     private TextView heading;private String searchText="";
     private final LinearLayout grid;
@@ -169,10 +170,10 @@ final class FilmHomeView extends FrameLayout {
     private int dp(int value){return TvUi.dp(activity,value);}
     private void button(LinearLayout row,String label,Runnable action){Button b=TvUi.button(activity,label,false);b.setId(View.generateViewId());b.setOnClickListener(v->action.run());actions.add(b);LinearLayout.LayoutParams p=new LinearLayout.LayoutParams(-2,dp(40));p.rightMargin=dp(8);row.addView(b,p);}
     static boolean safePoster(String raw){try {Uri u=Uri.parse(raw);return "https".equals(u.getScheme())&&u.getPort()==-1&&u.getUserInfo()==null&&(FlixMomoActivity.providerHost(u.getHost())||"image.tmdb.org".equals(u.getHost()));}catch(Exception e){return false;}}
-    void loading(){loadingData=true;progress.setVisibility(VISIBLE);if(!actions.isEmpty()){actions.get(0).setEnabled(false);actions.get(1).setEnabled(false);}status.setText(cardCount==0?"Loading FlixMomo suggestions… Please wait; you can still search or leave.":"Refreshing FlixMomo suggestions… Your existing cards remain available.");removeCallbacks(loadingDeadline);postDelayed(loadingDeadline,15000);}
+    void loading(){unavailableReason="";loadingData=true;progress.setVisibility(VISIBLE);if(!actions.isEmpty()){actions.get(0).setEnabled(false);actions.get(1).setEnabled(false);}status.setText(cardCount==0?"Loading FlixMomo suggestions… Please wait; you can still search or leave.":"Refreshing FlixMomo suggestions… Your existing cards remain available.");removeCallbacks(loadingDeadline);postDelayed(loadingDeadline,15000);}
     private void ready(){loadingData=false;removeCallbacks(loadingDeadline);progress.setVisibility(GONE);if(!actions.isEmpty()){actions.get(0).setEnabled(true);actions.get(1).setEnabled(true);}}
     boolean isLoadingData(){return loadingData;}
-    void unavailable(String reason){ready();status.setText(reason+" Use Refresh or Open provider page. No sample catalogue has been substituted.");}
+    void unavailable(String reason){unavailableReason=reason;ready();status.setText(reason+" Use Refresh or Open provider page. No sample catalogue has been substituted.");}
     int cardCount(){return cardCount;}
     void render(JSONObject snapshot){
         if(snapshot==null)return;
@@ -186,8 +187,8 @@ final class FilmHomeView extends FrameLayout {
             if(!safePoster(image))continue; // No image-less text-tile fallback.
             allowed.add(item);
         }
-        if(allowed.isEmpty()){if(loadingData)return;unavailable("The current page has not supplied any readable poster suggestions yet.");return;}
-        ready();
+        if(allowed.isEmpty()){if(loadingData||!unavailableReason.isEmpty())return;unavailable("The current page has not supplied any readable poster suggestions yet.");return;}
+        unavailableReason="";ready();
 
         String next=allowed.toString();if(identity.equals(next)){status.setText(cardCount+" suggestions supplied by FlixMomo · availability is not verified");return;}
         // Do not reset a user's focus while they are browsing an already-rendered set.

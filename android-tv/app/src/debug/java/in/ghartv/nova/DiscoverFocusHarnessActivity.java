@@ -3,6 +3,7 @@ package in.ghartv.nova;
 /** Debug-only page loader. All production Activity layout/lifecycle/key dispatch
  * runs unchanged; only the network navigation is replaced with local fixture HTML. */
 public final class DiscoverFocusHarnessActivity extends FlixMomoActivity {
+    @Override protected String initialProviderHome(){return "https://flixmomo.app/";}
     // Historical parsed-control regressions; Review51PointerHarness tests the production default.
     @Override protected boolean pointerFirstBrowsing(){return false;}
     public int pageLoads;

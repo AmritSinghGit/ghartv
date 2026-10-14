@@ -2,6 +2,7 @@ package in.ghartv.nova;
 
 /** Local, owned fixture pages. Production lifecycle and input routing are not overridden. */
 public final class Review39HarnessActivity extends FlixMomoActivity {
+    @Override protected String initialProviderHome(){return "https://flixmomo.app/";}
     // Historical parsed-control regressions; Review51PointerHarness tests the production default.
     @Override protected boolean pointerFirstBrowsing(){return false;}
     public int pageLoads;
