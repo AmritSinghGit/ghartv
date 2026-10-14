@@ -51,7 +51,20 @@ public class Review51PointerSearchTest {
     @Test public void backFromTitleReturnsToRetainedResultsOnce()throws Exception{title();h.press(KeyEvent.KEYCODE_BACK);assertTrue(flag("homeRequested"));assertFalse(flag("pointerPage"));assertFalse(flag("mouseActive"));}
     @Test public void backFromWatchNavigatesPageHistoryWithoutOpeningTray()throws Exception{title();click("a");waitPath("/watch/lantern");h.press(KeyEvent.KEYCODE_BACK);waitPath("/movie/lantern");assertTrue(flag("mouseActive"));assertFalse(((FilmNativeControls)f("nativeControls")).visible());}
     @Test public void invalidOriginDoesNotNavigateOrExitCurrentPage()throws Exception{title();h.ui(()->invoke("openProviderTitle",new Class[]{String.class},"https://evil.invalid/movie/x"));assertEquals("/movie/lantern",h.eval("JSON.stringify({p:location.pathname})").getString("p"));}
-    @Test public void providerSearchInputYieldsToKeyboardUntilBack()throws Exception{title();h.eval("JSON.stringify((()=>{document.body.innerHTML='<input id=q style=width:450px;height:80px><div>Owned search</div>';return {ok:true}})())");click("#q");SystemClock.sleep(350);assertTrue(flag("pageEditor"));h.press(KeyEvent.KEYCODE_BACK);assertFalse(flag("pageEditor"));assertTrue(flag("mouseActive"));}
+    @Test public void providerSearchInputYieldsToKeyboardUntilBack()throws Exception{
+        title();h.eval("JSON.stringify((()=>{document.body.innerHTML='<input id=q style=width:450px;height:80px><div>Owned search</div>';return {ok:true}})())");click("#q");
+        // The real pointer click and WebView focus observation are asynchronous.
+        // Observe them on the UI thread; never inject editor state or retry the click.
+        long until=SystemClock.elapsedRealtime()+5000;boolean[] editing={false};
+        while(SystemClock.elapsedRealtime()<until){h.ui(()->editing[0]=flag("pageEditor"));if(editing[0])break;SystemClock.sleep(30);}
+        String[] diagnostic={""};if(!editing[0]){
+            h.ui(()->diagnostic[0]="mouse="+flag("mouseActive")+" windowFocus="+h.activity.hasWindowFocus()+" journal="+((FilmReviewJournal)f("reviewJournal")).snapshot());
+            try{diagnostic[0]+=" DOM="+h.eval("JSON.stringify({active:document.activeElement?.tagName,ready:document.readyState,inputPresent:!!document.querySelector('#q')})");}catch(Exception error){diagnostic[0]+=" DOM unavailable: "+error.getClass().getSimpleName();}
+        }
+        assertTrue("Provider input must enter keyboard editing after the real click. "+diagnostic[0],editing[0]);
+        h.press(KeyEvent.KEYCODE_BACK);
+        h.ui(()->{assertFalse("Back must leave keyboard editing",flag("pageEditor"));assertTrue("Back must restore the pointer",flag("mouseActive"));});
+    }
     @Test public void plainTextSearchHasOneCombinedQuery()throws Exception{start();h.ui(()->{((EditText)f("query")).setText("  Paper Lantern  ");invoke("search",new Class[]{});});String url=((Review51PointerHarness)h.activity).requested;assertEquals("https://flixmomo.app/search?q=Paper%20Lantern",url);assertTrue(flag("homeRequested"));}
     @Test public void injectedSpeechResultUsesSameSearchPath()throws Exception{start();Intent data=new Intent().putStringArrayListExtra(RecognizerIntent.EXTRA_RESULTS,new ArrayList<>(Arrays.asList("Paper Lantern")));h.ui(()->invoke("onActivityResult",new Class[]{int.class,int.class,Intent.class},UnifiedSearch.VOICE,Activity.RESULT_OK,data));assertEquals("https://flixmomo.app/search?q=Paper%20Lantern",((Review51PointerHarness)h.activity).requested);}
     @Test public void repeatedSearchIntentUpdatesExistingFilmActivity()throws Exception{title();Intent in=new Intent().putExtra(UnifiedSearch.QUERY,"Paper Lantern");h.ui(()->invoke("onNewIntent",new Class[]{Intent.class},in));assertEquals("Paper Lantern",((EditText)f("query")).getText().toString());assertFalse(flag("pointerPage"));}
