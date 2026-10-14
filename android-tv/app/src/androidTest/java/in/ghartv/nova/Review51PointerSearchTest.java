@@ -40,7 +40,14 @@ public class Review51PointerSearchTest {
     @Test public void pointerClickNavigatesObservedWatchLinkOnce()throws Exception{title();click("a");waitPath("/watch/lantern");assertTrue(flag("mouseActive"));}
     @Test public void noDelayedMonitorOrBlueTrayAfterPageNavigation()throws Exception{title();click("a");waitPath("/watch/lantern");SystemClock.sleep(2000);h.ui(()->{assertFalse(((FilmNativeControls)f("nativeControls")).visible());assertEquals(View.GONE,((FilmPlaybackMonitor)f("startMonitor")).panel.getVisibility());});}
     @Test public void pointerStartsOwnedVideoWithGenuineUserClick()throws Exception{title();click("a");waitPath("/watch/lantern");click("video");JSONObject out=new JSONObject();long until=SystemClock.elapsedRealtime()+5000;while(SystemClock.elapsedRealtime()<until){out=h.eval("JSON.stringify({t:document.querySelector('video').currentTime,paused:document.querySelector('video').paused,trusted:window.trustedMedia})");if(out.optDouble("t")>.4&&!out.optBoolean("paused"))break;SystemClock.sleep(60);}assertTrue(out.toString(),out.optDouble("t")>.4);assertTrue(out.optBoolean("trusted"));}
-    @Test public void menuOpensExplicitNavigationAndCloseRestoresPointer()throws Exception{title();h.press(KeyEvent.KEYCODE_MENU);h.ui(()->{AlertDialog d=(AlertDialog)f("optionsDialog");assertTrue(d.isShowing());d.getButton(AlertDialog.BUTTON_NEGATIVE).performClick();});assertTrue(flag("mouseActive"));}
+    @Test public void menuOpensExplicitNavigationAndCloseRestoresPointer()throws Exception{
+        title();h.press(KeyEvent.KEYCODE_MENU);
+        h.ui(()->{AlertDialog d=(AlertDialog)f("optionsDialog");assertTrue("Menu must show navigation",d.isShowing());d.getButton(AlertDialog.BUTTON_NEGATIVE).performClick();});
+        // AlertDialog posts its button callback and dismissal to the UI queue.
+        // Wait for those real callbacks; do not call resumePagePointer or dismiss directly.
+        InstrumentationRegistry.getInstrumentation().waitForIdleSync();
+        h.ui(()->{assertFalse("Close must dismiss navigation",((AlertDialog)f("optionsDialog")).isShowing());assertTrue("Close must restore the pointer",flag("mouseActive"));});
+    }
     @Test public void backFromTitleReturnsToRetainedResultsOnce()throws Exception{title();h.press(KeyEvent.KEYCODE_BACK);assertTrue(flag("homeRequested"));assertFalse(flag("pointerPage"));assertFalse(flag("mouseActive"));}
     @Test public void backFromWatchNavigatesPageHistoryWithoutOpeningTray()throws Exception{title();click("a");waitPath("/watch/lantern");h.press(KeyEvent.KEYCODE_BACK);waitPath("/movie/lantern");assertTrue(flag("mouseActive"));assertFalse(((FilmNativeControls)f("nativeControls")).visible());}
     @Test public void invalidOriginDoesNotNavigateOrExitCurrentPage()throws Exception{title();h.ui(()->invoke("openProviderTitle",new Class[]{String.class},"https://evil.invalid/movie/x"));assertEquals("/movie/lantern",h.eval("JSON.stringify({p:location.pathname})").getString("p"));}
