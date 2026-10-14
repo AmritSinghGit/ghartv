@@ -73,9 +73,12 @@ public class Review50FeedbackTest {
         h.player();h.ui(()->{invoke("toolbar");assertNotNull(h.text((View)f("chrome"),ReviewDisplay.films()));invoke("showOptions");assertTrue(((android.app.AlertDialog)f("optionsDialog")).isShowing());});
     }
     @Test public void realProviderFullscreenCallbackThenFDoesNotReloadOwnedVideo()throws Exception{
-        h.player();h.eval("JSON.stringify((()=>{const v=document.querySelector('video');const b=document.createElement('button');b.textContent='Fullscreen';b.onclick=()=>v.requestFullscreen();v.before(b);b.scrollIntoView({block:'center'});window.loadCount=0;v.addEventListener('loadstart',()=>window.loadCount++);return {ok:true}})())");
+        h.player();h.eval("JSON.stringify((()=>{const v=document.querySelector('video');const b=document.createElement('button');b.textContent='Fullscreen';window.fullscreenClicks=0;window.fullscreenTrusted=false;window.fullscreenRequestError='';b.onclick=e=>{window.fullscreenClicks++;window.fullscreenTrusted=e.isTrusted;v.requestFullscreen().catch(error=>window.fullscreenRequestError=error.name+': '+error.message);};v.before(b);b.scrollIntoView({block:'center'});window.loadCount=0;v.addEventListener('loadstart',()=>window.loadCount++);return {ok:true}})())");
         h.ui(()->{controls().menu();h.text((View)h.field(controls(),"tray"),"Fullscreen").requestFocus();});h.press(KeyEvent.KEYCODE_DPAD_CENTER);
-        boolean[] yes={false};long until=SystemClock.elapsedRealtime()+5000;while(SystemClock.elapsedRealtime()<until){h.ui(()->yes[0]=f("custom")!=null);if(yes[0])break;SystemClock.sleep(30);}assertTrue("Real WebView fullscreen",yes[0]);
+        boolean[] yes={false};long until=SystemClock.elapsedRealtime()+5000;while(SystemClock.elapsedRealtime()<until){h.ui(()->yes[0]=f("custom")!=null);if(yes[0])break;SystemClock.sleep(30);}String[] diagnostic={""};if(!yes[0]){
+            h.ui(()->diagnostic[0]="journal="+((FilmReviewJournal)f("reviewJournal")).snapshot()+" active="+h.field(controls(),"active")+" pageBusy="+h.field(controls(),"pageBusy")+" mouse="+f("mouseActive")+" windowFocus="+h.activity.hasWindowFocus()+" focus="+h.activity.getCurrentFocus());
+            try{diagnostic[0]+=" DOM="+h.eval("JSON.stringify({clicks:window.fullscreenClicks,trusted:window.fullscreenTrusted,error:window.fullscreenRequestError,fullscreen:!!document.fullscreenElement,focused:document.hasFocus(),active:document.activeElement?.tagName,ready:document.readyState})");}catch(Exception error){diagnostic[0]+=" DOM unavailable: "+error.getClass().getSimpleName();}
+        }assertTrue("Real WebView fullscreen. "+diagnostic[0],yes[0]);
         h.press(KeyEvent.KEYCODE_F);SystemClock.sleep(100);h.ui(()->{assertNull(f("custom"));assertTrue(((View)f("pageButton")).hasFocus());});assertEquals(0,h.eval("JSON.stringify({loads:window.loadCount})").getInt("loads"));
     }
 }
