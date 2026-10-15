@@ -35,7 +35,7 @@ public class Review53ProviderRecoveryTest {
     WebResourceResponse unavailable(){return new WebResourceResponse("text/plain","UTF-8",503,"Service Unavailable",Collections.emptyMap(),new ByteArrayInputStream(new byte[0]));}
     void failDns(){((FlixMomoActivity)h.activity).providerRequestFailed(request(true),WebViewClient.ERROR_HOST_LOOKUP);}
     @Test public void mainDnsErrorHasVisibleRecoveryOutsideCatalogue()throws Exception{
-        scene.title();h.ui(()->{failDns();assertTrue(panel().isShown());assertTrue(message(),message().contains("DNS"));assertFalse(message().contains("private fixture"));assertTrue(((View)field("retryButton")).hasFocus());assertFalse((Boolean)field("mouseActive"));assertTrue((Boolean)field("pointerPage"));});
+        scene.title();h.ui(()->{failDns();assertTrue(panel().isShown());assertSame(panel(),((View)field("providerRecoveryActions")).getParent());assertTrue(message(),message().contains("DNS"));assertFalse(message().contains("private fixture"));assertTrue(((View)field("retryButton")).hasFocus());assertFalse((Boolean)field("mouseActive"));assertTrue((Boolean)field("pointerPage"));});
     }
     @Test public void pendingPointerLoadHasVisibleStatusInsteadOfBlankScreen()throws Exception{
         scene.title();h.ui(()->{h.web.getWebViewClient().onPageStarted(h.web,"https://flixmomo.app/movie/lantern",null);assertTrue(panel().isShown());assertTrue(message().contains("Opening"));assertEquals(View.GONE,((View)field("providerRecoveryActions")).getVisibility());});
@@ -53,7 +53,7 @@ public class Review53ProviderRecoveryTest {
         assertTrue("Successful explicit retry restores pointer without a stale error",ready[0]);scene.waitPath("/movie/lantern");
     }
     @Test public void successfulPageKeepsRecoveryOffTheContent()throws Exception{
-        scene.title();h.ui(()->{assertFalse(panel().isShown());assertTrue((Boolean)field("mouseActive"));});
+        scene.title();h.ui(()->{assertFalse(panel().isShown());assertNull(((View)field("providerRecoveryActions")).getParent());assertTrue((Boolean)field("mouseActive"));});
     }
     @Test public void supportingImageFailureDoesNotReplaceProviderPage()throws Exception{
         scene.title();h.ui(()->{h.web.getWebViewClient().onReceivedHttpError(h.web,request(false),unavailable());assertFalse(panel().isShown());assertTrue((Boolean)field("mouseActive"));assertFalse((Boolean)field("mainFrameError"));});
@@ -62,6 +62,6 @@ public class Review53ProviderRecoveryTest {
         scene.title();h.ui(()->{failDns();((FlixMomoActivity)h.activity).enterFullScreen(new FrameLayout(h.activity),()->{});assertFalse(panel().isShown());assertNotNull(field("custom"));});
     }
     @Test public void backFromErrorRetainsExistingResults()throws Exception{
-        scene.title();h.ui(this::failDns);h.press(KeyEvent.KEYCODE_BACK);h.ui(()->{assertTrue((Boolean)field("homeRequested"));assertFalse(panel().isShown());assertTrue(((FilmHomeView)field("homePanel")).cardCount()>0);});
+        scene.title();h.ui(this::failDns);h.press(KeyEvent.KEYCODE_BACK);h.ui(()->{assertTrue((Boolean)field("homeRequested"));assertFalse(panel().isShown());assertNull(((View)field("providerRecoveryActions")).getParent());assertTrue(((FilmHomeView)field("homePanel")).cardCount()>0);});
     }
 }

@@ -133,7 +133,7 @@ public class FlixMomoActivity extends Activity {
                 .setNegativeButton("Cancel",null).show();}).setNegativeButton("Close",null).show();
     }
     private void resumeCatalogueMode(){
-        if(providerStatusPanel!=null)providerStatusPanel.setVisibility(View.GONE);
+        hideProviderStatus();
         pointerPage=false;pageEditor=false;pointerTitleOrigin="";
         if(mouseActive)leaveMouse(false);else cursor.enable(false);
         nativeControls.resume();credit.setText(FilmProviderPolicy.CREDIT);credit.setVisibility(View.VISIBLE);
@@ -207,7 +207,7 @@ public class FlixMomoActivity extends Activity {
         providerRecoveryActions.addView(connectionButton);providerRecoveryActions.addView(resultsButton);
         for(int i=0;i<providerRecoveryActions.getChildCount();i++)providerRecoveryActions.getChildAt(i).setId(View.generateViewId());
         for(int i=0;i<providerRecoveryActions.getChildCount();i++){View b=providerRecoveryActions.getChildAt(i);b.setNextFocusLeftId(providerRecoveryActions.getChildAt(Math.max(0,i-1)).getId());b.setNextFocusRightId(providerRecoveryActions.getChildAt(Math.min(2,i+1)).getId());}
-        providerStatusPanel.addView(providerRecoveryActions);providerStatusPanel.setVisibility(View.GONE);root.addView(providerStatusPanel);
+        providerRecoveryActions.setVisibility(View.GONE);providerStatusPanel.setVisibility(View.GONE);root.addView(providerStatusPanel);
         liveResults=new android.widget.HorizontalScrollView(this);liveResults.setHorizontalScrollBarEnabled(false);liveResults.setVisibility(View.GONE);
         liveRow=new LinearLayout(this);liveResults.addView(liveRow);root.addView(liveResults,new LinearLayout.LayoutParams(-1,TvUi.dp(this,48)));
         stage=new FrameLayout(this);root.addView(stage,new LinearLayout.LayoutParams(-1,0,1));
@@ -329,7 +329,7 @@ public class FlixMomoActivity extends Activity {
             @Override public void onPageFinished(WebView view,String url){
                 loading=false;handler.removeCallbacks(slowLoad);if(mainFrameError){pageReady=false;return;}
                 if("/dummy".equals(Uri.parse(url).getPath())){fail("FlixMomo declined this session. No provider protection was changed.");return;}
-                pageReady=allowedTop(Uri.parse(url));if(pageReady){providerStatusPanel.setVisibility(View.GONE);if(java.util.Objects.equals(url,view.getUrl()))rememberProviderHome(url);status.setText(homeRequested?"Loading FlixMomo suggestions…":detailRequested?"Loading title information…":"Original page loaded · Menu shows GharTV controls");if(!mouseActive&&!pointerPage)nativeControls.finished();if(pointerPage&&!pageEditor)resumePagePointer(false);}
+                pageReady=allowedTop(Uri.parse(url));if(pageReady){hideProviderStatus();if(java.util.Objects.equals(url,view.getUrl()))rememberProviderHome(url);status.setText(homeRequested?"Loading FlixMomo suggestions…":detailRequested?"Loading title information…":"Original page loaded · Menu shows GharTV controls");if(!mouseActive&&!pointerPage)nativeControls.finished();if(pointerPage&&!pageEditor)resumePagePointer(false);}
             }
             @Override public void doUpdateVisitedHistory(WebView view,String url,boolean reload){
                 if(!loading&&allowedTop(Uri.parse(url))&&!java.util.Objects.equals(lastRequested,url)){
@@ -441,9 +441,18 @@ public class FlixMomoActivity extends Activity {
             mediaAttempted=true;playMessage("Starting the provider’s visible player…");nativeControls.pageAction("media");
         }
     }
+    private void hideProviderStatus(){
+        if(providerStatusPanel==null)return;
+        providerStatusPanel.setVisibility(View.GONE);
+        if(providerRecoveryActions!=null){providerStatusPanel.removeView(providerRecoveryActions);providerRecoveryActions.setVisibility(View.GONE);}
+    }
     private void providerStatus(String message,boolean recovery){
         status.setText(message);
         if(providerStatusPanel==null||!pointerPage||custom!=null)return;
+        // Recovery controls enter the view tree only for an actual failure.
+        // Successful browsing must not contain duplicate navigation controls.
+        if(recovery){if(providerRecoveryActions.getParent()==null)providerStatusPanel.addView(providerRecoveryActions);}
+        else providerStatusPanel.removeView(providerRecoveryActions);
         providerRecoveryActions.setVisibility(recovery?View.VISIBLE:View.GONE);
         providerStatusPanel.setVisibility(View.VISIBLE);
         if(recovery){pageEditor=false;mouseActive=false;cursor.enable(false);retryButton.requestFocus();}
@@ -482,7 +491,7 @@ public class FlixMomoActivity extends Activity {
     private void search(){resumeCatalogueMode();if(startMonitor!=null)startMonitor.leave();playUntil=0;playNotice.setVisibility(View.GONE);String text=UnifiedSearch.clean(query.getText().toString());if(!UnifiedSearch.valid(text)){status.setText("Enter 2–120 characters.");return;}
         filmEvent("film_search");detailRequested=false;detailPanel.setVisibility(View.GONE);homeRequested=true;nativeSearch=text;homePanel.mode(text);homePanel.discardSuggestions();homePanel.setVisibility(View.VISIBLE);homePanel.bringToFront();nativeControls.hideAll();cursor.enable(false);showLiveResults(text);homePanel.loading();navigate(providerOrigin()+"/search?q="+Uri.encode(text),false);homePanel.focusRefresh();
     }
-    private void navigate(String url,boolean page){if(!allowedTop(Uri.parse(url))){fail("Only the registered provider can open here.");return;}hideKeyboard();lastRequested=url;connection.begin(url);connectionWarning="";networkNotice.setVisibility(View.GONE);if(pointerPage)providerStatus("Opening the registered provider page… Menu and Back remain available.",false);else if(providerStatusPanel!=null)providerStatusPanel.setVisibility(View.GONE);if(browser==null){fail("Provider browser stopped. Press Retry to reopen it.");return;}loadProviderPage(url);if(page)usePage();}
+    private void navigate(String url,boolean page){if(!allowedTop(Uri.parse(url))){fail("Only the registered provider can open here.");return;}hideKeyboard();lastRequested=url;connection.begin(url);connectionWarning="";networkNotice.setVisibility(View.GONE);if(pointerPage)providerStatus("Opening the registered provider page… Menu and Back remain available.",false);else hideProviderStatus();if(browser==null){fail("Provider browser stopped. Press Retry to reopen it.");return;}loadProviderPage(url);if(page)usePage();}
     protected FilmDetailView createDetailPanel(FilmDetailView.Host host){return new FilmDetailView(this,host);}
     protected FilmHomeView createHomePanel(FilmHomeView.Host host){return new FilmHomeView(this,host);}
     protected void loadProviderPage(String url){browser.loadUrl(url);}
