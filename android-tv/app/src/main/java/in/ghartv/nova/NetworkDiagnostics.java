@@ -34,7 +34,8 @@ public final class NetworkDiagnostics {
     private static final String[][] HOSTS = {
         {"jio_playback", "jiotvapi.media.jio.com"}, {"jio_guide", "jiotvapi.cdn.jio.com"},
         {"updates", "api.github.com"}, {"collector", "ghartv-telemetry.ghartv-47d9a0.workers.dev"},
-        {"flixmomo_app", "flixmomo.app"}, {"flixmomo_st", "flixmomo.st"}, {"flixmomo_bet", "flixmomo.bet"}
+        {"flixmomo_app", "flixmomo.app"}, {"flixmomo_st", "flixmomo.st"}, {"flixmomo_bet", "flixmomo.bet"},
+        {"film_catalogue", "api.themoviedb.org"}
     };
     public static boolean reviewProbe(Activity activity) {
         String id = activity.getIntent().getStringExtra("ghartv_network_probe");

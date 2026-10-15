@@ -50,6 +50,7 @@ final class FilmNativeControls {
     private int detectedPlayers;private boolean playerTruncated;
     private long lastPosterKey,selectedAt;
     private int generation,probeCount;private long probeBegan=SystemClock.elapsedRealtime();
+    private boolean documentReadySeen;
     private boolean active=true,blocked,pending,selectedByViewer,reading,autoNext=false;
     private final Runnable probe=this::read;
     private final Runnable hide=()->{if(!ownsFocus())hideTray();};
@@ -69,8 +70,16 @@ final class FilmNativeControls {
     }
     private int dp(int n){return TvUi.dp(activity,n);}
     private Button add(LinearLayout row,String title,Runnable click){Button b=TvUi.button(activity,title,false);b.setTextSize(13);b.setOnClickListener(v->{handler.removeCallbacks(hide);click.run();});row.addView(b);return b;}
-    void attach(WebView web){probeBegan=SystemClock.elapsedRealtime();pageActions.clear();posterActions.clear();pageBusy=false;browser=web;generation++;reading=false;posterBusy=false;postersReady=false;}
-    void started(){cancelPageTouch();dismissedByViewer=false;expectedWatchLabel="";host.controlsVisibility(false);pageActions.clear();posterActions.clear();postersReady=false;posterBusy=false;playerTrayAnnounced=false;mediaCandidates=0;pageBusy=false;detailFocusApplied=false;generation++;handler.removeCallbacksAndMessages(null);reading=false;pending=false;blocked=false;probeCount=0;probeBegan=SystemClock.elapsedRealtime();players=new JSONArray();snapshotUrl="";playerIdentity="";selectedByViewer=false;selected="";attempted.clear();choiceView.setVisibility(View.GONE);tray.setVisibility(View.GONE);}
+    void attach(WebView web){documentReadySeen=false;probeBegan=SystemClock.elapsedRealtime();pageActions.clear();posterActions.clear();pageBusy=false;browser=web;generation++;reading=false;posterBusy=false;postersReady=false;}
+    void started(){documentReadySeen=false;cancelPageTouch();dismissedByViewer=false;expectedWatchLabel="";host.controlsVisibility(false);pageActions.clear();posterActions.clear();postersReady=false;posterBusy=false;playerTrayAnnounced=false;mediaCandidates=0;pageBusy=false;detailFocusApplied=false;generation++;handler.removeCallbacksAndMessages(null);reading=false;pending=false;blocked=false;probeCount=0;probeBegan=SystemClock.elapsedRealtime();players=new JSONArray();snapshotUrl="";playerIdentity="";selectedByViewer=false;selected="";attempted.clear();choiceView.setVisibility(View.GONE);tray.setVisibility(View.GONE);}
+    // A slow document load must not spend the observation window before the
+    // WebView can expose it. Commit/finish notifications renew it only once per
+    // navigation; Menu and ordinary polling still use finished() without renewal.
+    void documentReady(){
+        if(!active||blocked)return;
+        if(!documentReadySeen){documentReadySeen=true;probeBegan=SystemClock.elapsedRealtime();probeCount=0;}
+        finished();
+    }
     void finished(){if(active&&!blocked){handler.removeCallbacks(probe);handler.post(probe);}}
     void failure(){cancelPageTouch();pageActions.clear();posterActions.clear();pageBusy=false;postersReady=false;posterBusy=false;blocked=true;generation++;reading=false;pending=false;handler.removeCallbacksAndMessages(null);hideAll();chrome.setVisibility(View.VISIBLE);}
     void pause(){cancelPageTouch();pageActions.clear();posterActions.clear();pageBusy=false;posterBusy=false;active=false;generation++;reading=false;handler.removeCallbacksAndMessages(null);}

@@ -39,6 +39,8 @@ jobs:
       - run: |
           python tools/tv-first/check_contract.py
           python tools/network_recovery_check.py
+          python tools/tv-open/test_reopen.py
+          python tools/tv-open/test_cold_start_dns.py
           python tools/provider-access/generate_android_players.py --check
           node --test tools/provider-access/player-options.test.mjs
           python tools/tv-first/test_review_clock.py
@@ -89,7 +91,7 @@ jobs:
           cd android-tv
           chmod +x gradlew
           ./gradlew --no-daemon --max-workers=2 assembleRelease assembleDebug assembleDebugAndroidTest
-          cp app/build/outputs/apk/release/app-release-unsigned.apk /tmp/ghartv-candidate/GharTV-code53-review-unsigned.apk
+          cp app/build/outputs/apk/release/app-release-unsigned.apk /tmp/ghartv-candidate/GharTV-code54-review-unsigned.apk
       - name: Isolated cloud Android36, not an owner emulator
         run: |
           set -euo pipefail
@@ -117,30 +119,32 @@ jobs:
           else:raise RuntimeError('CLOUD_DEVICE_TIMEOUT')
           for args in (['wm','size','1280x720'],['wm','density','160'],['settings','put','secure','immersive_mode_confirmations','confirmed'],['input','keyevent','KEYCODE_WAKEUP'],['wm','dismiss-keyguard']):subprocess.run(['adb','-s','emulator-5580','shell']+args,check=True)
           PY
-      - name: Verify299 cases including production-default pointer-first flow and shared search
+      - name: Verify306 cases including production-default pointer-first flow and shared search
         run: |
           set -euo pipefail
           adb -s emulator-5580 install -r android-tv/app/build/outputs/apk/debug/app-debug.apk
           adb -s emulator-5580 install -r android-tv/app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk
+          adb -s emulator-5580 shell am instrument -w -r -e class in.ghartv.nova.FilmCatalogueObservationTest in.ghartv.nova.test/androidx.test.runner.AndroidJUnitRunner | tee /tmp/ghartv-candidate/proof/android-catalogue-tests.txt
+          grep -q 'OK (7 tests)' /tmp/ghartv-candidate/proof/android-catalogue-tests.txt
           # Repeated real fullscreen transitions must ALL pass; this is not retry-until-green.
           for attempt in 1 2 3 4 5 6 7 8; do
             adb -s emulator-5580 shell am instrument -w -r -e class 'in.ghartv.nova.Review50FeedbackTest#realProviderFullscreenCallbackThenFDoesNotReloadOwnedVideo,in.ghartv.nova.Review47ViewingTest#explicitFullscreenActionEntersActualWebViewCustomMode' in.ghartv.nova.test/androidx.test.runner.AndroidJUnitRunner | tee "/tmp/ghartv-candidate/proof/android-fullscreen-repeat-${attempt}.txt"
             grep -q 'OK (2 tests)' "/tmp/ghartv-candidate/proof/android-fullscreen-repeat-${attempt}.txt"
           done
-          adb -s emulator-5580 shell am instrument -w -r -e class in.ghartv.nova.Review50FeedbackTest,in.ghartv.nova.Review51PointerSearchTest,in.ghartv.nova.Review47ViewingTest,in.ghartv.nova.Review52ProviderMigrationTest,in.ghartv.nova.PreviewControllerTest,in.ghartv.nova.Review53PreviewFailureTest,in.ghartv.nova.Review53ProviderRecoveryTest in.ghartv.nova.test/androidx.test.runner.AndroidJUnitRunner | tee /tmp/ghartv-candidate/proof/android-focused-tests.txt
-          grep -q 'OK (91 tests)' /tmp/ghartv-candidate/proof/android-focused-tests.txt
-          adb -s emulator-5580 shell am instrument -w -r -e class in.ghartv.nova.RemoteWebCursorTest,in.ghartv.nova.FilmNativeControlsTest,in.ghartv.nova.DiscoverExperienceTest,in.ghartv.nova.Review38RegressionTest,in.ghartv.nova.Review39ExperienceTest,in.ghartv.nova.Review40PlaybackTest,in.ghartv.nova.Review41ConnectionTelemetryTest,in.ghartv.nova.Review42RegressionTest,in.ghartv.nova.Review43PerformanceTest,in.ghartv.nova.Review44LoadingMouseTest,in.ghartv.nova.Review45PlayEvidenceTest,in.ghartv.nova.Review46NativePointerTest,in.ghartv.nova.Review47ViewingTest,in.ghartv.nova.Review48InputStabilityTest,in.ghartv.nova.Review49PlaybackBudgetTest,in.ghartv.nova.Review50SeriesControlsTest,in.ghartv.nova.Review50FeedbackTest,in.ghartv.nova.Review51PointerSearchTest,in.ghartv.nova.Review52ProviderMigrationTest,in.ghartv.nova.PreviewControllerTest,in.ghartv.nova.Review53PreviewFailureTest,in.ghartv.nova.Review53ProviderRecoveryTest in.ghartv.nova.test/androidx.test.runner.AndroidJUnitRunner | tee /tmp/ghartv-candidate/proof/android-tests.txt
-          grep -q 'OK (299 tests)' /tmp/ghartv-candidate/proof/android-tests.txt
+          adb -s emulator-5580 shell am instrument -w -r -e class in.ghartv.nova.Review50FeedbackTest,in.ghartv.nova.Review51PointerSearchTest,in.ghartv.nova.Review47ViewingTest,in.ghartv.nova.Review52ProviderMigrationTest,in.ghartv.nova.PreviewControllerTest,in.ghartv.nova.Review53PreviewFailureTest,in.ghartv.nova.Review53ProviderRecoveryTest,in.ghartv.nova.FilmCatalogueObservationTest in.ghartv.nova.test/androidx.test.runner.AndroidJUnitRunner | tee /tmp/ghartv-candidate/proof/android-focused-tests.txt
+          grep -q 'OK (98 tests)' /tmp/ghartv-candidate/proof/android-focused-tests.txt
+          adb -s emulator-5580 shell am instrument -w -r -e class in.ghartv.nova.RemoteWebCursorTest,in.ghartv.nova.FilmNativeControlsTest,in.ghartv.nova.DiscoverExperienceTest,in.ghartv.nova.Review38RegressionTest,in.ghartv.nova.Review39ExperienceTest,in.ghartv.nova.Review40PlaybackTest,in.ghartv.nova.Review41ConnectionTelemetryTest,in.ghartv.nova.Review42RegressionTest,in.ghartv.nova.Review43PerformanceTest,in.ghartv.nova.Review44LoadingMouseTest,in.ghartv.nova.Review45PlayEvidenceTest,in.ghartv.nova.Review46NativePointerTest,in.ghartv.nova.Review47ViewingTest,in.ghartv.nova.Review48InputStabilityTest,in.ghartv.nova.Review49PlaybackBudgetTest,in.ghartv.nova.Review50SeriesControlsTest,in.ghartv.nova.Review50FeedbackTest,in.ghartv.nova.Review51PointerSearchTest,in.ghartv.nova.Review52ProviderMigrationTest,in.ghartv.nova.PreviewControllerTest,in.ghartv.nova.Review53PreviewFailureTest,in.ghartv.nova.Review53ProviderRecoveryTest,in.ghartv.nova.FilmCatalogueObservationTest in.ghartv.nova.test/androidx.test.runner.AndroidJUnitRunner | tee /tmp/ghartv-candidate/proof/android-tests.txt
+          grep -q 'OK (306 tests)' /tmp/ghartv-candidate/proof/android-tests.txt
           for name in review47-owned-fullscreen.png review47-fullscreen-menu.png review47-toolbar-return.png; do adb -s emulator-5580 pull /sdcard/Android/data/in.ghartv.nova/files/$name /tmp/ghartv-candidate/proof/$name; done
       - name: Collect controlled timing observations
         run: |
           adb -s emulator-5580 pull /sdcard/Android/data/in.ghartv.nova/files/review49-timing.json /tmp/ghartv-candidate/proof/review49-timing.json
           adb -s emulator-5580 pull /sdcard/Android/data/in.ghartv.nova/files/review50-series-timing.json /tmp/ghartv-candidate/proof/review50-series-timing.json
       - name: Package same sign-and-open owner flow
-        run: python tools/tv-first/package_review53.py
+        run: python tools/tv-first/package_review54.py
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: ghartv-code53-owner-review
+          name: ghartv-code54-owner-review
           path: /tmp/ghartv-candidate/
           retention-days: 14
