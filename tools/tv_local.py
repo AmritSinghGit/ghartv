@@ -150,7 +150,7 @@ def _port_conflict(owners,procs):
                     '_PID_'+str(row['pid'])+'_PRESERVED')
     return None
 
-def attach_or_start(root,run):
+def attach_or_start(root,run,*,prepare_cold_start=None):
     """Reconcile close/reopen races before starting this one configured AVD."""
     adb=root/'platform-tools/adb'; child=None; started=False
     observation={'revision':REVISION,'ports':[5580,5581], 'processes_killed':0,
@@ -199,6 +199,27 @@ def attach_or_start(root,run):
             listed=call([root/'emulator/emulator','-list-avds'],10)
             if listed.returncode or AVD not in listed.stdout.splitlines():
                 raise Hold('EXISTING_NAMED_AVD_NOT_FOUND')
+            # Prepare DNS only when this exact AVD is genuinely stopped. Online
+            # reuse never probes/changes its DNS. Recheck identity/ports afterwards.
+            dns_args=[]
+            if prepare_cold_start is not None:
+                try: values=prepare_cold_start()
+                except Exception as error:
+                    code=str(error)
+                    if code not in ('COLD_START_MEMORY_HELD','COLD_START_NO_WORKING_SYSTEM_DNS'):
+                        code='COLD_START_DNS_PREFLIGHT_FAILED'
+                    raise Hold(code) from None
+                if not isinstance(values,(list,tuple)) or not 1<=len(values)<=2:
+                    raise Hold('COLD_START_RESOLVER_SET_INVALID')
+                checked=[]
+                for value in values:
+                    try: address=ipaddress.ip_address(value) if isinstance(value,str) else None
+                    except ValueError: address=None
+                    if address is None or address.version!=4 or address.is_loopback or address.is_unspecified or address.is_link_local or address.is_multicast or str(address) in checked:
+                        raise Hold('COLD_START_RESOLVER_SET_INVALID')
+                    checked.append(str(address))
+                dns_args=['-dns-server',','.join(checked)]
+                record('COLD_START_SYSTEM_DNS_PREPARED',resolver_count=len(checked))
             # Final read immediately before spawn. The emulator's own bind/AVD
             # locks remain authoritative if another launcher races us.
             if avd_processes() or _listen_owners(5580) or _listen_owners(5581):
@@ -209,7 +230,7 @@ def attach_or_start(root,run):
             with log.open('xb') as out:
                 os.chmod(log,0o600)
                 child=subprocess.Popen([str(root/'emulator/emulator'),'-avd',AVD,'-port','5580',
-                    '-no-snapshot-load','-no-snapshot-save'],stdin=subprocess.DEVNULL,
+                    '-no-snapshot-load','-no-snapshot-save',*dns_args],stdin=subprocess.DEVNULL,
                     stdout=out,stderr=out,cwd=root/'emulator',start_new_session=True)
             started=True;record('STARTED_EXISTING_AVD');break
         record('WAITING_FOR_EXISTING_TRANSPORT_OR_SHUTDOWN',transport=connected.get(SERIAL,'ABSENT'),

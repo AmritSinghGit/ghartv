@@ -72,6 +72,15 @@ def system_dns():
    except Exception:pass
   if len(servers)==2:break
  return servers
+def cold_start_resolvers(memory_normal):
+ """Fresh existing-system resolvers for a stopped AVD; never a memory override."""
+ if not memory_normal():raise RuntimeError('COLD_START_MEMORY_HELD')
+ resolvers=system_dns()
+ if not resolvers:raise RuntimeError('COLD_START_NO_WORKING_SYSTEM_DNS')
+ # Resolver checks take time: resource admission must still hold at the end.
+ if not memory_normal():raise RuntimeError('COLD_START_MEMORY_HELD')
+ return resolvers
+
 def _inspect_and_repair(sdk,serial,run_dir,run_id):
  sdk=Path(sdk);run_dir=Path(run_dir);adb=sdk/'platform-tools/adb';result={'schema':'ghartv.network-recovery.v1','restart':'NOT_ATTEMPTED','physical_tv':'NOT_TOUCHED','playback':'NOT_VERIFIED'}
  if serial!='emulator-5580':return {**result,'status':'NONCANONICAL_EMULATOR_PRESERVED'}

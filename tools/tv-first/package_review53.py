@@ -21,6 +21,12 @@ anchor_sdk="                sdk=transport.sdk();tools,env=signing_tools(sdk);uns
 entry=entry.replace(anchor_sdk, "                sdk=transport.sdk();SERIAL=transport.existing_serial(sdk/'platform-tools/adb');transport.SERIAL=SERIAL;R['resolved_emulator_serial']=SERIAL;tools,env=signing_tools(sdk);unsigned=artifact(APK_ASSET,APK_SHA)")
 entry=entry.replace("clock_helper=source_module(z,'tools/tv-first/review_clock.py')", "clock_helper=source_module(z,'tools/tv-first/review_clock.py');clock_helper.SERIAL=SERIAL")
 entry=entry.replace("capture_helper=source_module(z,'tools/tv-first/collect_review_interactions.py')", "capture_helper=source_module(z,'tools/tv-first/collect_review_interactions.py');capture_helper.SERIAL=SERIAL")
+# The original two attach paths (initial boot and hidden-window recovery) share
+# one cold-start resolver callback. Existing-memory and identity guards remain.
+cold_start_anchor="transport.attach_or_start(sdk,RUN)"
+cold_start_bound="transport.attach_or_start(sdk,RUN,prepare_cold_start=lambda: source_module(z,'tools/emulator_network_repair.py').cold_start_resolvers(memory_normal))"
+assert entry.count(cold_start_anchor)==2
+entry=entry.replace(cold_start_anchor,cold_start_bound)
 network_anchor="    atomic(RUN/'NETWORK_PROBE.json',json.dumps(network,indent=2).encode())"
 network_recovery="""
     recovery_helper=source_module(z,'tools/emulator_network_repair.py')
