@@ -66,6 +66,7 @@ public class FlixMomoActivity extends Activity {
     private int liveGeneration;
     private EditText query;
     private TextView status,help,playNotice;
+    private LinearLayout providerStatusPanel,providerRecoveryActions;
     private boolean attemptObservable;
     private FilmPlaybackMonitor startMonitor;
     private long detailBegan,detailUsableMs=-1,detailPreviewMs=-1;
@@ -132,6 +133,7 @@ public class FlixMomoActivity extends Activity {
                 .setNegativeButton("Cancel",null).show();}).setNegativeButton("Close",null).show();
     }
     private void resumeCatalogueMode(){
+        if(providerStatusPanel!=null)providerStatusPanel.setVisibility(View.GONE);
         pointerPage=false;pageEditor=false;pointerTitleOrigin="";
         if(mouseActive)leaveMouse(false);else cursor.enable(false);
         nativeControls.resume();credit.setText(FilmProviderPolicy.CREDIT);credit.setVisibility(View.VISIBLE);
@@ -170,7 +172,7 @@ public class FlixMomoActivity extends Activity {
         }
     }
     private final Handler handler=new Handler(Looper.getMainLooper());
-    private final Runnable slowLoad=()->{if(loading&&!mainFrameError){status.setText("Still connecting. Retry is available; playback is not verified.");if(homeRequested&&homePanel!=null)homePanel.unavailable("The provider is taking longer than expected.");}};
+    private final Runnable slowLoad=()->{if(loading&&!mainFrameError){status.setText("Still connecting. Retry is available; playback is not verified.");if(homeRequested&&homePanel!=null)homePanel.unavailable("The provider is taking longer than expected.");else if(pointerPage)providerStatus("The provider page has not finished loading. Check the connection or retry; no catalogue or playback is confirmed.",true);}};
 
     @Override public void onCreate(Bundle saved){
         super.onCreate(saved);lastRequested=initialProviderHome();Telemetry.screen(this,"discover");filmEvent("discover_open");getWindow().getDecorView().setSystemUiVisibility(5894);
@@ -187,7 +189,7 @@ public class FlixMomoActivity extends Activity {
         row.addView(search);row.addView(voice);row.addView(browse);row.addView(guide);chrome.addView(row);
         pageButton=TvUi.button(this,"Options",false);row.addView(pageButton);
         // Detached compatibility references are not duplicate on-screen controls.
-        modeButton=new Button(this);scrollButton=new Button(this);retryButton=new Button(this);
+        modeButton=new Button(this);scrollButton=new Button(this);retryButton=TvUi.button(this,"Retry page",false);
         help=TvUi.label(this,"",12,TvUi.MUTED,false);
         status=TvUi.label(this,"",12,TvUi.MUTED,false);
         pageButton.setOnClickListener(v->showOptions());
@@ -195,6 +197,17 @@ public class FlixMomoActivity extends Activity {
         credit=TvUi.label(this,FilmProviderPolicy.CREDIT,12,TvUi.MINT,true);credit.setPadding(0,TvUi.dp(this,5),0,TvUi.dp(this,6));root.addView(credit);
         networkNotice=TvUi.label(this,"",12,TvUi.MUTED,false);networkNotice.setVisibility(View.GONE);root.addView(networkNotice);
         playNotice=TvUi.label(this,"",12,TvUi.MUTED,false);playNotice.setVisibility(View.GONE);root.addView(playNotice);
+        // Visible recovery belongs to the existing provider screen, not an overlay
+        // over video. The old status/retry objects were detached during pointer loading.
+        providerStatusPanel=new LinearLayout(this);providerStatusPanel.setOrientation(LinearLayout.VERTICAL);
+        providerStatusPanel.addView(status,new LinearLayout.LayoutParams(-1,-2));
+        providerRecoveryActions=new LinearLayout(this);providerRecoveryActions.addView(retryButton);
+        Button connectionButton=TvUi.button(this,"Connection",false),resultsButton=TvUi.button(this,"Back to results",false);
+        connectionButton.setOnClickListener(v->showFilmConnection());resultsButton.setOnClickListener(v->returnToCards());
+        providerRecoveryActions.addView(connectionButton);providerRecoveryActions.addView(resultsButton);
+        for(int i=0;i<providerRecoveryActions.getChildCount();i++)providerRecoveryActions.getChildAt(i).setId(View.generateViewId());
+        for(int i=0;i<providerRecoveryActions.getChildCount();i++){View b=providerRecoveryActions.getChildAt(i);b.setNextFocusLeftId(providerRecoveryActions.getChildAt(Math.max(0,i-1)).getId());b.setNextFocusRightId(providerRecoveryActions.getChildAt(Math.min(2,i+1)).getId());}
+        providerStatusPanel.addView(providerRecoveryActions);providerStatusPanel.setVisibility(View.GONE);root.addView(providerStatusPanel);
         liveResults=new android.widget.HorizontalScrollView(this);liveResults.setHorizontalScrollBarEnabled(false);liveResults.setVisibility(View.GONE);
         liveRow=new LinearLayout(this);liveResults.addView(liveRow);root.addView(liveResults,new LinearLayout.LayoutParams(-1,TvUi.dp(this,48)));
         stage=new FrameLayout(this);root.addView(stage,new LinearLayout.LayoutParams(-1,0,1));
@@ -311,12 +324,12 @@ public class FlixMomoActivity extends Activity {
                 cursor.cancel();nativeControls.started();if("about:blank".equals(url))return;connection.started(url);
                 if(detailRequested&&FilmProviderPolicy.detail(Uri.parse(url)))detailPanel.followNavigation(url);
                 else if(detailRequested&&allowedTop(Uri.parse(url))&&!FilmProviderPolicy.detail(Uri.parse(url)))usePage();mainFrameError=false;pageReady=false;loading=true;if(allowedTop(Uri.parse(url)))lastRequested=url;
-                status.setText("Opening FlixMomo…");if(pointerPage){nativeControls.pause();playNotice.setVisibility(View.GONE);networkNotice.setVisibility(View.GONE);}handler.removeCallbacks(slowLoad);handler.postDelayed(slowLoad,20000);
+                status.setText("Opening FlixMomo…");if(pointerPage){providerStatus("Opening the registered provider page… Menu and Back remain available.",false);nativeControls.pause();playNotice.setVisibility(View.GONE);networkNotice.setVisibility(View.GONE);}handler.removeCallbacks(slowLoad);handler.postDelayed(slowLoad,20000);
             }
             @Override public void onPageFinished(WebView view,String url){
                 loading=false;handler.removeCallbacks(slowLoad);if(mainFrameError){pageReady=false;return;}
                 if("/dummy".equals(Uri.parse(url).getPath())){fail("FlixMomo declined this session. No provider protection was changed.");return;}
-                pageReady=allowedTop(Uri.parse(url));if(pageReady){if(java.util.Objects.equals(url,view.getUrl()))rememberProviderHome(url);status.setText(homeRequested?"Loading FlixMomo suggestions…":detailRequested?"Loading title information…":"Original page loaded · Menu shows GharTV controls");if(!mouseActive&&!pointerPage)nativeControls.finished();if(pointerPage&&!pageEditor)resumePagePointer(false);}
+                pageReady=allowedTop(Uri.parse(url));if(pageReady){providerStatusPanel.setVisibility(View.GONE);if(java.util.Objects.equals(url,view.getUrl()))rememberProviderHome(url);status.setText(homeRequested?"Loading FlixMomo suggestions…":detailRequested?"Loading title information…":"Original page loaded · Menu shows GharTV controls");if(!mouseActive&&!pointerPage)nativeControls.finished();if(pointerPage&&!pageEditor)resumePagePointer(false);}
             }
             @Override public void doUpdateVisitedHistory(WebView view,String url,boolean reload){
                 if(!loading&&allowedTop(Uri.parse(url))&&!java.util.Objects.equals(lastRequested,url)){
@@ -423,10 +436,18 @@ public class FlixMomoActivity extends Activity {
             mediaAttempted=true;playMessage("Starting the provider’s visible player…");nativeControls.pageAction("media");
         }
     }
+    private void providerStatus(String message,boolean recovery){
+        status.setText(message);
+        if(providerStatusPanel==null||!pointerPage||custom!=null)return;
+        providerRecoveryActions.setVisibility(recovery?View.VISIBLE:View.GONE);
+        providerStatusPanel.setVisibility(View.VISIBLE);
+        if(recovery){pageEditor=false;mouseActive=false;cursor.enable(false);retryButton.requestFocus();}
+    }
     private void fail(String message){
         if(playUntil>0){playUntil=0;playMessage(message);}if(nativeControls!=null)nativeControls.failure();mainFrameError=true;pageReady=false;loading=false;handler.removeCallbacks(slowLoad);status.setText(message);
         if(homeRequested&&homePanel!=null)homePanel.unavailable(message);
         else if(detailRequested&&detailPanel!=null)detailPanel.unavailable(message);
+        else if(pointerPage){networkNotice.setVisibility(View.GONE);providerStatus(message,true);}
         else if(networkNotice!=null){networkNotice.setText(message);networkNotice.setVisibility(View.VISIBLE);}
     }
     static boolean providerHost(String host){return FilmProviderPolicy.host(host);}
@@ -456,7 +477,7 @@ public class FlixMomoActivity extends Activity {
     private void search(){resumeCatalogueMode();if(startMonitor!=null)startMonitor.leave();playUntil=0;playNotice.setVisibility(View.GONE);String text=UnifiedSearch.clean(query.getText().toString());if(!UnifiedSearch.valid(text)){status.setText("Enter 2–120 characters.");return;}
         filmEvent("film_search");detailRequested=false;detailPanel.setVisibility(View.GONE);homeRequested=true;nativeSearch=text;homePanel.mode(text);homePanel.discardSuggestions();homePanel.setVisibility(View.VISIBLE);homePanel.bringToFront();nativeControls.hideAll();cursor.enable(false);showLiveResults(text);homePanel.loading();navigate(providerOrigin()+"/search?q="+Uri.encode(text),false);homePanel.focusRefresh();
     }
-    private void navigate(String url,boolean page){if(!allowedTop(Uri.parse(url))){fail("Only the registered provider can open here.");return;}hideKeyboard();lastRequested=url;connection.begin(url);connectionWarning="";networkNotice.setVisibility(View.GONE);if(browser==null){fail("Provider browser stopped. Press Retry to reopen it.");return;}loadProviderPage(url);if(page)usePage();}
+    private void navigate(String url,boolean page){if(!allowedTop(Uri.parse(url))){fail("Only the registered provider can open here.");return;}hideKeyboard();lastRequested=url;connection.begin(url);connectionWarning="";networkNotice.setVisibility(View.GONE);if(pointerPage)providerStatus("Opening the registered provider page… Menu and Back remain available.",false);else if(providerStatusPanel!=null)providerStatusPanel.setVisibility(View.GONE);if(browser==null){fail("Provider browser stopped. Press Retry to reopen it.");return;}loadProviderPage(url);if(page)usePage();}
     protected FilmDetailView createDetailPanel(FilmDetailView.Host host){return new FilmDetailView(this,host);}
     protected FilmHomeView createHomePanel(FilmHomeView.Host host){return new FilmHomeView(this,host);}
     protected void loadProviderPage(String url){browser.loadUrl(url);}
@@ -473,6 +494,7 @@ public class FlixMomoActivity extends Activity {
     }
     private void resumePagePointer(boolean center){
         if(!pointerPage||browser==null||custom!=null||homeRequested||detailRequested)return;
+        if(providerStatusPanel.isShown()&&providerRecoveryActions.isShown()){retryButton.requestFocus();return;}
         inputEpoch++;pageEditor=false;mouseActive=true;nativeControls.pause();nativeControls.hideAll();
         if(startMonitor!=null)startMonitor.leave();playUntil=0;playNotice.setVisibility(View.GONE);
         cursor.target(browser);cursor.scrollMode(false);cursor.enable(true);browser.requestFocus();
@@ -615,6 +637,7 @@ public class FlixMomoActivity extends Activity {
             }
             return true;
         }
+        if(providerStatusPanel!=null&&providerStatusPanel.isShown()&&providerRecoveryActions.isShown())return super.dispatchKeyEvent(event);
         if(pointerPage&&pageEditor&&custom==null)return super.dispatchKeyEvent(event);
         if(startMonitor!=null&&startMonitor.ownsFocus())return super.dispatchKeyEvent(event);
         if(custom!=null){

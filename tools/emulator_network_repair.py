@@ -151,3 +151,24 @@ def inspect_and_repair(sdk,serial,run_dir,run_id):
   except Exception:result['foreground_after_check']=False
  p=Path(run_dir)/'NETWORK_CHECK.json';p.write_text(json.dumps(result,indent=2)+'\n');p.chmod(0o600)
  return result
+
+
+def review_recovery(sdk,serial,run_dir,run_id,before,memory_normal,verify_target):
+ """One explicit owner-review recovery; never turn an incomplete probe into success."""
+ suspects={row.get('service') for row in before.get('checks',[])
+           if row.get('dns') in ('DNS_UNAVAILABLE','CHECK_TIMED_OUT')}
+ if before.get('status')!='COMPLETE':
+  return {'state':'PROBE_INCOMPLETE','network':before,'restart':'NOT_ATTEMPTED'}
+ if 'jio_playback' not in suspects or len(suspects)<2:
+  return {'state':'NO_SHARED_DNS_FAILURE','network':before,'restart':'NOT_ATTEMPTED'}
+ if serial!='emulator-5580':
+  return {'state':'NONCANONICAL_EMULATOR_PRESERVED','network':before,'restart':'NOT_ATTEMPTED'}
+ if not memory_normal():
+  return {'state':'MEMORY_PRESSURE_REPAIR_HELD','network':before,'restart':'NOT_ATTEMPTED'}
+ verify_target()
+ # inspect_and_repair independently corroborates two rounds of host/guest DNS,
+ # uses only working resolvers already configured on the Mac, and never wipes data.
+ repaired=inspect_and_repair(sdk,serial,run_dir,run_id)
+ network=repaired.get('after',repaired.get('before',before))
+ return {'state':repaired.get('status','REPAIR_UNCONFIRMED'),'network':network,
+         'restart':repaired.get('restart','NOT_ATTEMPTED'),'recovery':repaired}

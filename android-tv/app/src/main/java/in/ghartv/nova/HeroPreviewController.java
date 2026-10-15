@@ -96,7 +96,7 @@ public final class HeroPreviewController {
         deadline=()->{
             LocalPerformance.record(activity,"preview_timeout_ms",
                     android.os.SystemClock.elapsedRealtime()-previewStartedAt);
-            finish(token,true,"Preview unavailable · OK still opens live TV");
+            finish(token,true,"Preview did not start in time · OK still opens live TV","STARTUP_TIMEOUT");
         };
         main.postDelayed(deadline,PreviewGate.FIRST_FRAME_BUDGET_MS);
         Telemetry.event(activity,"guide_preview_request",Telemetry.data("automatic",true,
@@ -112,10 +112,10 @@ public final class HeroPreviewController {
                             info.authRequired?"Reconnect your account to preview":"Preview unavailable · OK still opens live TV");return;
                     }
                     try{prepare(info,token);}
-                    catch(RuntimeException e){finish(token,true,"Preview unavailable · OK still opens live TV");}
+                    catch(RuntimeException e){failed(token,e);}
                 });
             }catch(Exception error){
-                main.post(()->{if(gate.current(token))finish(token,true,"Preview unavailable · OK still opens live TV");});
+                main.post(()->{if(gate.current(token))failed(token,error);});
             }
         });
     }
@@ -147,9 +147,7 @@ public final class HeroPreviewController {
                 if(state==Player.STATE_ENDED)finish(token,false,"OK to watch live");
                 // READY is not proof of a rendered picture. Buffering never renews the budget.
             }
-            @Override public void onPlayerError(PlaybackException error){
-                finish(token,true,"Preview unavailable · OK still opens live TV");
-            }
+            @Override public void onPlayerError(PlaybackException error){failed(token,error);}
         });
         MediaItem.Builder item=new MediaItem.Builder().setUri(info.streamUrl);
         String mime=safe(info.mimeType).toLowerCase(Locale.ROOT),uri=safe(info.streamUrl).toLowerCase(Locale.ROOT);
@@ -160,8 +158,24 @@ public final class HeroPreviewController {
                 .setLicenseRequestHeaders(jsonMap(info.licenseHeaders)).setMultiSession(false).build());
         player.setMediaItem(item.build());player.prepare();player.play();
     }
-    private void finish(long token,boolean error,String message){
+    private void failed(long token,Throwable error){
+        String code=NetworkFailure.classify(error);
+        String cause;
+        switch(code){
+            case "DNS_UNAVAILABLE":cause="TV cannot resolve the channel service";break;
+            case "TLS_FAILED":cause="Secure channel connection failed";break;
+            case "TIMED_OUT":cause="Channel service timed out";break;
+            case "CONNECTION_FAILED":cause="Channel service could not be reached";break;
+            default:cause="Preview unavailable";
+        }
+        finish(token,true,cause+" · OK still opens live TV",code);
+    }
+    private void finish(long token,boolean error,String message){finish(token,error,message,error?"UNAVAILABLE":"");}
+    private void finish(long token,boolean error,String message,String code){
         if(!gate.finish(token,error))return;
+        // Existing consent gate/envelope; never include exception messages, URLs,
+        // channel titles, tokens or successful viewing history in this event.
+        if(error)Telemetry.event(activity,"guide_preview_failed",Telemetry.data("automatic",true,"reason",code));
         cancelWork();resetVisual();copy(message,TvUi.MUTED);
     }
     private void cancelWork(){

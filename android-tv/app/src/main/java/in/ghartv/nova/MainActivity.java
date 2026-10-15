@@ -133,6 +133,11 @@ public final class MainActivity extends Activity implements ChannelNavigator.Lis
         mainHandler.postDelayed(() -> UpdateManager.check(this, false), 2600L);
     }
 
+
+    @Override protected void onNewIntent(Intent intent) {
+        super.onNewIntent(intent);setIntent(intent);NetworkDiagnostics.reviewProbe(this);
+    }
+
     @Override protected void onResume() {
         super.onResume();
         TvUi.immersive(this);
