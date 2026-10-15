@@ -343,18 +343,7 @@ public class FlixMomoActivity extends Activity {
                 else{if(startMonitor!=null)startMonitor.requestFailure("Embedded HTTP "+response.getStatusCode());filmFailure("film_resource_http","HTTP_"+response.getStatusCode());catalogueResourceFailure(request.getUrl(),"HTTP "+response.getStatusCode());}}
             @Override public void onReceivedSslError(WebView view,SslErrorHandler handler,SslError error){certificateFailure(handler::cancel,error);}
             @Override public void onReceivedError(WebView view,WebResourceRequest request,android.webkit.WebResourceError error){
-                if(!request.isForMainFrame()){
-                    if(startMonitor!=null)startMonitor.requestFailure("Embedded request error "+error.getErrorCode());
-                    filmFailure("film_resource","WEBVIEW_ERROR_"+error.getErrorCode());catalogueResourceFailure(request.getUrl(),"network error "+error.getErrorCode());return;
-                }
-                filmFailure("film_navigation","WEBVIEW_ERROR_"+error.getErrorCode());
-                switch(error.getErrorCode()){
-                    case WebViewClient.ERROR_FAILED_SSL_HANDSHAKE:fail("TLS handshake failed for the main page. Open Connection to check this TV; security checks remain enabled.");break;
-                    case WebViewClient.ERROR_HOST_LOOKUP:fail("DNS: Android cannot resolve the provider. No page/video loaded. Your query is kept.");break;
-                    case WebViewClient.ERROR_CONNECT:fail("Android could not connect. Check the TV network, then Retry; your query is kept.");break;
-                    case WebViewClient.ERROR_TIMEOUT:fail("Provider request timed out. Your query is kept. Press Retry when ready.");break;
-                    default:fail("Navigation failed ("+error.getErrorCode()+"). Your query is kept. Use Retry or TV guide.");
-                }
+                providerRequestFailed(request,error.getErrorCode());
             }
             @Override public boolean onRenderProcessGone(WebView view,RenderProcessGoneDetail detail){
                 nativeControls.failure();cursor.leave();exitFullScreen();stage.removeView(view);view.destroy();if(browser==view)browser=null;cursor.target(null);nativeControls.attach(null);
@@ -367,6 +356,22 @@ public class FlixMomoActivity extends Activity {
             @Override public void onShowCustomView(View view,CustomViewCallback callback){enterFullScreen(view,callback);}
             @Override public void onHideCustomView(){exitFullScreen();}
         });return true;
+    }
+
+    // Shared by the real WebView callback; provider error descriptions are not retained.
+    void providerRequestFailed(WebResourceRequest request,int errorCode){
+        if(!request.isForMainFrame()){
+            if(startMonitor!=null)startMonitor.requestFailure("Embedded request error "+errorCode);
+            filmFailure("film_resource","WEBVIEW_ERROR_"+errorCode);catalogueResourceFailure(request.getUrl(),"network error "+errorCode);return;
+        }
+        filmFailure("film_navigation","WEBVIEW_ERROR_"+errorCode);
+        switch(errorCode){
+            case WebViewClient.ERROR_FAILED_SSL_HANDSHAKE:fail("TLS handshake failed for the main page. Open Connection to check this TV; security checks remain enabled.");break;
+            case WebViewClient.ERROR_HOST_LOOKUP:fail("DNS: Android cannot resolve the provider. No page/video loaded. Your query is kept.");break;
+            case WebViewClient.ERROR_CONNECT:fail("Android could not connect. Check the TV network, then Retry; your query is kept.");break;
+            case WebViewClient.ERROR_TIMEOUT:fail("Provider request timed out. Your query is kept. Press Retry when ready.");break;
+            default:fail("Navigation failed ("+errorCode+"). Your query is kept. Use Retry or TV guide.");
+        }
     }
 
     private void enterMouse(){

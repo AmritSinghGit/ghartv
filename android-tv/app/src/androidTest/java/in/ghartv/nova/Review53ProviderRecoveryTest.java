@@ -4,7 +4,6 @@ import android.net.Uri;
 import android.os.SystemClock;
 import android.view.KeyEvent;
 import android.view.View;
-import android.webkit.WebResourceError;
 import android.webkit.WebResourceRequest;
 import android.webkit.WebResourceResponse;
 import android.webkit.WebViewClient;
@@ -33,9 +32,8 @@ public class Review53ProviderRecoveryTest {
         public boolean isForMainFrame(){return main;}public boolean isRedirect(){return false;}public boolean hasGesture(){return false;}
         public String getMethod(){return "GET";}public Map<String,String> getRequestHeaders(){return Collections.emptyMap();}
     };}
-    WebResourceError dns(){return new WebResourceError(){public int getErrorCode(){return WebViewClient.ERROR_HOST_LOOKUP;}public CharSequence getDescription(){return "private fixture details";}};}
     WebResourceResponse unavailable(){return new WebResourceResponse("text/plain","UTF-8",503,"Service Unavailable",Collections.emptyMap(),new ByteArrayInputStream(new byte[0]));}
-    void failDns(){h.web.getWebViewClient().onReceivedError(h.web,request(true),dns());}
+    void failDns(){((FlixMomoActivity)h.activity).providerRequestFailed(request(true),WebViewClient.ERROR_HOST_LOOKUP);}
     @Test public void mainDnsErrorHasVisibleRecoveryOutsideCatalogue()throws Exception{
         scene.title();h.ui(()->{failDns();assertTrue(panel().isShown());assertTrue(message(),message().contains("DNS"));assertFalse(message().contains("private fixture"));assertTrue(((View)field("retryButton")).hasFocus());assertFalse((Boolean)field("mouseActive"));assertTrue((Boolean)field("pointerPage"));});
     }
