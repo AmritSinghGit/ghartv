@@ -544,7 +544,7 @@ public class FlixMomoActivity extends Activity {
         public void routeChanged(boolean tor){credit.setText(FilmProviderPolicy.CREDIT+torRouteSuffix());}
         public void failure(String message){showTorFailure(message);}
     });}
-    private String torRouteSuffix(){return torController!=null&&torController.active()?" · Tor":" · Direct";}
+    private String torRouteSuffix(){return torController==null?"":torController.active()?" · Tor":" · Direct";}
     private void showTorConsent(FilmTorController.ConsentResult callback){
         final boolean[] answered={false};
         android.app.AlertDialog dialog=new android.app.AlertDialog.Builder(this).setTitle("Use Tor for FlixMomo?")
