@@ -7,7 +7,7 @@ import androidx.webkit.ProxyController;
 import androidx.webkit.WebViewFeature;
 import java.util.concurrent.Executor;
 
-/** Process-scoped WebView proxy constrained by reverse-bypass to fixed film hosts. */
+/** Process-scoped proxy for the single film WebView. Jio/update/telemetry hosts are explicitly bypassed. */
 final class FilmTorProxy implements FilmTorController.ProxyAdapter {
     private static final Object LOCK=new Object();
     private static Object owner;
@@ -16,14 +16,14 @@ final class FilmTorProxy implements FilmTorController.ProxyAdapter {
     private volatile boolean applied;
 
     FilmTorProxy(Context context){mainExecutor=ContextCompat.getMainExecutor(context.getApplicationContext());}
-    @Override public boolean supported(){return WebViewFeature.isFeatureSupported(WebViewFeature.PROXY_OVERRIDE)&&WebViewFeature.isFeatureSupported(WebViewFeature.PROXY_OVERRIDE_REVERSE_BYPASS);}
+    @Override public boolean supported(){return WebViewFeature.isFeatureSupported(WebViewFeature.PROXY_OVERRIDE);}
     @Override public boolean applied(){return applied;}
     @Override public void apply(int httpPort,FilmTorController.Result callback){
         if(!supported()||httpPort<1||httpPort>65535){callback.done(false);return;}
         synchronized(LOCK){if(owner!=null&&owner!=ownerToken){callback.done(false);return;}owner=ownerToken;}
         try{
-            ProxyConfig.Builder builder=new ProxyConfig.Builder().addProxyRule("http://127.0.0.1:"+httpPort).setReverseBypassEnabled(true);
-            for(String host:FilmTorFallback.proxyHosts())builder.addBypassRule(host);
+            ProxyConfig.Builder builder=new ProxyConfig.Builder().addProxyRule("http://127.0.0.1:"+httpPort).bypassSimpleHostnames();
+            for(String host:new String[]{"jiotvapi.media.jio.com","jiotvapi.cdn.jio.com","api.github.com","ghartv-telemetry.ghartv-47d9a0.workers.dev"})builder.addBypassRule(host);
             ProxyController.getInstance().setProxyOverride(builder.build(),mainExecutor,()->{applied=true;callback.done(true);});
         }catch(RuntimeException failure){releaseOwner();callback.done(false);}
     }

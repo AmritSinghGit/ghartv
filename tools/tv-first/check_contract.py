@@ -18,7 +18,7 @@ assert 'playerView.setOnClickListener(view -> showGuide(true, nextButton))' in p
 assert 'MediaStore.ACTION_PICK_IMAGES' in family and 'ACTION_GET_CONTENT' in family and 'takePersistableUriPermission' in family
 assert 'takePlaybackHandoff' in api and 'PLAYBACK_HANDOFF_MS = 20_000L' in api
 gradle=(R/'android-tv/app/build.gradle.kts').read_text()
-assert 'versionCode = 55' in gradle and '0.6.0-rc14.6-direct-tor-fallback-review' in gradle
+assert 'versionCode = 56' in gradle and '0.6.0-rc14.7-search-tor-browser-review' in gradle
 films=(J/'FlixMomoActivity.java').read_text();cursor=(J/'RemoteWebCursor.java').read_text();controls=(J/'FilmNativeControls.java').read_text()
 assert 'cursor.handle(event)' in films and 'onRenderProcessGone' in films and 'certificateFailure(handler::cancel,error)' in films and 'cancel.run()' in films and '.proceed()' not in films
 assert 'onPageFinished' in films and 'if(mainFrameError)' in films
@@ -43,11 +43,14 @@ assert 'MovieHubActivity' not in manifest and 'Punjabi +' not in m
 assert 'UnifiedSearch.voice(this)' in m and 'UnifiedSearch.open(this,q)' in m
 assert 'UnifiedSearch.dialog(this)' in player and 'UnifiedSearch.voice(this)' in player
 assert 'FilmHomeView' in films and 'showLiveResults(text)' in films
+assert 'protected boolean simplifiedDiscoverExperience(){return true;}' in films
+assert 'beginPreferredNavigation(url)' in films and 'event_version_code' in films
+assert (R/'android-tv/app/src/androidTest/java/in/ghartv/nova/Review56SimplifiedDiscoverTest.java').is_file()
 assert 'FilmPageFocus.script' in controls and 'pageKey(event)' in films
 assert 'FilmHomeView' in (J/'FilmHomeView.java').read_text()
-notice=(J/'ReviewNotice.java').read_text();assert 'direct HTTPS is always tried first' in notice and 'JioTV, updates and diagnostics remain direct' in notice
+notice=(J/'ReviewNotice.java').read_text();assert 'uses an app-local Tor route by default' in notice and 'JioTV, updates and diagnostics remain direct' in notice
 assert (J/'FilmTorFallback.java').is_file() and (J/'FilmTorController.java').is_file() and (J/'FilmTorProxy.java').is_file() and (J/'FilmTorTransport.java').is_file()
-assert 'setReverseBypassEnabled(true)' in (J/'FilmTorProxy.java').read_text() and 'api.themoviedb.org' in (J/'FilmTorFallback.java').read_text()
+proxy=(J/'FilmTorProxy.java').read_text();assert 'setReverseBypassEnabled(true)' not in proxy and 'bypassSimpleHostnames()' in proxy and 'jiotvapi.cdn.jio.com' in proxy and 'ghartv-telemetry.ghartv-47d9a0.workers.dev' in proxy and 'api.themoviedb.org' in (J/'FilmTorFallback.java').read_text()
 assert 'info.guardianproject:tor-android:0.4.8.22' in gradle and 'androidx.webkit:webkit:1.17.1' in gradle
 assert json.loads((R/'RELEASE_HOLD.json').read_text())['public_feed_write'] is False
 print('CODE40_HOME_SHARED_SEARCH_DETAIL_FOCUS_PUNJABI_PLUS_REMOVAL_RELEASE_HOLD=PASS')

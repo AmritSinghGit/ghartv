@@ -13,8 +13,8 @@ android {
         applicationId = "in.ghartv.nova"
         minSdk = 26
         targetSdk = 35
-        versionCode = 55
-        versionName = "0.6.0-rc14.6-direct-tor-fallback-review"
+        versionCode = 56
+        versionName = "0.6.0-rc14.7-search-tor-browser-review"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
     buildFeatures { buildConfig = true }
