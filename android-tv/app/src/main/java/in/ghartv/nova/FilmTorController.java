@@ -34,8 +34,10 @@ final class FilmTorController {
     }
     /** Begin one navigation with Tor as the preferred film route. True means page loading is deferred until proxy acknowledgement. */
     boolean beginPreferredNavigation(String url){
+        if(closed)return false;if(url!=null)currentUrl=url;
+        if(!proxy.applied()&&preferTorThisSession&&(policy.state()==FilmTorFallback.State.STARTING_TOR||policy.state()==FilmTorFallback.State.APPLYING_PROXY))return true;
         long ticket=beginNavigation(url);
-        if(closed||proxy.applied()||!policy.consentEnabled()||!preferTorThisSession)return false;
+        if(proxy.applied()||!policy.consentEnabled()||!preferTorThisSession)return false;
         FilmTorFallback.Action action=policy.requestTor(ticket,listener.foreground(),listener.mediaPlaying());
         if(action!=FilmTorFallback.Action.START_TOR)return false;
         handle(action,ticket);return true;
