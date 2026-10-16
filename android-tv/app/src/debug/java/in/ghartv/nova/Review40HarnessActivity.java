@@ -5,6 +5,9 @@ public final class Review40HarnessActivity extends FlixMomoActivity {
     @Override protected String initialProviderHome(){return "https://flixmomo.app/";}
     // Historical parsed-control regressions; Review51PointerHarness tests the production default.
     @Override protected boolean pointerFirstBrowsing(){return false;}
+    @Override protected boolean torFallbackEnabledForBuild(){return false;}
+    @Override protected boolean simplifiedDiscoverExperience(){return false;}
+    @Override protected boolean torDefaultForFilms(){return false;}
     public int loads;
     static String ownedClip(){return CLIP;}
     private final java.util.concurrent.ConcurrentHashMap<String,byte[]> fixturePages=new java.util.concurrent.ConcurrentHashMap<>();
