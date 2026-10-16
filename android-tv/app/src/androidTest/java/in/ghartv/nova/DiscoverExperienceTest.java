@@ -107,7 +107,7 @@ public class DiscoverExperienceTest {
     }
     @Test public void retiredFeatureClassIsNotPresentAndNoticeDoesNotClaimImmunity() {
         try{Class.forName("in.ghartv.nova.MovieHubActivity");fail("Retired feature still compiled");}catch(ClassNotFoundException expected){}
-        assertTrue(ReviewNotice.TEXT.contains("does not replace permission"));assertTrue(ReviewNotice.TEXT.contains("direct HTTPS is always tried first"));assertTrue(ReviewNotice.TEXT.contains("After explicit opt-in"));assertTrue(ReviewNotice.TEXT.contains("does not bypass DRM"));assertTrue(ReviewNotice.TEXT.contains("not a guarantee of Tor Browser anonymity"));assertTrue(ReviewNotice.TEXT.contains("does not record/store the audio"));
+        assertTrue(ReviewNotice.TEXT.contains("does not replace permission"));assertTrue(ReviewNotice.TEXT.contains("uses an app-local Tor route by default"));assertTrue(ReviewNotice.TEXT.contains("return to the direct route"));assertTrue(ReviewNotice.TEXT.contains("does not bypass DRM"));assertTrue(ReviewNotice.TEXT.contains("not a guarantee of Tor Browser anonymity"));assertTrue(ReviewNotice.TEXT.contains("does not record/store the audio"));
     }
     @Test public void watchStepAndPlayerControlsWorkInOnePageFlowWithoutExtractingMedia() throws Exception {
         String html="<button id='watch' onclick=\"document.getElementById('options').style.display='block';this.style.display='none';document.title='WATCH_OPEN'\">Watch now</button><section id='options' style='display:none'><button onclick=\"document.title='PLAYER1'\">Player 1</button><button onclick=\"document.title='PLAYER2'\">Player 2</button></section>";
