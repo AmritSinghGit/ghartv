@@ -13,8 +13,8 @@ android {
         applicationId = "in.ghartv.nova"
         minSdk = 26
         targetSdk = 35
-        versionCode = 54
-        versionName = "0.6.0-rc14.5-catalogue-readiness-review"
+        versionCode = 55
+        versionName = "0.6.0-rc14.6-direct-tor-fallback-review"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
     buildFeatures { buildConfig = true }
@@ -50,6 +50,10 @@ dependencies {
     androidTestImplementation("androidx.test:runner:1.6.2")
     androidTestImplementation("androidx.test.ext:junit:1.2.1")
     implementation("androidx.core:core:1.15.0")
+    implementation("androidx.webkit:webkit:1.17.1")
+    implementation("androidx.localbroadcastmanager:localbroadcastmanager:1.1.0")
+    implementation("info.guardianproject:tor-android:0.4.8.22")
+    implementation("info.guardianproject:jtorctl:0.4.5.7")
     implementation("androidx.recyclerview:recyclerview:1.4.0")
     implementation("androidx.work:work-runtime:2.11.2")
     implementation("androidx.media3:media3-exoplayer:1.10.1")

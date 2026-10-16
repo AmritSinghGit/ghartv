@@ -18,7 +18,7 @@ assert 'playerView.setOnClickListener(view -> showGuide(true, nextButton))' in p
 assert 'MediaStore.ACTION_PICK_IMAGES' in family and 'ACTION_GET_CONTENT' in family and 'takePersistableUriPermission' in family
 assert 'takePlaybackHandoff' in api and 'PLAYBACK_HANDOFF_MS = 20_000L' in api
 gradle=(R/'android-tv/app/build.gradle.kts').read_text()
-assert 'versionCode = 54' in gradle and '0.6.0-rc14.5-catalogue-readiness-review' in gradle
+assert 'versionCode = 55' in gradle and '0.6.0-rc14.6-direct-tor-fallback-review' in gradle
 films=(J/'FlixMomoActivity.java').read_text();cursor=(J/'RemoteWebCursor.java').read_text();controls=(J/'FilmNativeControls.java').read_text()
 assert 'cursor.handle(event)' in films and 'onRenderProcessGone' in films and 'certificateFailure(handler::cancel,error)' in films and 'cancel.run()' in films and '.proceed()' not in films
 assert 'onPageFinished' in films and 'if(mainFrameError)' in films
@@ -45,7 +45,10 @@ assert 'UnifiedSearch.dialog(this)' in player and 'UnifiedSearch.voice(this)' in
 assert 'FilmHomeView' in films and 'showLiveResults(text)' in films
 assert 'FilmPageFocus.script' in controls and 'pageKey(event)' in films
 assert 'FilmHomeView' in (J/'FilmHomeView.java').read_text()
-assert 'Tor is not enabled' in (J/'ReviewNotice.java').read_text()
+notice=(J/'ReviewNotice.java').read_text();assert 'direct HTTPS is always tried first' in notice and 'JioTV, updates and diagnostics remain direct' in notice
+assert (J/'FilmTorFallback.java').is_file() and (J/'FilmTorController.java').is_file() and (J/'FilmTorProxy.java').is_file() and (J/'FilmTorTransport.java').is_file()
+assert 'setReverseBypassEnabled(true)' in (J/'FilmTorProxy.java').read_text() and 'api.themoviedb.org' in (J/'FilmTorFallback.java').read_text()
+assert 'info.guardianproject:tor-android:0.4.8.22' in gradle and 'androidx.webkit:webkit:1.17.1' in gradle
 assert json.loads((R/'RELEASE_HOLD.json').read_text())['public_feed_write'] is False
 print('CODE40_HOME_SHARED_SEARCH_DETAIL_FOCUS_PUNJABI_PLUS_REMOVAL_RELEASE_HOLD=PASS')
 

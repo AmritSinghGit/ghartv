@@ -113,13 +113,16 @@ public class FlixMomoActivity extends Activity {
     private final FilmConnectionState connection=new FilmConnectionState();
     private String connectionDetail="No certificate failure observed in this screen session.";
     private String connectionWarning="";private TextView networkNotice;private int filmErrors;
+    private FilmTorController torController;
+    private FilmTorPosterLoader torPosterLoader;
     private void filmEvent(String name){Telemetry.event(this,name,Telemetry.data("surface","discover"));}
     private void filmFailure(String stage,String reason){
         if(filmErrors++<8)Telemetry.error(this,stage,new IllegalStateException(reason),Telemetry.data("provider","flixmomo"));
     }
     private void showFilmConnection(){
         String version="unknown";try{android.content.pm.PackageInfo p=WebView.getCurrentWebViewPackage();if(p!=null)version=p.versionName;}catch(Exception ignored){}
-        String message=ReviewDisplay.technical()+"\n\n"+connectionDetail+"\n\nTV time: "+new java.util.Date()+"\nAndroid: "+android.os.Build.VERSION.RELEASE+" · WebView: "+version+"\n\nCertificate checks stay on. No passwords, cookies or search text are sent by a connection check.";
+        String route=torController==null?"Unavailable":torController.routeLabel()+(torController.enabled()?" · fallback enabled":" · fallback off");
+        String message=ReviewDisplay.technical()+"\n\n"+connectionDetail+"\n\nFlixMomo route: "+route+"\nTV time: "+new java.util.Date()+"\nAndroid: "+android.os.Build.VERSION.RELEASE+" · WebView: "+version+"\n\nCertificate checks stay on. No passwords, cookies or search text are sent by a connection check. JioTV, updates and diagnostics are never routed through this film fallback.";
         new android.app.AlertDialog.Builder(this).setTitle("FlixMomo connection")
             .setMessage(message).setPositiveButton("Check DNS / HTTPS",(d,w)->NetworkDiagnostics.show(this))
             .setNeutralButton("Registered addresses",(d,w)->chooseFilmOrigin()).setNegativeButton("Close",null).show();
@@ -136,7 +139,7 @@ public class FlixMomoActivity extends Activity {
         hideProviderStatus();
         pointerPage=false;pageEditor=false;pointerTitleOrigin="";
         if(mouseActive)leaveMouse(false);else cursor.enable(false);
-        nativeControls.resume();credit.setText(FilmProviderPolicy.CREDIT);credit.setVisibility(View.VISIBLE);
+        nativeControls.resume();credit.setText(FilmProviderPolicy.CREDIT+torRouteSuffix());credit.setVisibility(View.VISIBLE);
     }
     void selectProviderOrigin(String value){
         String root=FilmProviderPolicy.registeredHome(value);if(root==null)return;
@@ -150,11 +153,16 @@ public class FlixMomoActivity extends Activity {
         rememberProviderHome(root);
         navigate(root+(nativeSearch.isEmpty()?"":"search?q="+Uri.encode(nativeSearch)),false);homePanel.focusRefresh();
     }
-    private void catalogueResourceFailure(Uri uri,String reason){
-        // A catalogue dependency failure is not a movie-playback failure. Do not
-        // substitute data, copy API keys, proxy the request or weaken TLS.
-        if(homeRequested&&homePanel!=null&&uri!=null&&"api.themoviedb.org".equals(uri.getHost()))
-            homePanel.unavailable("The provider page opened, but its catalogue service could not be reached ("+reason+"). Page reachability is not catalogue readiness.");
+    private boolean catalogueResourceFailure(Uri uri,FilmTorFallback.Failure failure,String reason){
+        // A catalogue dependency failure is not a movie-playback failure. The
+        // explicit fallback may retry only the reviewed fixed host set.
+        if(uri!=null&&"api.themoviedb.org".equals(uri.getHost())){
+            if(torController!=null&&torController.failure(uri.toString(),failure))return true;
+            String message="The provider page opened, but its catalogue service could not be reached ("+reason+"). Page reachability is not catalogue readiness.";
+            if(homeRequested&&homePanel!=null)homePanel.unavailable(message);
+            else if(pointerPage)providerStatus(message,true);
+        }
+        return false;
     }
     void certificateFailure(Runnable cancel,SslError error){
         cancel.run(); // The failed resource is NEVER trusted or loaded.
@@ -172,7 +180,7 @@ public class FlixMomoActivity extends Activity {
         }
     }
     private final Handler handler=new Handler(Looper.getMainLooper());
-    private final Runnable slowLoad=()->{if(loading&&!mainFrameError){status.setText("Still connecting. Retry is available; playback is not verified.");if(homeRequested&&homePanel!=null)homePanel.unavailable("The provider is taking longer than expected.");else if(pointerPage)providerStatus("The provider page has not finished loading. Check the connection or retry; no catalogue or playback is confirmed.",true);}};
+    private final Runnable slowLoad=()->{if(loading&&!mainFrameError){if(torController!=null&&torController.failure(lastRequested,FilmTorFallback.Failure.NO_CATALOGUE_RESPONSE))return;status.setText("Still connecting. Retry is available; playback is not verified.");if(homeRequested&&homePanel!=null)homePanel.unavailable("The provider is taking longer than expected.");else if(pointerPage)providerStatus("The provider page has not finished loading. Check the connection or retry; no catalogue or playback is confirmed.",true);}};
 
     @Override public void onCreate(Bundle saved){
         super.onCreate(saved);lastRequested=initialProviderHome();Telemetry.screen(this,"discover");filmEvent("discover_open");getWindow().getDecorView().setSystemUiVisibility(5894);
@@ -224,7 +232,7 @@ public class FlixMomoActivity extends Activity {
             public void controlsVisibility(boolean visible){if(startMonitor!=null)startMonitor.controlsOpen(visible);}
             public void mouse(){enterMouse();}
             public boolean pageIsVisible(){return !homeRequested&&!detailRequested&&custom==null&&!(chrome.getVisibility()==View.VISIBLE&&chrome.hasFocus());}
-            public void pageObserved(org.json.JSONObject data){observeDetail(data);visitCache.put(data.optJSONObject("detail"));if(homeRequested&&homePanel!=null)homePanel.render(data);else if(detailRequested&&detailPanel!=null)detailPanel.render(data.optJSONObject("detail"));else if(!data.optBoolean("search"))liveResults.setVisibility(View.GONE);followPlayback(data);}
+            public void pageObserved(org.json.JSONObject data){observeDetail(data);visitCache.put(data.optJSONObject("detail"));if(homeRequested&&homePanel!=null){homePanel.render(data);if(torController!=null)torController.catalogueObserved(homePanel.cardCount());}else if(detailRequested&&detailPanel!=null)detailPanel.render(data.optJSONObject("detail"));else if(!data.optBoolean("search"))liveResults.setVisibility(View.GONE);followPlayback(data);}
             public void pageAction(String action){if("watch".equals(action))requestWatch();else if("media".equals(action)){armPlayback();mediaAttempted=true;nativeControls.pageAction("media");}else nativeControls.pageAction(action);}
             public void playerSelected(){if(startMonitor!=null)startMonitor.selected();armPlayback();}
             public void actionOutcome(String action,String result){
@@ -242,6 +250,8 @@ public class FlixMomoActivity extends Activity {
             }
             public void verificationRequired(){if(homeRequested&&homePanel!=null)homePanel.unavailable("Provider verification is required.");else if(detailRequested)detailPanel.unavailable("Provider verification is required.");else toolbar();}
         });
+        torController=torFallbackEnabledForBuild()?createTorController():null;
+        torPosterLoader=torController==null?null:new FilmTorPosterLoader(this,torController);
         homePanel=createHomePanel(new FilmHomeView.Host(){
             public void open(String url){if(pointerFirstBrowsing())openProviderTitle(url);else openDetail(url);}
             public void refresh(){if(nativeSearch.isEmpty())showHome(true);else search();}
@@ -252,6 +262,10 @@ public class FlixMomoActivity extends Activity {
                 nativeControls.failure();homeRequested=true;liveGeneration++;liveResults.setVisibility(View.GONE);homePanel.discardSuggestions();homePanel.setVisibility(View.VISIBLE);homePanel.bringToFront();chrome.setVisibility(View.VISIBLE);
                 homePanel.unavailable("Film site data cleared. Suggestions will reload only when you choose Refresh.");
             });}
+        });
+        homePanel.setLoadingObserver(new FilmHomeView.LoadingObserver(){
+            public boolean timeout(){return torController!=null&&torController.failure(lastRequested,FilmTorFallback.Failure.NO_CATALOGUE_RESPONSE);}
+            public void readable(int count){if(torController!=null)torController.catalogueObserved(count);}
         });
         stage.addView(homePanel,new FrameLayout.LayoutParams(-1,-1));
         detailPanel=createDetailPanel(new FilmDetailView.Host(){
@@ -321,7 +335,7 @@ public class FlixMomoActivity extends Activity {
             }
             @Override public void onPageCommitVisible(WebView view,String url){if(!mainFrameError&&allowedTop(Uri.parse(url))&&!mouseActive&&!pointerPage)nativeControls.documentReady();}
             @Override public void onPageStarted(WebView view,String url,Bitmap icon){
-                cursor.cancel();nativeControls.started();if("about:blank".equals(url))return;connection.started(url);
+                cursor.cancel();nativeControls.started();if("about:blank".equals(url))return;if(torController!=null&&!java.util.Objects.equals(url,lastRequested))torController.beginNavigation(url);connection.started(url);
                 if(detailRequested&&FilmProviderPolicy.detail(Uri.parse(url)))detailPanel.followNavigation(url);
                 else if(detailRequested&&allowedTop(Uri.parse(url))&&!FilmProviderPolicy.detail(Uri.parse(url)))usePage();mainFrameError=false;pageReady=false;loading=true;if(allowedTop(Uri.parse(url)))lastRequested=url;
                 status.setText("Opening FlixMomo…");if(pointerPage){providerStatus("Opening the registered provider page… Menu and Back remain available.",false);nativeControls.pause();playNotice.setVisibility(View.GONE);networkNotice.setVisibility(View.GONE);}handler.removeCallbacks(slowLoad);handler.postDelayed(slowLoad,20000);
@@ -333,14 +347,16 @@ public class FlixMomoActivity extends Activity {
             }
             @Override public void doUpdateVisitedHistory(WebView view,String url,boolean reload){
                 if(!loading&&allowedTop(Uri.parse(url))&&!java.util.Objects.equals(lastRequested,url)){
-                    lastRequested=url;nativeControls.started();
+                    lastRequested=url;if(torController!=null)torController.beginNavigation(url);nativeControls.started();
                     if(detailRequested&&FilmProviderPolicy.detail(Uri.parse(url)))detailPanel.followNavigation(url);
                     else if(detailRequested)usePage();
                     if(!pointerPage)nativeControls.documentReady();else if(!pageEditor)resumePagePointer(false);
                 }
             }
-            @Override public void onReceivedHttpError(WebView view,WebResourceRequest request,WebResourceResponse response){if(request.isForMainFrame())fail("Provider returned HTTP "+response.getStatusCode()+". Your search is kept. Use Retry or Browse.");
-                else{if(startMonitor!=null)startMonitor.requestFailure("Embedded HTTP "+response.getStatusCode());filmFailure("film_resource_http","HTTP_"+response.getStatusCode());catalogueResourceFailure(request.getUrl(),"HTTP "+response.getStatusCode());}}
+            @Override public void onReceivedHttpError(WebView view,WebResourceRequest request,WebResourceResponse response){
+                int code=response.getStatusCode();FilmTorFallback.Failure kind=code==401||code==407?FilmTorFallback.Failure.HTTP_AUTH:code==403?FilmTorFallback.Failure.HTTP_DENIED:code==429?FilmTorFallback.Failure.HTTP_RATE_LIMIT:FilmTorFallback.Failure.OTHER;
+                if(request.isForMainFrame())fail("Provider returned HTTP "+code+". Your search is kept. Use Retry or Browse.");
+                else{if(startMonitor!=null)startMonitor.requestFailure("Embedded HTTP "+code);filmFailure("film_resource_http","HTTP_"+code);catalogueResourceFailure(request.getUrl(),kind,"HTTP "+code);}}
             @Override public void onReceivedSslError(WebView view,SslErrorHandler handler,SslError error){certificateFailure(handler::cancel,error);}
             @Override public void onReceivedError(WebView view,WebResourceRequest request,android.webkit.WebResourceError error){
                 providerRequestFailed(request,error.getErrorCode());
@@ -360,11 +376,13 @@ public class FlixMomoActivity extends Activity {
 
     // Shared by the real WebView callback; provider error descriptions are not retained.
     void providerRequestFailed(WebResourceRequest request,int errorCode){
+        FilmTorFallback.Failure kind=errorCode==WebViewClient.ERROR_HOST_LOOKUP?FilmTorFallback.Failure.DNS:errorCode==WebViewClient.ERROR_CONNECT?FilmTorFallback.Failure.CONNECT:errorCode==WebViewClient.ERROR_TIMEOUT?FilmTorFallback.Failure.TIMEOUT:errorCode==WebViewClient.ERROR_FAILED_SSL_HANDSHAKE?FilmTorFallback.Failure.TLS:FilmTorFallback.Failure.OTHER;
         if(!request.isForMainFrame()){
             if(startMonitor!=null)startMonitor.requestFailure("Embedded request error "+errorCode);
-            filmFailure("film_resource","WEBVIEW_ERROR_"+errorCode);catalogueResourceFailure(request.getUrl(),"network error "+errorCode);return;
+            filmFailure("film_resource","WEBVIEW_ERROR_"+errorCode);if(catalogueResourceFailure(request.getUrl(),kind,"network error "+errorCode))return;return;
         }
         filmFailure("film_navigation","WEBVIEW_ERROR_"+errorCode);
+        if(torController!=null&&torController.failure(request.getUrl().toString(),kind)){mainFrameError=true;pageReady=false;loading=false;handler.removeCallbacks(slowLoad);return;}
         switch(errorCode){
             case WebViewClient.ERROR_FAILED_SSL_HANDSHAKE:fail("TLS handshake failed for the main page. Open Connection to check this TV; security checks remain enabled.");break;
             case WebViewClient.ERROR_HOST_LOOKUP:fail("DNS: Android cannot resolve the provider. No page/video loaded. Your query is kept.");break;
@@ -491,10 +509,40 @@ public class FlixMomoActivity extends Activity {
     private void search(){resumeCatalogueMode();if(startMonitor!=null)startMonitor.leave();playUntil=0;playNotice.setVisibility(View.GONE);String text=UnifiedSearch.clean(query.getText().toString());if(!UnifiedSearch.valid(text)){status.setText("Enter 2–120 characters.");return;}
         filmEvent("film_search");detailRequested=false;detailPanel.setVisibility(View.GONE);homeRequested=true;nativeSearch=text;homePanel.mode(text);homePanel.discardSuggestions();homePanel.setVisibility(View.VISIBLE);homePanel.bringToFront();nativeControls.hideAll();cursor.enable(false);showLiveResults(text);homePanel.loading();navigate(providerOrigin()+"/search?q="+Uri.encode(text),false);homePanel.focusRefresh();
     }
-    private void navigate(String url,boolean page){if(!allowedTop(Uri.parse(url))){fail("Only the registered provider can open here.");return;}hideKeyboard();lastRequested=url;connection.begin(url);connectionWarning="";networkNotice.setVisibility(View.GONE);if(pointerPage)providerStatus("Opening the registered provider page… Menu and Back remain available.",false);else hideProviderStatus();if(browser==null){fail("Provider browser stopped. Press Retry to reopen it.");return;}loadProviderPage(url);if(page)usePage();}
+    private void navigate(String url,boolean page){if(!allowedTop(Uri.parse(url))){fail("Only the registered provider can open here.");return;}hideKeyboard();lastRequested=url;if(torController!=null)torController.beginNavigation(url);connection.begin(url);connectionWarning="";networkNotice.setVisibility(View.GONE);if(pointerPage)providerStatus("Opening the registered provider page… Menu and Back remain available.",false);else hideProviderStatus();if(browser==null){fail("Provider browser stopped. Press Retry to reopen it.");return;}loadProviderPage(url);if(page)usePage();}
     protected FilmDetailView createDetailPanel(FilmDetailView.Host host){return new FilmDetailView(this,host);}
-    protected FilmHomeView createHomePanel(FilmHomeView.Host host){return new FilmHomeView(this,host);}
+    protected boolean torFallbackEnabledForBuild(){return true;}
+    protected FilmHomeView createHomePanel(FilmHomeView.Host host){return torPosterLoader==null?new FilmHomeView(this,host):new FilmHomeView(this,host,torPosterLoader::load);}
     protected void loadProviderPage(String url){browser.loadUrl(url);}
+    private FilmTorController createTorController(){return new FilmTorController(this,new FilmTorController.Listener(){
+        public boolean foreground(){return !isFinishing()&&!isDestroyed();}
+        public boolean mediaPlaying(){return custom!=null||(startMonitor!=null&&startMonitor.healthy());}
+        public void requestConsent(long ticket,FilmTorController.ConsentResult callback){showTorConsent(callback);}
+        public void status(String message){showTorStatus(message);}
+        public void reload(String url){reloadForTorRoute(url);}
+        public void routeChanged(boolean tor){credit.setText(FilmProviderPolicy.CREDIT+torRouteSuffix());}
+        public void failure(String message){showTorFailure(message);}
+    });}
+    private String torRouteSuffix(){return torController!=null&&torController.active()?" · Tor fallback":"";}
+    private void showTorConsent(FilmTorController.ConsentResult callback){
+        final boolean[] answered={false};
+        android.app.AlertDialog dialog=new android.app.AlertDialog.Builder(this).setTitle("Use Tor fallback for FlixMomo?")
+            .setMessage("The direct FlixMomo catalogue connection failed. GharTV can start an app-local Tor route and retry only the registered FlixMomo, TMDB catalogue and poster hosts. JioTV, app updates and diagnostics remain direct. Tor can be slower and is not a guarantee of Tor Browser anonymity. Certificate and provider access checks stay enabled.")
+            .setPositiveButton("Enable and retry",(d,w)->{answered[0]=true;callback.answer(true);})
+            .setNegativeButton("Stay direct",(d,w)->{answered[0]=true;callback.answer(false);}).create();
+        dialog.setOnCancelListener(d->{if(!answered[0])callback.answer(false);});dialog.show();
+    }
+    private void showTorStatus(String message){handler.removeCallbacks(slowLoad);if(homeRequested&&homePanel!=null)homePanel.routeStatus(message);else if(pointerPage)providerStatus(message,false);else{networkNotice.setText(message);networkNotice.setVisibility(View.VISIBLE);}}
+    private void showTorFailure(String message){if(homeRequested&&homePanel!=null)homePanel.unavailable(message);else if(pointerPage)providerStatus(message,true);else{networkNotice.setText(message);networkNotice.setVisibility(View.VISIBLE);}}
+    private void reloadForTorRoute(String url){mainFrameError=false;loading=true;if(homeRequested&&homePanel!=null)homePanel.loading();navigate(url,false);}
+    private void showTorRoute(){
+        if(torController==null){new android.app.AlertDialog.Builder(this).setTitle("FlixMomo route").setMessage("Tor fallback is unavailable in this test harness.").setPositiveButton("Close",null).show();return;}
+        java.util.List<String> actions=new java.util.ArrayList<>();
+        if(torController.active())actions.add("Return to direct connection");else if(torController.enabled())actions.add("Try Tor now");
+        actions.add(torController.enabled()?"Disable automatic Tor fallback":"Enable direct-first Tor fallback");
+        String message="Current route: "+torController.routeLabel()+". Direct is always tried first. The fallback is limited to registered FlixMomo/TMDB hosts; JioTV, updates and diagnostics remain direct.";
+        new android.app.AlertDialog.Builder(this).setTitle("FlixMomo route").setMessage(message).setItems(actions.toArray(new String[0]),(d,n)->{String choice=actions.get(n);if(choice.startsWith("Return"))torController.requestDirect();else if(choice.startsWith("Try"))torController.tryTorNow();else torController.setEnabled(!torController.enabled());}).setNegativeButton("Close",null).show();
+    }
     private void openProviderTitle(String url){
         if(url==null||!allowedTop(Uri.parse(url))){status.setText("That address is not registered. Current page preserved.");return;}
         if(custom!=null)exitFullScreen();
@@ -518,7 +566,7 @@ public class FlixMomoActivity extends Activity {
         if(!pointerPage){showOptions();return;}
         if(custom!=null){showFullscreenMenu();return;}
         inputEpoch++;mouseActive=false;pageEditor=false;cursor.enable(false);nativeControls.pause();nativeControls.hideAll();
-        String[] choices={"Return to page / pointer","Search GharTV · TV + films","Go back one page","Reload current page","Connection details","Recent interaction log"};
+        String[] choices={"Return to page / pointer","Search GharTV · TV + films","Go back one page","Reload current page","Connection details","FlixMomo route","Recent interaction log"};
         optionsDialog=new android.app.AlertDialog.Builder(this).setTitle(ReviewDisplay.details())
             .setItems(choices,(dialog,which)->{
                 if(which==0){resumePagePointer(false);}
@@ -526,6 +574,7 @@ public class FlixMomoActivity extends Activity {
                 else if(which==2){pointerBack();}
                 else if(which==3){if(browser!=null){navigate(lastRequested,false);resumePagePointer(false);}}
                 else if(which==4){showFilmConnection();}
+                else if(which==5){showTorRoute();}
                 else showInteractionLog();
             }).setNegativeButton("Close",(d,w)->resumePagePointer(false)).create();
         optionsDialog.setOnCancelListener(d->resumePagePointer(false));
@@ -562,10 +611,10 @@ public class FlixMomoActivity extends Activity {
         if(pointerPage){pointerNavigation();return;}
         if(custom!=null){showFullscreenMenu();return;}
         if(mouseActive)leaveMouse(false);nativeControls.hideAll();cursor.enable(false);chrome.setVisibility(View.VISIBLE);
-        String[] items={"Return to video / website","Connection details","Diagnostics","Privacy & attribution","Recent interaction log"};
+        String[] items={"Return to video / website","Connection details","FlixMomo route","Diagnostics","Privacy & attribution","Recent interaction log"};
         optionsDialog=new android.app.AlertDialog.Builder(this).setTitle(ReviewDisplay.details())
             .setMessage(null).setItems(items,(d,n)->{
-                if(n==0)usePage();else if(n==1)showFilmConnection();else if(n==2)DiagnosticsDialog.show(this);else if(n==4)showInteractionLog();else ReviewNotice.show(this,()->{visitCache.clear();if(browser!=null){browser.stopLoading();browser.loadUrl("about:blank");browser.clearCache(true);browser.clearHistory();browser.clearFormData();}nativeControls.failure();com.bumptech.glide.Glide.get(this).clearMemory();homePanel.discardSuggestions();homeRequested=true;detailRequested=false;detailPanel.setVisibility(View.GONE);homePanel.setVisibility(View.VISIBLE);chrome.setVisibility(View.VISIBLE);homePanel.unavailable("Local film data cleared. Choose Refresh to load again.");});
+                if(n==0)usePage();else if(n==1)showFilmConnection();else if(n==2)showTorRoute();else if(n==3)DiagnosticsDialog.show(this);else if(n==5)showInteractionLog();else ReviewNotice.show(this,()->{visitCache.clear();if(browser!=null){browser.stopLoading();browser.loadUrl("about:blank");browser.clearCache(true);browser.clearHistory();browser.clearFormData();}nativeControls.failure();com.bumptech.glide.Glide.get(this).clearMemory();homePanel.discardSuggestions();homeRequested=true;detailRequested=false;detailPanel.setVisibility(View.GONE);homePanel.setVisibility(View.VISIBLE);chrome.setVisibility(View.VISIBLE);homePanel.unavailable("Local film data cleared. Choose Refresh to load again.");});
             }).setNegativeButton("Close",null).create();
         optionsDialog.setOnDismissListener(d->{if(custom==null&&chrome.getVisibility()==View.VISIBLE)pageButton.requestFocus();});optionsDialog.show();
     }
@@ -767,5 +816,5 @@ public class FlixMomoActivity extends Activity {
     @Override protected void onResume(){super.onResume();EngagementTracker.start(this,"discover");if(nativeControls!=null&&!mouseActive&&custom==null)nativeControls.resume();if(browser!=null)browser.onResume();}
     @Override public void onRequestPermissionsResult(int r,String[] p,int[] g){super.onRequestPermissionsResult(r,p,g);InAppVoiceSearch.permission(this,r,g);}
     @Override protected void onStop(){InAppVoiceSearch.stopped(this);super.onStop();}
-    @Override protected void onDestroy(){InAppVoiceSearch.close(this);if(startMonitor!=null)startMonitor.leave();liveGeneration++;liveExecutor.shutdownNow();if(nativeControls!=null)nativeControls.destroy();handler.removeCallbacksAndMessages(null);if(cursor!=null)cursor.leave();exitFullScreen();if(browser!=null){browser.stopLoading();stage.removeView(browser);browser.destroy();browser=null;}super.onDestroy();}
+    @Override protected void onDestroy(){InAppVoiceSearch.close(this);if(startMonitor!=null)startMonitor.leave();liveGeneration++;liveExecutor.shutdownNow();if(torPosterLoader!=null)torPosterLoader.close();if(torController!=null)torController.destroy();if(nativeControls!=null)nativeControls.destroy();handler.removeCallbacksAndMessages(null);if(cursor!=null)cursor.leave();exitFullScreen();if(browser!=null){browser.stopLoading();stage.removeView(browser);browser.destroy();browser=null;}super.onDestroy();}
 }

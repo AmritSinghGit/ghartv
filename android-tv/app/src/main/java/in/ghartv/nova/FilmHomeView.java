@@ -29,6 +29,7 @@ import java.util.Set;
 final class FilmHomeView extends FrameLayout {
     interface Host { void open(String url); void refresh(); void provider(); void privacy(); }
     interface PosterLoader { void load(ImageView target,String url); }
+    interface LoadingObserver { boolean timeout(); void readable(int count); }
     private final Activity activity;
     private final Host host;
     private final PosterLoader loader;
@@ -37,8 +38,9 @@ final class FilmHomeView extends FrameLayout {
     private final TextView status;
     private final android.widget.ProgressBar progress;
     private boolean loadingData;
+    private LoadingObserver loadingObserver;
     private String unavailableReason="";
-    private final Runnable loadingDeadline=()->{if(loadingData)unavailable("The provider is taking longer to supply suggestions.");};
+    private final Runnable loadingDeadline=()->{if(loadingData){if(loadingObserver!=null&&loadingObserver.timeout())return;unavailable("The provider is taking longer to supply suggestions.");}};
     private TextView heading;private String searchText="";
     private final LinearLayout grid;
     private String identity="";
@@ -81,6 +83,8 @@ final class FilmHomeView extends FrameLayout {
 
 
     void setToolbarAnchor(View anchor){toolbarAnchor=anchor;if(anchor.getId()==View.NO_ID)anchor.setId(View.generateViewId());wireFocus();}
+    void setLoadingObserver(LoadingObserver observer){loadingObserver=observer;}
+    void routeStatus(String message){loadingData=true;progress.setVisibility(VISIBLE);status.setText(message);removeCallbacks(loadingDeadline);}
     void bindUnderlyingPage(ViewGroup page){restorePage();underlyingPage=page;syncPageFocus();}
     @Override public void setVisibility(int visibility){super.setVisibility(visibility);syncPageFocus();if(visibility==VISIBLE)schedulePosters();}
     private void syncPageFocus(){
@@ -190,7 +194,7 @@ final class FilmHomeView extends FrameLayout {
         if(allowed.isEmpty()){if(loadingData||!unavailableReason.isEmpty())return;unavailable("The current page has not supplied any readable poster suggestions yet.");return;}
         unavailableReason="";ready();
 
-        String next=allowed.toString();if(identity.equals(next)){status.setText(cardCount+" suggestions supplied by FlixMomo · availability is not verified");return;}
+        String next=allowed.toString();if(identity.equals(next)){status.setText(cardCount+" suggestions supplied by FlixMomo · availability is not verified");if(loadingObserver!=null)loadingObserver.readable(cardCount);return;}
         // Do not reset a user's focus while they are browsing an already-rendered set.
         if(grid.hasFocus()&&cardCount>0){status.setText("Browsing "+cardCount+" suggestions · Refresh loads the latest set");return;}
         lastCards.clear();lastCards.addAll(allowed);
@@ -214,6 +218,7 @@ final class FilmHomeView extends FrameLayout {
         // All remaining rows still use bounded viewport scheduling.
         if(isAttachedToWindow()&&isShown())for(int i=0;i<Math.min(columns*2,posterTasks.size());i++){PosterTask task=posterTasks.get(i);if(!task.loaded){task.loaded=true;loader.load(task.view,task.url);}}
         status.setText(cardCount+" suggestions supplied by FlixMomo · availability is not verified");
+        if(loadingObserver!=null)loadingObserver.readable(cardCount);
     }
     static String readable(String text){String s=text.trim();if(s.indexOf(' ')>=0)return s;String[] words=s.replace('-',' ').replace('_',' ').split(" ");StringBuilder result=new StringBuilder();for(String word:words){if(word.isEmpty())continue;if(result.length()>0)result.append(' ');result.append(Character.toUpperCase(word.charAt(0))).append(word.substring(1));}return result.toString();}
     void discardSuggestions(){boolean focused=grid.hasFocus();identity="";cardCount=0;lastCards.clear();clearPosters();grid.removeAllViews();cards.clear();wireFocus();if(focused)focusRefresh();}
