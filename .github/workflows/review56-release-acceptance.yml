@@ -57,7 +57,7 @@ jobs:
           python3 - <<'PY'
           import subprocess,os
           cmd=['avdmanager','create','avd','--name','GHARTV_REVIEW56_ACCEPTANCE','--package','system-images;android-36;google_apis;x86_64','--path',os.environ['ANDROID_AVD_HOME']+'/GHARTV_REVIEW56_ACCEPTANCE.avd']
-          p=subprocess.run(cmd,input='no\\n',stdout=subprocess.PIPE,stderr=subprocess.STDOUT,text=True,timeout=45)
+          p=subprocess.run(cmd,input='no\n',stdout=subprocess.PIPE,stderr=subprocess.STDOUT,text=True,timeout=45)
           print(p.stdout)
           if p.returncode: raise SystemExit(p.returncode)
           PY
