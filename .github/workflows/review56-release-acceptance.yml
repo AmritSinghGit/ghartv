@@ -1,5 +1,8 @@
 name: Review56 exact-release acceptance
 on:
+  push:
+    branches: ['codex/ghartv-remove-auto-preview']
+    paths: ['.github/workflows/review56-release-acceptance.yml']
   workflow_dispatch:
     inputs:
       source_sha:
