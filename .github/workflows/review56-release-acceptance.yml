@@ -108,6 +108,7 @@ jobs:
           import os,pathlib,xml.etree.ElementTree as ET
           p=pathlib.Path(os.environ["OUT"])/"01-release-entry.xml"
           root=ET.parse(p).getroot()
+          import re,subprocess,time
           vals=[(n.attrib.get("text",""),n.attrib.get("content-desc",""),n.attrib.get("bounds","")) for n in root.iter("node")]
           # First launch can legitimately show the existing diagnostics-consent prompt. Choose NOT NOW;
           # do not opt the owner into telemetry just to reach the guide in a test.
@@ -144,7 +145,7 @@ jobs:
           if not edit: raise SystemExit("BLOCKED: search field not exposed on production release UI")
           m=re.fullmatch(r"\[(\d+),(\d+)\]\[(\d+),(\d+)\]",edit[3]);a,b,c,d=map(int,m.groups())
           subprocess.run(["adb","-s","emulator-5580","shell","input","tap",str((a+c)//2),str((b+d)//2)],check=True)
-          subprocess.run(["adb","-s","emulator-5580","shell","input","text","Paper%slLantern"],check=True)
+          subprocess.run(["adb","-s","emulator-5580","shell","input","text","Paper%sLantern"],check=True)
           subprocess.run(["adb","-s","emulator-5580","shell","input","keyevent","KEYCODE_ENTER"],check=True)
           time.sleep(2)
           subprocess.run(["adb","-s","emulator-5580","exec-out","screencap","-p"],stdout=open(pathlib.Path(os.environ["OUT"])/"03-query-submitted.png","wb"),check=True)
