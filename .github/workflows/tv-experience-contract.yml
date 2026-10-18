@@ -145,6 +145,102 @@ jobs:
         run: |
           adb -s emulator-5580 pull /sdcard/Android/data/in.ghartv.nova/files/review49-timing.json /tmp/ghartv-candidate/proof/review49-timing.json
           adb -s emulator-5580 pull /sdcard/Android/data/in.ghartv.nova/files/review50-series-timing.json /tmp/ghartv-candidate/proof/review50-series-timing.json
+      - name: Exact code56 release APK smoke and screenshots (CI emulator only)
+        run: |
+          set -euo pipefail
+          OUT=/tmp/ghartv-candidate/proof/review56-release-ui
+          mkdir -p "$OUT"
+          APK=/tmp/ghartv-candidate/GharTV-code56-review-unsigned.apk
+          SIGNED="$RUNNER_TEMP/ghartv-code56-ci-signed.apk"
+          KS="$RUNNER_TEMP/ghartv-review56-smoke.keystore"
+          PASS='Review56-CI-only-2026'
+          export OUT APK SIGNED KS PASS
+          python - <<'PY'
+          import hashlib, json, os, pathlib, re, subprocess, time, xml.etree.ElementTree as ET
+          out=pathlib.Path(os.environ["OUT"])
+          status={"scope":"ephemeral CI Android 36 emulator; exact code56 release APK signed with a throwaway CI-only key","candidate_unsigned_apk_sha256":hashlib.sha256(pathlib.Path(os.environ["APK"]).read_bytes()).hexdigest(),"installed_package":"in.ghartv.nova","installed_version_code":None,"installed_version_name":None,"screenshots":[],"checks":{},"notes":[]}
+          def run(args, timeout=30, check=True):
+              p=subprocess.run(args,stdout=subprocess.PIPE,stderr=subprocess.STDOUT,text=True,timeout=timeout)
+              if check and p.returncode: raise RuntimeError("exit=%s %s: %s"%(p.returncode,args[0],p.stdout[-1000:]))
+              return p
+          def adb(*args,timeout=30,check=True): return run(["adb","-s","emulator-5580",*args],timeout,check)
+          def snap(name):
+              q=subprocess.run(["adb","-s","emulator-5580","exec-out","screencap","-p"],stdout=subprocess.PIPE,stderr=subprocess.PIPE,timeout=20)
+              if q.returncode==0 and q.stdout.startswith(b"\x89PNG"):
+                  (out/name).write_bytes(q.stdout);status["screenshots"].append({"file":name,"bytes":len(q.stdout)});return True
+              status["notes"].append("screenshot capture failed: "+name+" "+q.stderr.decode("utf-8","replace")[-200:]);return False
+          def hierarchy(label):
+              adb("shell","uiautomator","dump","/sdcard/review56-window.xml",timeout=20,check=False)
+              p=out/(label+".xml");q=adb("pull","/sdcard/review56-window.xml",str(p),timeout=15,check=False)
+              if q.returncode or not p.exists(): status["notes"].append("UI hierarchy unavailable: "+label);return []
+              try:
+                  root=ET.parse(p).getroot();rows=[]
+                  for n in root.iter("node"):
+                      text=(n.attrib.get("text") or "").strip();desc=(n.attrib.get("content-desc") or "").strip()
+                      if text or desc: rows.append({"text":text,"desc":desc,"bounds":n.attrib.get("bounds",""),"class":n.attrib.get("class","")})
+                  return rows
+              except Exception as e: status["notes"].append("UI hierarchy parse failed "+label+": "+str(e));return []
+          def tap_node(rows,pred):
+              for n in rows:
+                  if pred(n):
+                      m=re.fullmatch(r"\[(\d+),(\d+)\]\[(\d+),(\d+)\]",n.get("bounds",""))
+                      if m:
+                          x1,y1,x2,y2=map(int,m.groups());adb("shell","input","tap",str((x1+x2)//2),str((y1+y2)//2));time.sleep(1);return n
+              return None
+          try:
+              run(["keytool","-genkeypair","-keystore",os.environ["KS"],"-storepass",os.environ["PASS"],"-keypass",os.environ["PASS"],"-alias","review56ci","-dname","CN=GharTV ephemeral CI smoke only","-keyalg","RSA","-keysize","2048","-validity","2","-noprompt"],timeout=30)
+              apksigner=pathlib.Path(os.environ["ANDROID_HOME"])/"build-tools/36.0.0/apksigner"
+              run([str(apksigner),"sign","--ks",os.environ["KS"],"--ks-key-alias","review56ci","--ks-pass","pass:"+os.environ["PASS"],"--key-pass","pass:"+os.environ["PASS"],"--out",os.environ["SIGNED"],os.environ["APK"]],timeout=30)
+              run([str(apksigner),"verify","--verbose",os.environ["SIGNED"]],timeout=20)
+              run(["adb","-s","emulator-5580","uninstall","in.ghartv.nova"],timeout=30,check=False)
+              run(["adb","-s","emulator-5580","install",os.environ["SIGNED"]],timeout=60)
+              pkg=adb("shell","dumpsys","package","in.ghartv.nova").stdout
+              m=re.search(r"versionCode=(\d+).*?versionName=([^\s]+)",pkg)
+              if m: status["installed_version_code"]=int(m.group(1));status["installed_version_name"]=m.group(2)
+              status["checks"]["exact_code56_release_installed"]=status["installed_version_code"]==56
+              if not status["checks"]["exact_code56_release_installed"]: raise RuntimeError("installed package did not report versionCode 56")
+              run(["adb","-s","emulator-5580","shell","monkey","-p","in.ghartv.nova","1"],timeout=20,check=False);time.sleep(10)
+              snap("01-release-tv-guide.png");rows=hierarchy("01-release-tv-guide")
+              status["checks"]["discover_visible_on_release_entry"]=any(n["text"]=="Discover" for n in rows)
+              if not status["checks"]["discover_visible_on_release_entry"]:
+                  status["notes"].append("Discover label was not exposed by accessibility hierarchy; guide screenshot retained.")
+              else:
+                  tap_node(rows,lambda n:n["text"]=="Discover");time.sleep(3);snap("02-release-discover-search.png");rows=hierarchy("02-release-discover-search")
+                  status["checks"]["search_toolbar_visible"]=any(n["text"]=="Search" for n in rows) and any(n["text"]=="Back to TV guide" for n in rows)
+                  edit=next((n for n in rows if n["class"].endswith("EditText") and n.get("bounds")),None)
+                  if edit:
+                      tap_node(rows,lambda n:n is edit);adb("shell","input","text","Paper%sLantern");time.sleep(1);rows=hierarchy("02a-query-entered")
+                      tap_node(rows,lambda n:n["text"]=="Search");time.sleep(2);snap("03-release-search-submitted.png")
+                      time.sleep(35);snap("04-release-search-after-35s.png");rows=hierarchy("04-release-search-after-35s")
+                      texts=[n["text"] for n in rows if n["text"]]
+                      status["checks"]["search_submitted"]=True
+                      status["search_observation"]={"elapsed_after_submit_seconds":35,"visible_accessibility_texts":texts[:80],"catalogue_content_visible":any(any(k in t.lower() for k in ("trending movies","popular movies","search results","results for")) for t in texts),"error_or_loading_visible":any(any(k in t.lower() for k in ("could not","network error","timed out","no results","loading")) for t in texts)}
+                      adb("shell","input","keyevent","KEYCODE_SEARCH");time.sleep(1);snap("05-release-search-toolbar-restored.png");rows=hierarchy("05-release-search-toolbar-restored")
+                      status["checks"]["search_key_restores_toolbar"]=any(n["text"]=="Search" for n in rows)
+                      adb("shell","input","keyevent","KEYCODE_MENU");time.sleep(1);rows=hierarchy("05a-options-menu")
+                      route=tap_node(rows,lambda n:"FlixMomo route" in n["text"])
+                      if route:
+                          time.sleep(2);snap("06-release-route-status.png");rr=hierarchy("06-release-route-status")
+                          status["checks"]["route_menu_opened"]=True;status["route_status_visible_text"]=[n["text"] for n in rr if n["text"]][:40]
+                          adb("shell","input","keyevent","KEYCODE_BACK");time.sleep(1)
+                      else: status["checks"]["route_menu_opened"]=False
+                      adb("shell","input","keyevent","KEYCODE_MENU");time.sleep(1);rows=hierarchy("06a-options-menu")
+                      back=tap_node(rows,lambda n:n["text"]=="Back to TV guide")
+                      if back:
+                          time.sleep(3);snap("07-release-return-to-guide.png");rr=hierarchy("07-release-return-to-guide")
+                          status["checks"]["back_to_tv_guide_action_invoked"]=True
+                          status["checks"]["discover_visible_after_return"]=any(n["text"]=="Discover" for n in rr)
+                      else: status["checks"]["back_to_tv_guide_action_invoked"]=False
+                  else:
+                      status["checks"]["search_toolbar_visible"]=False
+                      status["notes"].append("Search EditText not exposed; no search submitted.")
+              status["status"]="OBSERVED"
+          except Exception as e:
+              status["status"]="BLOCKED_OR_FAILED";status["error"]=str(e)
+          finally:
+              (out/"status.json").write_text(json.dumps(status,indent=2)+"\n")
+              print(json.dumps(status,indent=2))
+          PY
       - name: Package same sign-and-open owner flow
         run: python tools/tv-first/package_review56.py
       - uses: actions/upload-artifact@v4
