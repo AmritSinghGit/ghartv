@@ -54,7 +54,13 @@ jobs:
           sudo chmod a+rw /dev/kvm
           sdkmanager 'platforms;android-36' 'build-tools;36.0.0' 'emulator' 'system-images;android-36;google_apis;x86_64'
           mkdir -p "$ANDROID_USER_HOME" "$ANDROID_AVD_HOME"
-          echo no | avdmanager create avd --name GHARTV_REVIEW56_ACCEPTANCE --package 'system-images;android-36;google_apis;x86_64' --path "$ANDROID_AVD_HOME/GHARTV_REVIEW56_ACCEPTANCE.avd"
+          python3 - <<'PY'
+          import subprocess,os
+          cmd=['avdmanager','create','avd','--name','GHARTV_REVIEW56_ACCEPTANCE','--package','system-images;android-36;google_apis;x86_64','--path',os.environ['ANDROID_AVD_HOME']+'/GHARTV_REVIEW56_ACCEPTANCE.avd']
+          p=subprocess.run(cmd,input='no\\n',stdout=subprocess.PIPE,stderr=subprocess.STDOUT,text=True,timeout=45)
+          print(p.stdout)
+          if p.returncode: raise SystemExit(p.returncode)
+          PY
           emulator -avd GHARTV_REVIEW56_ACCEPTANCE -port 5580 -no-window -no-audio -no-snapshot -no-boot-anim -gpu swiftshader -memory 2048 </dev/null > "$RUNNER_TEMP/review56-emulator.log" 2>&1 &
           echo $! > "$RUNNER_TEMP/review56-emulator.pid"
           timeout 60 adb -s emulator-5580 wait-for-device
