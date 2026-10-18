@@ -109,6 +109,20 @@ jobs:
           p=pathlib.Path(os.environ["OUT"])/"01-release-entry.xml"
           root=ET.parse(p).getroot()
           vals=[(n.attrib.get("text",""),n.attrib.get("content-desc",""),n.attrib.get("bounds","")) for n in root.iter("node")]
+          # First launch can legitimately show the existing diagnostics-consent prompt. Choose NOT NOW;
+          # do not opt the owner into telemetry just to reach the guide in a test.
+          consent=next((x for x in vals if x[0]=="NOT NOW" and x[2]),None)
+          if consent:
+              m=re.fullmatch(r"\\[(\\d+),(\\d+)\\]\\[(\\d+),(\\d+)\\]",consent[2])
+              if m:
+                  a,b,c,d=map(int,m.groups())
+                  subprocess.run(["adb","-s","emulator-5580","shell","input","tap",str((a+c)//2),str((b+d)//2)],check=True)
+                  time.sleep(2)
+                  subprocess.run(["adb","-s","emulator-5580","exec-out","screencap","-p"],stdout=open(pathlib.Path(os.environ["OUT"])/"01b-after-consent-not-now.png","wb"),check=True)
+                  subprocess.run(["adb","-s","emulator-5580","shell","uiautomator","dump","/sdcard/review56.xml"],check=True)
+                  subprocess.run(["adb","-s","emulator-5580","pull","/sdcard/review56.xml",str(p)],check=True)
+                  root=ET.parse(p).getroot()
+                  vals=[(n.attrib.get("text",""),n.attrib.get("content-desc",""),n.attrib.get("bounds","")) for n in root.iter("node")]
           print("RELEASE_ENTRY_ACCESSIBILITY", [x for x in vals if x[0] or x[1]][:80])
           if not any(t=="Discover" for t,d,b in vals):
               raise SystemExit("BLOCKED: Discover entry not exposed on actual release UI; screenshot retained")
