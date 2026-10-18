@@ -53,24 +53,33 @@ jobs:
           test -e /dev/kvm
           sudo chmod a+rw /dev/kvm
           sdkmanager 'platforms;android-36' 'build-tools;36.0.0' 'emulator' 'system-images;android-36;google_apis;x86_64'
-          mkdir -p "$ANDROID_USER_HOME" "$ANDROID_AVD_HOME"
+          mkdir -p "$ANDROID_USER_HOME" "$ANDROID_AVD_HOME" "$RUNNER_TEMP/review56-proof"
           python3 - <<'PY'
-          import subprocess,os
-          cmd=['avdmanager','create','avd','--name','GHARTV_REVIEW56_ACCEPTANCE','--package','system-images;android-36;google_apis;x86_64','--path',os.environ['ANDROID_AVD_HOME']+'/GHARTV_REVIEW56_ACCEPTANCE.avd']
-          p=subprocess.run(cmd,input='no\n',stdout=subprocess.PIPE,stderr=subprocess.STDOUT,text=True,timeout=45)
-          print(p.stdout)
-          if p.returncode: raise SystemExit(p.returncode)
+          from pathlib import Path
+          import os, subprocess, time, re
+          out=Path(os.environ["RUNNER_TEMP"])/"review56-proof"
+          sdk=Path(os.environ["ANDROID_HOME"])
+          avd=Path(os.environ["ANDROID_AVD_HOME"])/"GHARTV_REVIEW56_ACCEPTANCE.avd"
+          r=subprocess.run(["avdmanager","create","avd","--name","GHARTV_REVIEW56_ACCEPTANCE","--package","system-images;android-36;google_apis;x86_64","--path",str(avd)],input="no\\n",capture_output=True,text=True,timeout=45)
+          print(r.stdout); print(r.stderr)
+          if r.returncode: raise RuntimeError("AVD_CREATE_FAILED")
+          cfg=avd/"config.ini"
+          t=re.sub(r"^disk.dataPartition.size=.*$","disk.dataPartition.size=1G",cfg.read_text(),flags=re.M)
+          if "disk.dataPartition.size=" not in t: t+="\\ndisk.dataPartition.size=1G\\n"
+          cfg.write_text(t)
+          with (out/"emulator.log").open("w") as log:
+              p=subprocess.Popen([str(sdk/"emulator/emulator"),"-avd","GHARTV_REVIEW56_ACCEPTANCE","-port","5580","-no-window","-no-audio","-no-snapshot","-no-boot-anim","-gpu","swiftshader","-memory","2048"],stdin=subprocess.DEVNULL,stdout=log,stderr=log,start_new_session=True)
+          end=time.monotonic()+180
+          while time.monotonic()<end:
+              if p.poll() is not None: raise RuntimeError("EMULATOR_EXITED: "+(out/"emulator.log").read_text()[-3000:])
+              try: r=subprocess.run(["adb","-s","emulator-5580","shell","getprop","sys.boot_completed"],capture_output=True,text=True,timeout=5)
+              except subprocess.TimeoutExpired: time.sleep(1); continue
+              if r.returncode==0 and r.stdout.strip()=="1": break
+              time.sleep(2)
+          else: raise RuntimeError("EMULATOR_BOOT_TIMEOUT: "+(out/"emulator.log").read_text()[-3000:])
+          for args in (["wm","size","1280x720"],["wm","density","160"],["settings","put","secure","immersive_mode_confirmations","confirmed"],["input","keyevent","KEYCODE_WAKEUP"],["wm","dismiss-keyguard"]):
+              subprocess.run(["adb","-s","emulator-5580","shell"]+args,check=True,timeout=10)
           PY
-          emulator -avd GHARTV_REVIEW56_ACCEPTANCE -port 5580 -no-window -no-audio -no-snapshot -no-boot-anim -gpu swiftshader -memory 2048 </dev/null > "$RUNNER_TEMP/review56-emulator.log" 2>&1 &
-          echo $! > "$RUNNER_TEMP/review56-emulator.pid"
-          timeout 60 adb -s emulator-5580 wait-for-device
-          for i in $(seq 1 90); do
-            [ "$(adb -s emulator-5580 shell getprop sys.boot_completed 2>/dev/null | tr -d '\r')" = "1" ] && break
-            sleep 2
-          done
-          test "$(adb -s emulator-5580 shell getprop sys.boot_completed | tr -d '\r')" = "1"
-          adb -s emulator-5580 shell wm size 1280x720
-          adb -s emulator-5580 shell wm density 160
       - name: Sign exact APK with disposable CI-only key and verify installed identity
         run: |
           set -euo pipefail
