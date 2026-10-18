@@ -195,8 +195,11 @@ jobs:
               run(["adb","-s","emulator-5580","uninstall","in.ghartv.nova"],timeout=30,check=False)
               run(["adb","-s","emulator-5580","install",os.environ["SIGNED"]],timeout=60)
               pkg=adb("shell","dumpsys","package","in.ghartv.nova").stdout
-              m=re.search(r"versionCode=(\d+).*?versionName=([^\s]+)",pkg)
-              if m: status["installed_version_code"]=int(m.group(1));status["installed_version_name"]=m.group(2)
+              mcode=re.search(r"versionCode=(\\d+)",pkg)
+              mname=re.search(r"versionName=([^\\s]+)",pkg)
+              status["installed_package_metadata"]=[line.strip() for line in pkg.splitlines() if "versionCode=" in line or "versionName=" in line][:4]
+              if mcode: status["installed_version_code"]=int(mcode.group(1))
+              if mname: status["installed_version_name"]=mname.group(1)
               status["checks"]["exact_code56_release_installed"]=status["installed_version_code"]==56
               if not status["checks"]["exact_code56_release_installed"]: raise RuntimeError("installed package did not report versionCode 56")
               run(["adb","-s","emulator-5580","shell","monkey","-p","in.ghartv.nova","1"],timeout=20,check=False);time.sleep(10)
