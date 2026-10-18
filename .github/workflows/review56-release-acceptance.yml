@@ -1,0 +1,135 @@
+name: Review56 exact-release acceptance
+on:
+  workflow_dispatch:
+    inputs:
+      source_sha:
+        description: Exact Review56 source SHA (must match the preserved artifact)
+        required: true
+        default: a177968c625098f32e1b41c792c2775758312157
+permissions:
+  contents: read
+  actions: read
+concurrency:
+  group: ghartv-review56-release-acceptance
+  cancel-in-progress: false
+jobs:
+  exact-release-acceptance:
+    if: ${{ github.event.inputs.source_sha == 'a177968c625098f32e1b41c792c2775758312157' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      ANDROID_USER_HOME: /tmp/ghartv-review56-acceptance-android
+      ANDROID_EMULATOR_HOME: /tmp/ghartv-review56-acceptance-android
+      ANDROID_AVD_HOME: /tmp/ghartv-review56-acceptance-avd
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ github.event.inputs.source_sha }}
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+      - uses: android-actions/setup-android@v3
+        with:
+          packages: platform-tools
+          log-accepted-android-sdk-licenses: false
+      - name: Download preserved exact Review56 CI artifact
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          gh run download 39091294715 --repo "${GITHUB_REPOSITORY}" --name ghartv-code56-owner-review --dir "$RUNNER_TEMP/review56"
+          cd "$RUNNER_TEMP/review56"
+          sha256sum -c SHA256SUMS
+          test "$(python3 -c 'import json;print(json.load(open("CANDIDATE.json"))["source"])')" = "${{ github.event.inputs.source_sha }}"
+          test "$(python3 -c 'import json;print(json.load(open("CANDIDATE.json"))["apk_sha256"])')" = "b77a2b9faa262904ee4168bb7888b8f368f026446d735df77c6c19e63b5848e3"
+          cp GharTV-code56-review-unsigned.apk "$RUNNER_TEMP/review56.apk"
+      - name: Boot isolated official Android 36 emulator
+        run: |
+          set -euo pipefail
+          test -e /dev/kvm
+          sudo chmod a+rw /dev/kvm
+          sdkmanager 'platforms;android-36' 'build-tools;36.0.0' 'emulator' 'system-images;android-36;google_apis;x86_64'
+          mkdir -p "$ANDROID_USER_HOME" "$ANDROID_AVD_HOME"
+          echo no | avdmanager create avd --name GHARTV_REVIEW56_ACCEPTANCE --package 'system-images;android-36;google_apis;x86_64' --path "$ANDROID_AVD_HOME/GHARTV_REVIEW56_ACCEPTANCE.avd"
+          (yes no | emulator -avd GHARTV_REVIEW56_ACCEPTANCE -port 5580 -no-window -no-audio -no-snapshot -no-boot-anim -gpu swiftshader -memory 2048 > "$RUNNER_TEMP/review56-emulator.log" 2>&1) &
+          echo $! > "$RUNNER_TEMP/review56-emulator.pid"
+          adb -s emulator-5580 wait-for-device
+          for i in $(seq 1 90); do
+            [ "$(adb -s emulator-5580 shell getprop sys.boot_completed 2>/dev/null | tr -d '\r')" = "1" ] && break
+            sleep 2
+          done
+          test "$(adb -s emulator-5580 shell getprop sys.boot_completed | tr -d '\r')" = "1"
+          adb -s emulator-5580 shell wm size 1280x720
+          adb -s emulator-5580 shell wm density 160
+      - name: Sign exact APK with disposable CI-only key and verify installed identity
+        run: |
+          set -euo pipefail
+          keytool -genkeypair -keystore "$RUNNER_TEMP/acceptance.keystore" -storepass 'ci-only-pass' -keypass 'ci-only-pass' -alias acceptance -dname 'CN=Temporary GharTV CI acceptance only' -keyalg RSA -keysize 2048 -validity 2 -noprompt
+          apksigner="$ANDROID_HOME/build-tools/36.0.0/apksigner"
+          aapt="$ANDROID_HOME/build-tools/36.0.0/aapt"
+          "$aapt" dump badging "$RUNNER_TEMP/review56.apk" > "$RUNNER_TEMP/badging.txt"
+          grep -F "package: name='in.ghartv.nova' versionCode='56' versionName='0.6.0-rc14.7-search-tor-browser-review'" "$RUNNER_TEMP/badging.txt"
+          "$apksigner" sign --ks "$RUNNER_TEMP/acceptance.keystore" --ks-key-alias acceptance --ks-pass pass:ci-only-pass --key-pass pass:ci-only-pass --out "$RUNNER_TEMP/review56-signed.apk" "$RUNNER_TEMP/review56.apk"
+          "$apksigner" verify --verbose "$RUNNER_TEMP/review56-signed.apk"
+          adb -s emulator-5580 install "$RUNNER_TEMP/review56-signed.apk"
+          adb -s emulator-5580 shell dumpsys package in.ghartv.nova > "$RUNNER_TEMP/installed-package.txt"
+          grep -E 'versionCode=56|versionName=0.6.0-rc14.7-search-tor-browser-review' "$RUNNER_TEMP/installed-package.txt"
+      - name: Exercise actual release entry and search toolbar; capture screenshots and hierarchy
+        run: |
+          set -euo pipefail
+          OUT="$RUNNER_TEMP/review56-ui-evidence"
+          mkdir -p "$OUT"
+          export OUT
+          adb -s emulator-5580 shell monkey -p in.ghartv.nova 1
+          sleep 10
+          adb -s emulator-5580 exec-out screencap -p > "$OUT/01-release-entry.png"
+          adb -s emulator-5580 shell uiautomator dump /sdcard/review56.xml
+          adb -s emulator-5580 pull /sdcard/review56.xml "$OUT/01-release-entry.xml"
+          python3 - <<'PY'
+          import os,pathlib,xml.etree.ElementTree as ET
+          p=pathlib.Path(os.environ["OUT"])/"01-release-entry.xml"
+          root=ET.parse(p).getroot()
+          vals=[(n.attrib.get("text",""),n.attrib.get("content-desc",""),n.attrib.get("bounds","")) for n in root.iter("node")]
+          print("RELEASE_ENTRY_ACCESSIBILITY", [x for x in vals if x[0] or x[1]][:80])
+          if not any(t=="Discover" for t,d,b in vals):
+              raise SystemExit("BLOCKED: Discover entry not exposed on actual release UI; screenshot retained")
+          t=next((x for x in vals if x[0]=="Discover" and x[2]),None)
+          import re,subprocess,time
+          def tap(x):
+              m=re.fullmatch(r"\[(\d+),(\d+)\]\[(\d+),(\d+)\]",x[2])
+              if not m: raise RuntimeError("no tappable bounds: "+repr(x))
+              a,b,c,d=map(int,m.groups());subprocess.run(["adb","-s","emulator-5580","shell","input","tap",str((a+c)//2),str((b+d)//2)],check=True)
+          tap(t);time.sleep(3)
+          subprocess.run(["adb","-s","emulator-5580","exec-out","screencap","-p"],stdout=open(pathlib.Path(os.environ["OUT"])/"02-discover-toolbar.png","wb"),check=True)
+          subprocess.run(["adb","-s","emulator-5580","shell","uiautomator","dump","/sdcard/review56-discover.xml"],check=True)
+          subprocess.run(["adb","-s","emulator-5580","pull","/sdcard/review56-discover.xml",str(pathlib.Path(os.environ["OUT"])/"02-discover-toolbar.xml")],check=True)
+          root=ET.parse(pathlib.Path(os.environ["OUT"])/"02-discover-toolbar.xml").getroot()
+          rows=[(n.attrib.get("text",""),n.attrib.get("content-desc",""),n.attrib.get("class",""),n.attrib.get("bounds","")) for n in root.iter("node")]
+          print("DISCOVER_ACCESSIBILITY", [x for x in rows if x[0] or x[1]][:100])
+          if not any(x[0]=="Back to TV guide" for x in rows): raise SystemExit("BLOCKED: expected search-first toolbar/Back-to-guide not exposed")
+          edit=next((x for x in rows if x[2].endswith("EditText") and x[3]),None)
+          if not edit: raise SystemExit("BLOCKED: search field not exposed on production release UI")
+          m=re.fullmatch(r"\[(\d+),(\d+)\]\[(\d+),(\d+)\]",edit[3]);a,b,c,d=map(int,m.groups())
+          subprocess.run(["adb","-s","emulator-5580","shell","input","tap",str((a+c)//2),str((b+d)//2)],check=True)
+          subprocess.run(["adb","-s","emulator-5580","shell","input","text","Paper%slLantern"],check=True)
+          subprocess.run(["adb","-s","emulator-5580","shell","input","keyevent","KEYCODE_ENTER"],check=True)
+          time.sleep(2)
+          subprocess.run(["adb","-s","emulator-5580","exec-out","screencap","-p"],stdout=open(pathlib.Path(os.environ["OUT"])/"03-query-submitted.png","wb"),check=True)
+          subprocess.run(["adb","-s","emulator-5580","shell","input","keyevent","KEYCODE_SEARCH"],check=True);time.sleep(1)
+          subprocess.run(["adb","-s","emulator-5580","exec-out","screencap","-p"],stdout=open(pathlib.Path(os.environ["OUT"])/"04-search-restored.png","wb"),check=True)
+          (pathlib.Path(os.environ["OUT"])/"result.txt").write_text("Production release UI entry and Discover toolbar exercised. Screenshots are observations; public catalogue content is not assumed.\n")
+          PY
+          adb -s emulator-5580 logcat -d -t 4000 > "$OUT/logcat-tail.txt"
+          (cd "$OUT" && shasum -a 256 * > SHA256SUMS)
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: ghartv-review56-exact-release-acceptance
+          path: |
+            ${{ runner.temp }}/review56-ui-evidence/
+            ${{ runner.temp }}/installed-package.txt
+            ${{ runner.temp }}/badging.txt
+            ${{ runner.temp }}/review56-emulator.log
+            ${{ runner.temp }}/review56-signed.apk
+          retention-days: 14
