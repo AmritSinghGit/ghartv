@@ -55,9 +55,9 @@ jobs:
           sdkmanager 'platforms;android-36' 'build-tools;36.0.0' 'emulator' 'system-images;android-36;google_apis;x86_64'
           mkdir -p "$ANDROID_USER_HOME" "$ANDROID_AVD_HOME"
           echo no | avdmanager create avd --name GHARTV_REVIEW56_ACCEPTANCE --package 'system-images;android-36;google_apis;x86_64' --path "$ANDROID_AVD_HOME/GHARTV_REVIEW56_ACCEPTANCE.avd"
-          (yes no | emulator -avd GHARTV_REVIEW56_ACCEPTANCE -port 5580 -no-window -no-audio -no-snapshot -no-boot-anim -gpu swiftshader -memory 2048 > "$RUNNER_TEMP/review56-emulator.log" 2>&1) &
+          emulator -avd GHARTV_REVIEW56_ACCEPTANCE -port 5580 -no-window -no-audio -no-snapshot -no-boot-anim -gpu swiftshader -memory 2048 </dev/null > "$RUNNER_TEMP/review56-emulator.log" 2>&1 &
           echo $! > "$RUNNER_TEMP/review56-emulator.pid"
-          adb -s emulator-5580 wait-for-device
+          timeout 60 adb -s emulator-5580 wait-for-device
           for i in $(seq 1 90); do
             [ "$(adb -s emulator-5580 shell getprop sys.boot_completed 2>/dev/null | tr -d '\r')" = "1" ] && break
             sleep 2
