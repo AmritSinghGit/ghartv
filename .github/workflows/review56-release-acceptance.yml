@@ -118,6 +118,9 @@ jobs:
               if m:
                   a,b,c,d=map(int,m.groups())
                   subprocess.run(["adb","-s","emulator-5580","shell","input","tap",str((a+c)//2),str((b+d)//2)],check=True)
+                  time.sleep(1)
+                  # NOT NOW returns focus to the Jio number field; close its IME before tapping the film entry.
+                  subprocess.run(["adb","-s","emulator-5580","shell","input","keyevent","KEYCODE_BACK"],check=True)
                   time.sleep(2)
                   subprocess.run(["adb","-s","emulator-5580","exec-out","screencap","-p"],stdout=open(pathlib.Path(os.environ["OUT"])/"01b-after-consent-not-now.png","wb"),check=True)
                   subprocess.run(["adb","-s","emulator-5580","shell","uiautomator","dump","/sdcard/review56.xml"],check=True)
