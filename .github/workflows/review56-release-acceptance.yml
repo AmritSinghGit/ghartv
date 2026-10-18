@@ -60,12 +60,12 @@ jobs:
           out=Path(os.environ["RUNNER_TEMP"])/"review56-proof"
           sdk=Path(os.environ["ANDROID_HOME"])
           avd=Path(os.environ["ANDROID_AVD_HOME"])/"GHARTV_REVIEW56_ACCEPTANCE.avd"
-          r=subprocess.run(["avdmanager","create","avd","--name","GHARTV_REVIEW56_ACCEPTANCE","--package","system-images;android-36;google_apis;x86_64","--path",str(avd)],input="no\\n",capture_output=True,text=True,timeout=45)
+          r=subprocess.run(["avdmanager","create","avd","--name","GHARTV_REVIEW56_ACCEPTANCE","--package","system-images;android-36;google_apis;x86_64","--path",str(avd)],input="no\n",capture_output=True,text=True,timeout=45)
           print(r.stdout); print(r.stderr)
           if r.returncode: raise RuntimeError("AVD_CREATE_FAILED")
           cfg=avd/"config.ini"
           t=re.sub(r"^disk.dataPartition.size=.*$","disk.dataPartition.size=1G",cfg.read_text(),flags=re.M)
-          if "disk.dataPartition.size=" not in t: t+="\\ndisk.dataPartition.size=1G\\n"
+          if "disk.dataPartition.size=" not in t: t+="\ndisk.dataPartition.size=1G\n"
           cfg.write_text(t)
           with (out/"emulator.log").open("w") as log:
               p=subprocess.Popen([str(sdk/"emulator/emulator"),"-avd","GHARTV_REVIEW56_ACCEPTANCE","-port","5580","-no-window","-no-audio","-no-snapshot","-no-boot-anim","-gpu","swiftshader","-memory","2048"],stdin=subprocess.DEVNULL,stdout=log,stderr=log,start_new_session=True)
