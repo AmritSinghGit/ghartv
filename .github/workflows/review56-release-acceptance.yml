@@ -125,9 +125,11 @@ jobs:
                   root=ET.parse(p).getroot()
                   vals=[(n.attrib.get("text",""),n.attrib.get("content-desc",""),n.attrib.get("bounds","")) for n in root.iter("node")]
           print("RELEASE_ENTRY_ACCESSIBILITY", [x for x in vals if x[0] or x[1]][:80])
-          if not any(t=="Discover" for t,d,b in vals):
-              raise SystemExit("BLOCKED: Discover entry not exposed on actual release UI; screenshot retained")
-          t=next((x for x in vals if x[0]=="Discover" and x[2]),None)
+          # A fresh install lands on the Jio onboarding page; the production Discover entry there is the
+          # explicit "FlixMomo · search without Jio login" card. Existing logged-in installs may show Discover.
+          t=next((x for x in vals if x[2] and (x[0]=="Discover" or x[0].startswith("FlixMomo · search without Jio login"))),None)
+          if t is None:
+              raise SystemExit("BLOCKED: neither Discover nor the production FlixMomo entry is exposed; screenshot retained")
           import re,subprocess,time
           def tap(x):
               m=re.fullmatch(r"\[(\d+),(\d+)\]\[(\d+),(\d+)\]",x[2])
