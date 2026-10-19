@@ -518,7 +518,7 @@ public final class MainActivity extends Activity implements ChannelNavigator.Lis
                             "duration_ms", System.currentTimeMillis() - refreshStartedAt,
                             "channel_count", refreshed.size()));
                     JioNetwork.reportFallbackIfNew(this);
-                    if (ownerInitiated) Toast.makeText(this, JioNetwork.fallbackUsedRecently()?"Live guide updated through secure DNS fallback":"Live guide updated", Toast.LENGTH_SHORT).show();
+                    if (ownerInitiated) Toast.makeText(this, JioNetwork.fallbackUsedRecently()?"Live guide updated through "+JioNetwork.recoveryLabel():"Live guide updated", Toast.LENGTH_SHORT).show();
                 });
             } catch (Exception error) {
                 mainHandler.post(() -> {
@@ -790,7 +790,7 @@ public final class MainActivity extends Activity implements ChannelNavigator.Lis
         }
         long updated = repository.lastUpdatedAt();
         String when = updated <= 0 ? "not downloaded yet" : TvUi.istDateTime(updated);
-        catalogueStatus.setText(String.format(Locale.US, "JIO LIVE  •  %,d channels  •  guide updated %s%s  •  %s", allChannels.size(), when, JioNetwork.fallbackUsedRecently()?"  •  secure DNS fallback":"", ReviewDisplay.title()));
+        catalogueStatus.setText(String.format(Locale.US, "JIO LIVE  •  %,d channels  •  guide updated %s  •  %s  •  %s", allChannels.size(), when, JioNetwork.recoveryLabel(), ReviewDisplay.title()));
         catalogueStatus.setTextColor(TvUi.MUTED);
     }
 

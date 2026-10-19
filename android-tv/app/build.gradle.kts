@@ -13,8 +13,8 @@ android {
         applicationId = "in.ghartv.nova"
         minSdk = 26
         targetSdk = 35
-        versionCode = 58
-        versionName = "0.6.0-rc14.9-jio-dns-iptv-review"
+        versionCode = 59
+        versionName = "0.6.0-rc15.0-jio-iptv-route-recovery"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
     buildFeatures { buildConfig = true }

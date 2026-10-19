@@ -16,9 +16,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
-import java.util.concurrent.TimeUnit;
-
-import okhttp3.OkHttpClient;
+import okhttp3.Call;
 import okhttp3.Request;
 import okhttp3.Response;
 
@@ -31,7 +29,7 @@ public class IptvRepository {
     private static final int MAX_BYTES = 6 * 1024 * 1024;
     private static final long FRESH_MS = 6L * 60L * 60L * 1000L;
     private final Context context;
-    private final OkHttpClient client;
+    private final Call.Factory client;
 
     public static final class Result {
         public final List<IptvChannel> channels;
@@ -51,10 +49,7 @@ public class IptvRepository {
 
     public IptvRepository(Context value) {
         context = value.getApplicationContext();
-        client = new OkHttpClient.Builder()
-                .connectTimeout(8, TimeUnit.SECONDS).readTimeout(18, TimeUnit.SECONDS)
-                .callTimeout(25, TimeUnit.SECONDS).retryOnConnectionFailure(true)
-                .followRedirects(true).followSslRedirects(false).build();
+        client = IptvNetwork.catalogue(context);
     }
 
     public Result load(boolean force) throws Exception {

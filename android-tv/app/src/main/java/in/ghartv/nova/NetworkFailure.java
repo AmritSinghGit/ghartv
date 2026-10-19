@@ -11,6 +11,29 @@ public final class NetworkFailure {
         }
         return "UNCLASSIFIED";
     }
+    /** Route failures may use secure DNS/Tor. TLS, HTTP, auth and DRM failures may not. */
+    public static boolean routeFailure(Throwable error) {
+        for(int i=0; error!=null && i<16; i++,error=error.getCause()) {
+            if(error instanceof java.net.UnknownHostException
+                    || error instanceof java.net.ConnectException
+                    || error instanceof java.net.NoRouteToHostException
+                    || error instanceof java.net.SocketTimeoutException) return true;
+            if(error instanceof javax.net.ssl.SSLException) return false;
+        }
+        return false;
+    }
+    /** Safe for non-idempotent retry because no application response body was exchanged. */
+    public static boolean beforeRequestConnection(Throwable error) {
+        for(int i=0; error!=null && i<16; i++,error=error.getCause()) {
+            if(error instanceof java.net.UnknownHostException
+                    || error instanceof java.net.ConnectException
+                    || error instanceof java.net.NoRouteToHostException) return true;
+            if(error instanceof javax.net.ssl.SSLException
+                    || error instanceof java.net.SocketTimeoutException) return false;
+        }
+        return false;
+    }
+
     public static String tlsReason(Throwable error) {
         boolean tls=false,chain=false;
         for(int i=0;error!=null&&i<12;i++,error=error.getCause()) {

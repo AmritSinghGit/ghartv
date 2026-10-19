@@ -52,7 +52,7 @@ final class FilmTorController {
     void setEnabled(boolean enabled){
         if(closed)return;preferTorThisSession=enabled;preferences.edit().putBoolean(KEY_DECIDED,true).putBoolean(KEY_ENABLED,enabled).apply();policy.configureConsent(enabled,false);event("film_tor_consent","enabled",enabled);
         if(!enabled){if(proxy.applied()||policy.state()==FilmTorFallback.State.STARTING_TOR||policy.state()==FilmTorFallback.State.APPLYING_PROXY)requestDirect();else{transport.cancel();listener.routeChanged(false);listener.status("Tor fallback is off. FlixMomo remains on the direct connection.");}}
-        else listener.status("Tor is the default route for FlixMomo. JioTV, updates and diagnostics remain direct.");
+        else listener.status("Tor is the default route for FlixMomo. This film proxy excludes JioTV, IPTV, updates and diagnostics.");
     }
     void tryTorNow(){
         if(closed||proxy.applied())return;preferTorThisSession=true;
@@ -78,7 +78,7 @@ final class FilmTorController {
     }
     private void applyProxy(long ticket,int port){
         listener.status("Tor is ready. Applying the FlixMomo-only route…");
-        proxy.apply(port,acknowledged->{if(closed||ticket!=policy.generation()){if(acknowledged)proxy.clear(ignored->{});return;}FilmTorFallback.Action action=policy.proxyApplied(ticket,acknowledged);if(action==FilmTorFallback.Action.RELOAD_THROUGH_TOR){listener.routeChanged(true);listener.status("Retrying FlixMomo through Tor. JioTV, updates and diagnostics remain direct.");event("film_tor_route","route","tor");listener.reload(currentUrl);}else if(action==FilmTorFallback.Action.SHOW_FAILURE)showFailure();});
+        proxy.apply(port,acknowledged->{if(closed||ticket!=policy.generation()){if(acknowledged)proxy.clear(ignored->{});return;}FilmTorFallback.Action action=policy.proxyApplied(ticket,acknowledged);if(action==FilmTorFallback.Action.RELOAD_THROUGH_TOR){listener.routeChanged(true);listener.status("Retrying FlixMomo through Tor. This film proxy excludes JioTV, IPTV, updates and diagnostics.");event("film_tor_route","route","tor");listener.reload(currentUrl);}else if(action==FilmTorFallback.Action.SHOW_FAILURE)showFailure();});
     }
     private void showFailure(){String message=policy.consentEnabled()?"The Tor route could not be prepared. Use FlixMomo route in Menu to retry directly or restart Tor.":"Tor is off. Use FlixMomo route in Menu to enable it or continue directly.";event("film_tor_failure","failure",pendingFailure.name());listener.failure(message);}
     void destroy(){if(closed)return;closed=true;boolean clear=policy.close();if(clear||proxy.applied())proxy.clear(ignored->transport.close());else transport.close();}

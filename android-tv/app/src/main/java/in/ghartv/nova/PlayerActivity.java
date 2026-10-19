@@ -440,7 +440,7 @@ public final class PlayerActivity extends Activity implements ChannelNavigator.L
                 || info.streamUrl.toLowerCase(Locale.ROOT).contains(".mpd")) ? "dash" : "hls";
         playbackDrm = info.drm;
         Map<String, String> streamHeaders = jsonMap(info.streamHeaders);
-        OkHttpDataSource.Factory dataSourceFactory = new OkHttpDataSource.Factory(JioNetwork.media())
+        OkHttpDataSource.Factory dataSourceFactory = new OkHttpDataSource.Factory(JioNetwork.media(this))
                 .setUserAgent(streamHeaders.getOrDefault("User-Agent", "GharTV-Jio-Live/" + BuildConfig.VERSION_NAME))
                 .setDefaultRequestProperties(streamHeaders);
         DefaultMediaSourceFactory mediaSourceFactory = new DefaultMediaSourceFactory(dataSourceFactory);
@@ -455,8 +455,8 @@ public final class PlayerActivity extends Activity implements ChannelNavigator.L
         PictureShape.apply(this, playerView, channel == null ? "" : channel.id);
         if(PlaybackComfort.light(this))player.setTrackSelectionParameters(player.getTrackSelectionParameters().buildUpon().setMaxVideoSize(1280,720).build());
         final int listenerGeneration=playbackGeneration;
-        firstFrameDeadline=()->{if(listenerGeneration==playbackGeneration){repository.api().cancelPlayback();releasePlayer();loading.setVisibility(View.GONE);showPlaybackError(new java.io.IOException("First picture timed out; retry or select another channel"));}};
-        mainHandler.postDelayed(firstFrameDeadline,18000L);
+        firstFrameDeadline=()->{if(listenerGeneration==playbackGeneration){repository.api().cancelPlayback();releasePlayer();loading.setVisibility(View.GONE);showPlaybackError(new java.io.IOException("First picture timed out after direct, secure DNS and Tor recovery; retry or select another channel"));}};
+        mainHandler.postDelayed(firstFrameDeadline,120_000L);
         player.addListener(new Player.Listener() {
             @Override public void onRenderedFirstFrame(){if(listenerGeneration!=playbackGeneration)return;if(firstFrameDeadline!=null)mainHandler.removeCallbacks(firstFrameDeadline);LocalPerformance.record(PlayerActivity.this,"first_picture_ms",android.os.SystemClock.elapsedRealtime()-tuneElapsed);}
 

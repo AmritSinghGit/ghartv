@@ -46,7 +46,7 @@ public final class NetworkDiagnostics {
     public static void show(Activity activity) {
         if(activity.isFinishing() || activity.isDestroyed()) return;
         AlertDialog wait = new AlertDialog.Builder(activity).setTitle("Checking this TV's connection")
-            .setMessage("Checking DNS and HTTPS separately for Jio, IPTV-org, registered FlixMomo addresses, updates and diagnostics. Jio uses system DNS first and a TLS-verified fallback only if system DNS fails. No login, stream or private data is sent. This can take up to 15 seconds.")
+            .setMessage("Checking DNS and HTTPS separately for Jio, IPTV-org, registered FlixMomo addresses, updates and diagnostics. Jio and IPTV use system DNS first, TLS-verified DNS recovery next, and an app-local Tor route only after route failures. No login, stream or private data is sent. This can take up to 15 seconds.")
             .setNegativeButton("Close", null).show();
         check(activity.getApplicationContext(), "manual_" + SystemClock.elapsedRealtime(), result -> {
             if(!wait.isShowing() || activity.isFinishing() || activity.isDestroyed()) return;
@@ -77,7 +77,7 @@ public final class NetworkDiagnostics {
             boolean jio=host[0].startsWith("jio_");
             try {InetAddress.getAllByName(host[1]);r.put("dns","RESOLVED");}
             catch(java.net.UnknownHostException direct){if(!jio)throw direct;JioNetwork.dns().lookup(host[1]);r.put("dns","SECURE_FALLBACK");}
-            OkHttpClient client=jio?JioNetwork.api():CLIENT;
+            OkHttpClient client=jio?JioNetwork.directApi():CLIENT;
             try(Response response=client.newCall(new Request.Builder().url("https://"+host[1]+"/").head().build()).execute()) {
                 r.put("https","REACHABLE"); r.put("http",response.code());
                 java.util.Date serverDate=response.headers().getDate("Date");

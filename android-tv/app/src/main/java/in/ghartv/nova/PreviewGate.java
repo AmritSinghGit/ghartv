@@ -3,7 +3,7 @@ package in.ghartv.nova;
 /** Main-thread preview ownership. A completed preview never loops without fresh focus. */
 public final class PreviewGate {
     public static final long FOCUS_DELAY_MS=650L;
-    public static final long FIRST_FRAME_BUDGET_MS=4500L;
+    public static final long FIRST_FRAME_BUDGET_MS=15000L;
     public static final long VISIBLE_PREVIEW_MS=12000L;
     public enum Phase { IDLE, WAITING, LOADING, PLAYING, FINISHED, FAILED }
     private String key="";

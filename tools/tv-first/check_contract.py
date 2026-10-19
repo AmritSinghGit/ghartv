@@ -18,7 +18,7 @@ assert 'playerView.setOnClickListener(view -> showGuide(true, nextButton))' in p
 assert 'MediaStore.ACTION_PICK_IMAGES' in family and 'ACTION_GET_CONTENT' in family and 'takePersistableUriPermission' in family
 assert 'takePlaybackHandoff' in api and 'PLAYBACK_HANDOFF_MS = 20_000L' in api
 gradle=(R/'android-tv/app/build.gradle.kts').read_text()
-assert 'versionCode = 58' in gradle and '0.6.0-rc14.9-jio-dns-iptv-review' in gradle
+assert 'versionCode = 59' in gradle and '0.6.0-rc15.0-jio-iptv-route-recovery' in gradle
 films=(J/'FlixMomoActivity.java').read_text();cursor=(J/'RemoteWebCursor.java').read_text();controls=(J/'FilmNativeControls.java').read_text()
 assert 'cursor.handle(event)' in films and 'onRenderProcessGone' in films and 'certificateFailure(handler::cancel,error)' in films and 'cancel.run()' in films and '.proceed()' not in films
 assert 'onPageFinished' in films and 'if(mainFrameError)' in films
@@ -48,17 +48,21 @@ assert 'beginPreferredNavigation(url)' in films and 'event_version_code' in film
 assert (R/'android-tv/app/src/androidTest/java/in/ghartv/nova/Review56SimplifiedDiscoverTest.java').is_file()
 assert 'FilmPageFocus.script' in controls and 'pageKey(event)' in films
 assert 'FilmHomeView' in (J/'FilmHomeView.java').read_text()
-notice=(J/'ReviewNotice.java').read_text();assert 'uses an app-local Tor route by default' in notice and 'JioTV, updates and diagnostics remain direct' in notice
+notice=(J/'ReviewNotice.java').read_text();assert 'uses an app-local Tor route by default' in notice and 'FlixMomo proxy never captures JioTV, IPTV, updates or diagnostics' in notice
 assert (J/'FilmTorFallback.java').is_file() and (J/'FilmTorController.java').is_file() and (J/'FilmTorProxy.java').is_file() and (J/'FilmTorTransport.java').is_file()
 proxy=(J/'FilmTorProxy.java').read_text();assert 'setReverseBypassEnabled(true)' not in proxy and 'bypassSimpleHostnames()' in proxy and 'jiotvapi.cdn.jio.com' in proxy and 'ghartv-telemetry.ghartv-47d9a0.workers.dev' in proxy and 'api.themoviedb.org' in (J/'FilmTorFallback.java').read_text()
 assert 'info.guardianproject:tor-android:0.4.8.22' in gradle and 'androidx.webkit:webkit:1.17.1' in gradle
 assert (J/'IptvActivity.java').is_file() and (J/'IptvPlayerActivity.java').is_file() and (J/'IptvPlaylistParser.java').is_file()
 assert 'https://iptv-org.github.io/iptv/index.m3u' in (J/'AppConfig.java').read_text()
 assert 'Only public HTTPS streams are admitted' in (J/'IptvPlaylistParser.java').read_text()
-assert 'System DNS first' in (J/'JioSecureDns.java').read_text() and 'cloudflare-dns.com/dns-query' in (J/'JioSecureDns.java').read_text()
-assert 'JioNetwork.api()' in api and 'IptvActivity.class' in m and 'actionButton("FlixMomo")' in m
+assert 'System DNS first' in (J/'JioSecureDns.java').read_text() and 'cloudflare-dns.com/dns-query' in (J/'SecureDns.java').read_text() and 'dns.google/dns-query' in (J/'SecureDns.java').read_text()
+assert 'JioNetwork.api(this.context)' in api and 'IptvActivity.class' in m and 'actionButton("FlixMomo")' in m
 assert 'okhttp-dnsoverhttps:4.12.0' in gradle and 'media3-datasource-okhttp:1.10.1' in gradle
 assert (R/'android-tv/app/src/androidTest/java/in/ghartv/nova/Review58IptvAndDnsTest.java').is_file()
+assert (R/'android-tv/app/src/androidTest/java/in/ghartv/nova/Review59NetworkRecoveryTest.java').is_file()
+route=(J/'RouteFallbackCallFactory.java').read_text();assert 'secure-DNS-only -> app-local Tor' in route and 'NetworkRouteState.recent(family)' in route
+assert 'IptvNetwork.media(this)' in (J/'IptvPlayerActivity.java').read_text() and 'IptvNetwork.catalogue(context)' in (J/'IptvRepository.java').read_text()
+assert '120_000L' in player and 'FIRST_FRAME_BUDGET_MS=15000L' in (J/'PreviewGate.java').read_text()
 assert json.loads((R/'RELEASE_HOLD.json').read_text())['public_feed_write'] is False
 print('CODE40_HOME_SHARED_SEARCH_DETAIL_FOCUS_PUNJABI_PLUS_REMOVAL_RELEASE_HOLD=PASS')
 

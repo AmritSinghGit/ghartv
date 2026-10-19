@@ -17,13 +17,10 @@ import java.util.Map;
 import java.util.HashSet;
 import java.util.Set;
 import java.util.UUID;
-import java.util.concurrent.TimeUnit;
 
-import okhttp3.ConnectionPool;
 import okhttp3.FormBody;
 import okhttp3.Headers;
 import okhttp3.MediaType;
-import okhttp3.OkHttpClient;
 import okhttp3.Request;
 import okhttp3.RequestBody;
 import okhttp3.Response;
@@ -34,8 +31,7 @@ public final class JioApiClient {
     private static final String PLAYER_USER_AGENT = "plaYtv/7.1.5 (Linux;Android 9) ExoPlayerLib/2.11.7";
 
     private final Context context;
-    private static final OkHttpClient SHARED = JioNetwork.api();
-    private final OkHttpClient client = SHARED;
+    private final okhttp3.Call.Factory client;
     private final java.util.Set<okhttp3.Call> playbackCalls = java.util.concurrent.ConcurrentHashMap.newKeySet();
     private static final long PLAYBACK_HANDOFF_MS = 20_000L;
     private static final java.util.LinkedHashMap<String, CachedPlayback> PLAYBACK_HANDOFFS =
@@ -48,7 +44,10 @@ public final class JioApiClient {
             info = value.copy();
         }
     }
-    public JioApiClient(Context context) { this.context=context.getApplicationContext(); }
+    public JioApiClient(Context context) {
+        this.context=context.getApplicationContext();
+        this.client=JioNetwork.api(this.context);
+    }
     public void cancelPlayback() { for(okhttp3.Call c:playbackCalls)c.cancel(); }
     public static void clearPlaybackHandoffs() { synchronized (PLAYBACK_HANDOFFS) { PLAYBACK_HANDOFFS.clear(); } }
 

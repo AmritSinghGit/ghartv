@@ -121,7 +121,7 @@ public final class HeroPreviewController {
     }
     private void prepare(PlaybackInfo info,long token){
         Map<String,String> headers=jsonMap(info.streamHeaders);
-        OkHttpDataSource.Factory http=new OkHttpDataSource.Factory(JioNetwork.preview())
+        OkHttpDataSource.Factory http=new OkHttpDataSource.Factory(JioNetwork.preview(activity))
             .setUserAgent(headers.getOrDefault("User-Agent","GharTV-Jio-Live/"+BuildConfig.VERSION_NAME))
             .setDefaultRequestProperties(headers);
         player=new ExoPlayer.Builder(activity)
@@ -161,9 +161,9 @@ public final class HeroPreviewController {
         String code=NetworkFailure.classify(error);
         String cause;
         switch(code){
-            case "DNS_UNAVAILABLE":cause="TV cannot resolve the channel service";break;
+            case "DNS_UNAVAILABLE":cause="Channel DNS failed after recovery";break;
             case "TLS_FAILED":cause="Secure channel connection failed";break;
-            case "TIMED_OUT":cause="Channel service timed out";break;
+            case "TIMED_OUT":cause="Channel routes timed out";break;
             case "CONNECTION_FAILED":cause="Channel service could not be reached";break;
             default:cause="Preview unavailable";
         }

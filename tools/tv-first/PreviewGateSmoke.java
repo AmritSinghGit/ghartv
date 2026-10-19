@@ -12,7 +12,7 @@ public class PreviewGateSmoke {
   g.focus(true);long timeout=g.arm();ok(g.begin(timeout));ok(g.finish(timeout,true));ok(g.arm()==-1);
   g.select("c");long c=g.arm();ok(g.begin(c));g.enabled(false);ok(!g.current(c));ok(g.arm()==-1);
   g.enabled(true);long resumed=g.arm();ok(g.begin(resumed));g.select("");ok(!g.current(resumed));ok(g.arm()==-1);
-  ok(PreviewGate.FOCUS_DELAY_MS==650L);ok(PreviewGate.FIRST_FRAME_BUDGET_MS==4500L);ok(PreviewGate.VISIBLE_PREVIEW_MS==12000L);
+  ok(PreviewGate.FOCUS_DELAY_MS==650L);ok(PreviewGate.FIRST_FRAME_BUDGET_MS==15000L);ok(PreviewGate.VISIBLE_PREVIEW_MS==12000L);
   System.out.println("PREVIEW_GATE="+checks+"_PASS");
  }
 }

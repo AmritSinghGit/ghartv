@@ -131,7 +131,7 @@ public class FlixMomoActivity extends Activity {
     private void showFilmConnection(){
         String version="unknown";try{android.content.pm.PackageInfo p=WebView.getCurrentWebViewPackage();if(p!=null)version=p.versionName;}catch(Exception ignored){}
         String route=torController==null?"Unavailable":torController.routeLabel()+(torController.enabled()?" · Tor default enabled":" · Tor default off");
-        String message=ReviewDisplay.technical()+"\n\n"+connectionDetail+"\n\nFlixMomo route: "+route+"\nTV time: "+new java.util.Date()+"\nAndroid: "+android.os.Build.VERSION.RELEASE+" · WebView: "+version+"\n\nCertificate checks stay on. No passwords, cookies or search text are sent by a connection check. JioTV, updates and diagnostics are never routed through this film fallback.";
+        String message=ReviewDisplay.technical()+"\n\n"+connectionDetail+"\n\nFlixMomo route: "+route+"\nTV time: "+new java.util.Date()+"\nAndroid: "+android.os.Build.VERSION.RELEASE+" · WebView: "+version+"\n\nCertificate checks stay on. No passwords, cookies or search text are sent by a connection check. This film proxy never captures JioTV, IPTV, updates or diagnostics; JioTV/IPTV route recovery is separate.";
         new android.app.AlertDialog.Builder(this).setTitle("FlixMomo connection")
             .setMessage(message).setPositiveButton("Check DNS / HTTPS",(d,w)->NetworkDiagnostics.show(this))
             .setNeutralButton("Registered addresses",(d,w)->chooseFilmOrigin()).setNegativeButton("Close",null).show();
@@ -555,7 +555,7 @@ public class FlixMomoActivity extends Activity {
     private void showTorConsent(FilmTorController.ConsentResult callback){
         final boolean[] answered={false};
         android.app.AlertDialog dialog=new android.app.AlertDialog.Builder(this).setTitle("Use Tor for FlixMomo?")
-            .setMessage("The direct FlixMomo catalogue connection failed. GharTV can start an app-local Tor route and retry only the registered FlixMomo, TMDB catalogue and poster hosts. JioTV, app updates and diagnostics remain direct. Tor can be slower and is not a guarantee of Tor Browser anonymity. Certificate and provider access checks stay enabled.")
+            .setMessage("The direct FlixMomo catalogue connection failed. GharTV can start an app-local Tor route and retry only the registered FlixMomo, TMDB catalogue and poster hosts. This film proxy excludes JioTV, IPTV, app updates and diagnostics. JioTV/IPTV recovery is separate. Tor can be slower and is not a guarantee of Tor Browser anonymity. Certificate and provider access checks stay enabled.")
             .setPositiveButton("Enable and retry",(d,w)->{answered[0]=true;callback.answer(true);})
             .setNegativeButton("Stay direct",(d,w)->{answered[0]=true;callback.answer(false);}).create();
         dialog.setOnCancelListener(d->{if(!answered[0])callback.answer(false);});dialog.show();
@@ -568,7 +568,7 @@ public class FlixMomoActivity extends Activity {
         java.util.List<String> actions=new java.util.ArrayList<>();
         if(torController.active())actions.add("Use direct connection");else actions.add("Start Tor now");
         actions.add(torController.enabled()?"Disable Tor by default":"Use Tor by default");
-        String message="Current route: "+torController.routeLabel()+". Tor is the default for the film browser in Review 56 and is limited to registered FlixMomo/TMDB hosts; JioTV, updates and diagnostics remain direct.\n\nLast local film error: "+lastFilmFailure;
+        String message="Current route: "+torController.routeLabel()+". Tor is the default for the film browser in Review 56 and is limited to registered FlixMomo/TMDB hosts; this film proxy excludes JioTV, IPTV, updates and diagnostics; JioTV/IPTV recovery is separate.\n\nLast local film error: "+lastFilmFailure;
         new android.app.AlertDialog.Builder(this).setTitle("FlixMomo route").setMessage(message).setItems(actions.toArray(new String[0]),(d,n)->{String choice=actions.get(n);if(choice.startsWith("Use direct"))torController.requestDirect();else if(choice.startsWith("Start Tor"))torController.tryTorNow();else torController.setEnabled(!torController.enabled());}).setNegativeButton("Close",null).show();
     }
     private void openProviderTitle(String url){
