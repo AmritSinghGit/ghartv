@@ -1,0 +1,60 @@
+name: Apply bounded Review57 repair
+on:
+  push:
+    branches: ['codex/ghartv-remove-auto-preview']
+    paths: ['.github/workflows/apply-review57-bounded.yml']
+permissions:
+  contents: write
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+      - name: Apply exact bounded patch and publish through the existing branch
+        run: |
+          set -euo pipefail
+          BRANCH='codex/ghartv-remove-auto-preview'
+          REMOTE_BEFORE=$(git ls-remote origin "refs/heads/$BRANCH" | cut -f1)
+          test "$REMOTE_BEFORE" = "$GITHUB_SHA"
+          echo '45cae353fb5a23c8f833da23c3077caaebe3633f401b33265435d21243dc434f  .github/review57-app.patch.gz.b64' | sha256sum -c -
+          base64 -d .github/review57-app.patch.gz.b64 | gzip -d > /tmp/review57.patch
+          echo 'a06d389a238f6532093e2196cb18740f7d98414ef09a63909cfc98cb0e4f6b6b  /tmp/review57.patch' | sha256sum -c -
+          git apply --check /tmp/review57.patch
+          git apply /tmp/review57.patch
+          python - <<'PY'
+          from pathlib import Path
+          path=Path('.github/workflows/tv-experience-contract.yml')
+          text=path.read_text()
+          replacements={
+              'GharTV-code56-review-unsigned.apk':'GharTV-code57-review-unsigned.apk',
+              'Verify329 retained/new cases plus real app-local Tor smoke':'Verify330 retained/new cases plus real app-local Tor smoke',
+              "grep -q 'OK (121 tests)' /tmp/ghartv-candidate/proof/android-focused-tests.txt":"grep -q 'OK (122 tests)' /tmp/ghartv-candidate/proof/android-focused-tests.txt",
+              "grep -q 'OK (329 tests)' /tmp/ghartv-candidate/proof/android-tests.txt":"grep -q 'OK (330 tests)' /tmp/ghartv-candidate/proof/android-tests.txt",
+              'python tools/tv-first/package_review56.py':'python tools/tv-first/package_review57.py',
+              'ghartv-code56-owner-review':'ghartv-code57-owner-review',
+          }
+          for old,new in replacements.items():
+              count=text.count(old)
+              if count!=1: raise SystemExit(f'expected one workflow anchor for {old!r}, got {count}')
+              text=text.replace(old,new)
+          start='      - name: Exact code56 release APK smoke and screenshots (CI emulator only)\n'
+          end='      - name: Package same sign-and-open owner flow\n'
+          if start in text:
+              if text.count(start)!=1 or text.count(end)!=1: raise SystemExit('ambiguous old exact-release block')
+              a=text.index(start); b=text.index(end,a)
+              text=text[:a]+text[b:]
+          path.write_text(text)
+          PY
+          rm .github/review57-app.patch.gz.b64 .github/workflows/apply-review57-bounded.yml
+          python tools/tv-first/check_contract.py
+          python -m py_compile tools/tv-first/package_review57.py
+          test "$(git diff --name-only | wc -l | tr -d ' ')" -ge 7
+          git config user.name 'Amrit Singh'
+          git config user.email 'reach.amritsingh@gmail.com'
+          git add -A
+          git commit -m 'Review57: keep submitted film search browser-only'
+          test "$(git ls-remote origin "refs/heads/$BRANCH" | cut -f1)" = "$GITHUB_SHA"
+          git push origin "HEAD:$BRANCH"
