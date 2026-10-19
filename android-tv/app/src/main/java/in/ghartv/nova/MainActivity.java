@@ -243,7 +243,7 @@ public final class MainActivity extends Activity implements ChannelNavigator.Lis
         header.addView(new View(this), new LinearLayout.LayoutParams(0, 1, 1f));
 
         Button search = actionButton("Search / mic");
-        search.setContentDescription("Search live channels and films. Type or use the microphone.");
+        search.setContentDescription("Search Jio live channels and films. Type or use the microphone.");
         search.setOnClickListener(view -> showSearch());
         header.addView(search, headerButtonParams());
 
@@ -251,9 +251,16 @@ public final class MainActivity extends Activity implements ChannelNavigator.Lis
         refresh.setOnClickListener(view -> refreshCatalogue(true));
         header.addView(refresh, headerButtonParams());
 
-        Button films = actionButton("Discover");
+        Button iptv = actionButton("IPTV");
+        iptv.setContentDescription("Open the separate public IPTV-org guide. No Jio account is shared.");
+        iptv.setOnClickListener(view -> startActivity(new Intent(this, IptvActivity.class)));
+        LinearLayout.LayoutParams iptvParams = new LinearLayout.LayoutParams(TvUi.dp(this, 76), TvUi.dp(this, 40));
+        iptvParams.leftMargin = TvUi.dp(this, 6);
+        header.addView(iptv, iptvParams);
+
+        Button films = actionButton("FlixMomo");
         films.setOnClickListener(view -> startActivity(new Intent(this, FlixMomoActivity.class)));
-        LinearLayout.LayoutParams filmParams = new LinearLayout.LayoutParams(TvUi.dp(this, 94), TvUi.dp(this, 40));
+        LinearLayout.LayoutParams filmParams = new LinearLayout.LayoutParams(TvUi.dp(this, 104), TvUi.dp(this, 40));
         filmParams.leftMargin = TvUi.dp(this, 6);
         header.addView(films, filmParams);
 
@@ -510,7 +517,8 @@ public final class MainActivity extends Activity implements ChannelNavigator.Lis
                             "manual", ownerInitiated,
                             "duration_ms", System.currentTimeMillis() - refreshStartedAt,
                             "channel_count", refreshed.size()));
-                    if (ownerInitiated) Toast.makeText(this, "Live guide updated", Toast.LENGTH_SHORT).show();
+                    JioNetwork.reportFallbackIfNew(this);
+                    if (ownerInitiated) Toast.makeText(this, JioNetwork.fallbackUsedRecently()?"Live guide updated through secure DNS fallback":"Live guide updated", Toast.LENGTH_SHORT).show();
                 });
             } catch (Exception error) {
                 mainHandler.post(() -> {
@@ -776,13 +784,13 @@ public final class MainActivity extends Activity implements ChannelNavigator.Lis
 
     private void updateCatalogueStatus(String error) {
         if (error != null && !error.isEmpty()) {
-            catalogueStatus.setText("Live TV needs attention  •  " + error);
+            catalogueStatus.setText("Jio TV needs attention  •  " + error + "  •  IPTV and FlixMomo remain separate");
             catalogueStatus.setTextColor(Color.rgb(255, 142, 154));
             return;
         }
         long updated = repository.lastUpdatedAt();
         String when = updated <= 0 ? "not downloaded yet" : TvUi.istDateTime(updated);
-        catalogueStatus.setText(String.format(Locale.US, "LIVE  •  %,d channels  •  guide updated %s  •  %s", allChannels.size(), when, ReviewDisplay.title()));
+        catalogueStatus.setText(String.format(Locale.US, "JIO LIVE  •  %,d channels  •  guide updated %s%s  •  %s", allChannels.size(), when, JioNetwork.fallbackUsedRecently()?"  •  secure DNS fallback":"", ReviewDisplay.title()));
         catalogueStatus.setTextColor(TvUi.MUTED);
     }
 

@@ -13,8 +13,8 @@ android {
         applicationId = "in.ghartv.nova"
         minSdk = 26
         targetSdk = 35
-        versionCode = 57
-        versionName = "0.6.0-rc14.8-search-browser-invariant-review"
+        versionCode = 58
+        versionName = "0.6.0-rc14.9-jio-dns-iptv-review"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
     buildFeatures { buildConfig = true }
@@ -61,5 +61,7 @@ dependencies {
     implementation("androidx.media3:media3-exoplayer-dash:1.10.1")
     implementation("androidx.media3:media3-ui:1.10.1")
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
+    implementation("com.squareup.okhttp3:okhttp-dnsoverhttps:4.12.0")
+    implementation("androidx.media3:media3-datasource-okhttp:1.10.1")
     implementation("com.github.bumptech.glide:glide:4.16.0")
 }

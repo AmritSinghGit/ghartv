@@ -2,4 +2,6 @@
     
     <activity android:name=".Review40HarnessActivity" android:exported="false" />    <activity android:name=".Review42HarnessActivity" android:exported="false" />
     <activity android:name=".Review51PointerHarness" android:exported="false" />
-    <activity android:name=".Review56SimpleHarnessActivity" android:exported="false" /></application></manifest>
+    <activity android:name=".Review56SimpleHarnessActivity" android:exported="false" />
+    <activity android:name=".Review58IptvHarnessActivity" android:exported="false" android:screenOrientation="landscape" />
+    <activity android:name=".Review58IptvPlayerHarnessActivity" android:exported="false" android:screenOrientation="landscape" /></application></manifest>

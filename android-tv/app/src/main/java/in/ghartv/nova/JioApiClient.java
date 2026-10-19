@@ -34,10 +34,7 @@ public final class JioApiClient {
     private static final String PLAYER_USER_AGENT = "plaYtv/7.1.5 (Linux;Android 9) ExoPlayerLib/2.11.7";
 
     private final Context context;
-    private static final OkHttpClient SHARED = new OkHttpClient.Builder()
-            .connectTimeout(8, TimeUnit.SECONDS).readTimeout(12, TimeUnit.SECONDS)
-            .writeTimeout(12, TimeUnit.SECONDS).callTimeout(16, TimeUnit.SECONDS)
-            .retryOnConnectionFailure(true).connectionPool(new ConnectionPool(8,5,TimeUnit.MINUTES)).build();
+    private static final OkHttpClient SHARED = JioNetwork.api();
     private final OkHttpClient client = SHARED;
     private final java.util.Set<okhttp3.Call> playbackCalls = java.util.concurrent.ConcurrentHashMap.newKeySet();
     private static final long PLAYBACK_HANDOFF_MS = 20_000L;
@@ -344,6 +341,7 @@ public final class JioApiClient {
         Request request = new Request.Builder().url(AppConfig.PLAYBACK).headers(headers).post(form).build();
         try (TrackedPlayback tracked = playbackExecute(request)) {
             Response response=tracked.response;
+            JioNetwork.reportFallbackIfNew(context);
             int status = response.code();
             String raw = response.body() == null ? "" : response.body().string();
 
@@ -474,6 +472,7 @@ public final class JioApiClient {
         Request request = new Request.Builder().url(url).headers(headers).get().build();
         try (Response response = client.newCall(request).execute()) {
             if (!response.isSuccessful()) throw new IOException("HTTP " + response.code() + " for " + url);
+            JioNetwork.reportFallbackIfNew(context);
             return new JSONObject(response.body() == null ? "{}" : response.body().string());
         }
     }

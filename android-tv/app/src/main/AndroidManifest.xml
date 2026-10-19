@@ -54,6 +54,8 @@
             android:screenOrientation="landscape" />
         <activity android:name=".NativeFilmPlayerActivity" android:exported="false" android:screenOrientation="landscape" />
         <activity android:name=".FlixMomoActivity" android:exported="false" android:screenOrientation="landscape" />
+        <activity android:name=".IptvActivity" android:exported="false" android:screenOrientation="landscape" />
+        <activity android:name=".IptvPlayerActivity" android:exported="false" android:screenOrientation="landscape" />
 
         <provider
             android:name="androidx.core.content.FileProvider"

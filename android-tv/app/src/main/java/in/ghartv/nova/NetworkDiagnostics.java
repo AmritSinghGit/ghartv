@@ -35,7 +35,7 @@ public final class NetworkDiagnostics {
         {"jio_playback", "jiotvapi.media.jio.com"}, {"jio_guide", "jiotvapi.cdn.jio.com"},
         {"updates", "api.github.com"}, {"collector", "ghartv-telemetry.ghartv-47d9a0.workers.dev"},
         {"flixmomo_app", "flixmomo.app"}, {"flixmomo_st", "flixmomo.st"}, {"flixmomo_bet", "flixmomo.bet"},
-        {"film_catalogue", "api.themoviedb.org"}
+        {"film_catalogue", "api.themoviedb.org"}, {"iptv_org", "iptv-org.github.io"}
     };
     public static boolean reviewProbe(Activity activity) {
         String id = activity.getIntent().getStringExtra("ghartv_network_probe");
@@ -46,7 +46,7 @@ public final class NetworkDiagnostics {
     public static void show(Activity activity) {
         if(activity.isFinishing() || activity.isDestroyed()) return;
         AlertDialog wait = new AlertDialog.Builder(activity).setTitle("Checking this TV's connection")
-            .setMessage("Checking DNS and HTTPS separately for Jio, registered FlixMomo addresses, updates and diagnostics. No login, stream or private data is sent. This can take up to 15 seconds.")
+            .setMessage("Checking DNS and HTTPS separately for Jio, IPTV-org, registered FlixMomo addresses, updates and diagnostics. Jio uses system DNS first and a TLS-verified fallback only if system DNS fails. No login, stream or private data is sent. This can take up to 15 seconds.")
             .setNegativeButton("Close", null).show();
         check(activity.getApplicationContext(), "manual_" + SystemClock.elapsedRealtime(), result -> {
             if(!wait.isShowing() || activity.isFinishing() || activity.isDestroyed()) return;
@@ -74,8 +74,11 @@ public final class NetworkDiagnostics {
     private static JSONObject probe(String[] host) {
         long start=SystemClock.elapsedRealtime(); JSONObject r=Telemetry.data("service",host[0],"dns","NOT_CHECKED","https","NOT_CHECKED");
         try {
-            InetAddress.getAllByName(host[1]); r.put("dns","RESOLVED");
-            try(Response response=CLIENT.newCall(new Request.Builder().url("https://"+host[1]+"/").head().build()).execute()) {
+            boolean jio=host[0].startsWith("jio_");
+            try {InetAddress.getAllByName(host[1]);r.put("dns","RESOLVED");}
+            catch(java.net.UnknownHostException direct){if(!jio)throw direct;JioNetwork.dns().lookup(host[1]);r.put("dns","SECURE_FALLBACK");}
+            OkHttpClient client=jio?JioNetwork.api():CLIENT;
+            try(Response response=client.newCall(new Request.Builder().url("https://"+host[1]+"/").head().build()).execute()) {
                 r.put("https","REACHABLE"); r.put("http",response.code());
                 java.util.Date serverDate=response.headers().getDate("Date");
                 if(serverDate!=null)r.put("clock_offset_seconds",(System.currentTimeMillis()-serverDate.getTime())/1000);

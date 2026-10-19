@@ -21,6 +21,7 @@ public final class AppConfig {
     public static final String TOKEN_REFRESH = "https://auth.media.jio.com/tokenservice/apis/v1/refreshtoken?langId=6";
     public static final String SSO_REFRESH = "https://tv.media.jio.com/apis/v2.0/loginotp/refresh?langId=6";
     public static final String LOGO_BASE = "https://jiotv.catchup.cdn.jio.com/dare_images/images/";
+    public static final String IPTV_ORG_PLAYLIST = "https://iptv-org.github.io/iptv/index.m3u";
 
     public static final String GITHUB_REPOSITORY = "https://github.com/AmritSinghGit/ghartv";
     public static final String INSTALL_PAGE = "https://amritsinghgit.github.io/ghartv/";
