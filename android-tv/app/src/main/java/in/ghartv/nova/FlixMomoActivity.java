@@ -108,7 +108,7 @@ public class FlixMomoActivity extends Activity {
     private FrameLayout stage;
     private View custom;
     private WebChromeClient.CustomViewCallback customCallback;
-    private boolean mainFrameError,pageReady,loading,mouseActive;
+    private boolean mainFrameError,pageReady,loading,mouseActive,browserSearchSubmitted;
     private String lastRequested=HOME;
     private final FilmConnectionState connection=new FilmConnectionState();
     private String connectionDetail="No certificate failure observed in this screen session.";
@@ -121,6 +121,12 @@ public class FlixMomoActivity extends Activity {
     private void filmFailure(String stage,String reason){
         lastFilmFailure=stage+" · "+reason+" · route "+filmRoute();
         if(filmErrors++<8)Telemetry.error(this,stage,new IllegalStateException(reason),Telemetry.data("provider","flixmomo","route",filmRoute(),"event_version_code",BuildConfig.VERSION_CODE));
+    }
+    /** Submitted film searches own the full provider browser until Search/Menu explicitly restores the toolbar. */
+    private void keepSubmittedSearchBrowserOnly(){
+        if(!simplifiedDiscoverExperience()||!browserSearchSubmitted||!pointerPage||custom!=null||chrome==null)return;
+        chrome.setVisibility(View.GONE);
+        if(query!=null&&query.hasFocus())hideKeyboard();
     }
     private void showFilmConnection(){
         String version="unknown";try{android.content.pm.PackageInfo p=WebView.getCurrentWebViewPackage();if(p!=null)version=p.versionName;}catch(Exception ignored){}
@@ -338,7 +344,7 @@ public class FlixMomoActivity extends Activity {
             }
             @Override public void onPageCommitVisible(WebView view,String url){if(!mainFrameError&&allowedTop(Uri.parse(url))&&!mouseActive&&!pointerPage)nativeControls.documentReady();}
             @Override public void onPageStarted(WebView view,String url,Bitmap icon){
-                cursor.cancel();nativeControls.started();if("about:blank".equals(url))return;if(torController!=null&&!java.util.Objects.equals(url,lastRequested))torController.beginNavigation(url);connection.started(url);
+                cursor.cancel();nativeControls.started();keepSubmittedSearchBrowserOnly();if("about:blank".equals(url))return;if(torController!=null&&!java.util.Objects.equals(url,lastRequested))torController.beginNavigation(url);connection.started(url);
                 if(detailRequested&&FilmProviderPolicy.detail(Uri.parse(url)))detailPanel.followNavigation(url);
                 else if(detailRequested&&allowedTop(Uri.parse(url))&&!FilmProviderPolicy.detail(Uri.parse(url)))usePage();mainFrameError=false;pageReady=false;loading=true;if(allowedTop(Uri.parse(url)))lastRequested=url;
                 status.setText("Opening FlixMomo…");if(pointerPage){if(!simplifiedDiscoverExperience()||chrome.getVisibility()!=View.VISIBLE)providerStatus("Opening the registered provider page… Menu and Back remain available.",false);nativeControls.pause();playNotice.setVisibility(View.GONE);networkNotice.setVisibility(View.GONE);}handler.removeCallbacks(slowLoad);handler.postDelayed(slowLoad,20000);
@@ -346,7 +352,7 @@ public class FlixMomoActivity extends Activity {
             @Override public void onPageFinished(WebView view,String url){
                 loading=false;handler.removeCallbacks(slowLoad);if(mainFrameError){pageReady=false;return;}
                 if("/dummy".equals(Uri.parse(url).getPath())){fail("FlixMomo declined this session. No provider protection was changed.");return;}
-                pageReady=allowedTop(Uri.parse(url));if(pageReady){hideProviderStatus();if(java.util.Objects.equals(url,view.getUrl()))rememberProviderHome(url);status.setText(homeRequested?"Loading FlixMomo suggestions…":detailRequested?"Loading title information…":"Original page loaded · Menu shows GharTV controls");if(!mouseActive&&!pointerPage)nativeControls.documentReady();if(pointerPage&&!pageEditor&&(!simplifiedDiscoverExperience()||chrome.getVisibility()!=View.VISIBLE))resumePagePointer(false);}
+                keepSubmittedSearchBrowserOnly();pageReady=allowedTop(Uri.parse(url));if(pageReady){hideProviderStatus();if(java.util.Objects.equals(url,view.getUrl()))rememberProviderHome(url);status.setText(homeRequested?"Loading FlixMomo suggestions…":detailRequested?"Loading title information…":"Original page loaded · Menu shows GharTV controls");if(!mouseActive&&!pointerPage)nativeControls.documentReady();if(pointerPage&&!pageEditor&&(!simplifiedDiscoverExperience()||chrome.getVisibility()!=View.VISIBLE))resumePagePointer(false);}
             }
             @Override public void doUpdateVisitedHistory(WebView view,String url,boolean reload){
                 if(!loading&&allowedTop(Uri.parse(url))&&!java.util.Objects.equals(lastRequested,url)){
@@ -430,6 +436,7 @@ public class FlixMomoActivity extends Activity {
         homePanel.focusRefresh();
     }
     private void showBrowserSearch(boolean reload){
+        browserSearchSubmitted=false;
         if(custom!=null)exitFullScreen();if(startMonitor!=null)startMonitor.leave();handler.removeCallbacks(detailWait);handler.removeCallbacks(playDeadline);playUntil=0;
         pointerPage=true;pageEditor=false;mouseActive=false;homeRequested=false;detailRequested=false;nativeSearch="";
         if(homePanel!=null)homePanel.setVisibility(View.GONE);if(detailPanel!=null)detailPanel.setVisibility(View.GONE);liveGeneration++;if(liveResults!=null)liveResults.setVisibility(View.GONE);
@@ -491,7 +498,7 @@ public class FlixMomoActivity extends Activity {
         if(recovery){pageEditor=false;mouseActive=false;cursor.enable(false);retryButton.requestFocus();}
     }
     private void fail(String message){
-        if(playUntil>0){playUntil=0;playMessage(message);}if(nativeControls!=null)nativeControls.failure();mainFrameError=true;pageReady=false;loading=false;handler.removeCallbacks(slowLoad);status.setText(message);
+        if(playUntil>0){playUntil=0;playMessage(message);}if(nativeControls!=null)nativeControls.failure();keepSubmittedSearchBrowserOnly();mainFrameError=true;pageReady=false;loading=false;handler.removeCallbacks(slowLoad);status.setText(message);
         if(homeRequested&&homePanel!=null)homePanel.unavailable(message);
         else if(detailRequested&&detailPanel!=null)detailPanel.unavailable(message);
         else if(pointerPage){networkNotice.setVisibility(View.GONE);providerStatus(message,true);}
@@ -525,7 +532,7 @@ public class FlixMomoActivity extends Activity {
     }
     private void search(){String text=UnifiedSearch.clean(query.getText().toString());if(!UnifiedSearch.valid(text)){status.setText("Enter 2–120 characters.");return;}
         filmEvent("film_search");
-        if(simplifiedDiscoverExperience()){nativeSearch=text;openProviderTitle(providerOrigin()+"/search?q="+Uri.encode(text));return;}
+        if(simplifiedDiscoverExperience()){browserSearchSubmitted=true;nativeSearch=text;openProviderTitle(providerOrigin()+"/search?q="+Uri.encode(text));handler.post(this::keepSubmittedSearchBrowserOnly);return;}
         resumeCatalogueMode();if(startMonitor!=null)startMonitor.leave();playUntil=0;playNotice.setVisibility(View.GONE);detailRequested=false;detailPanel.setVisibility(View.GONE);homeRequested=true;nativeSearch=text;homePanel.mode(text);homePanel.discardSuggestions();homePanel.setVisibility(View.VISIBLE);homePanel.bringToFront();nativeControls.hideAll();cursor.enable(false);showLiveResults(text);homePanel.loading();navigate(providerOrigin()+"/search?q="+Uri.encode(text),false);homePanel.focusRefresh();
     }
     private void navigate(String url,boolean page){if(!allowedTop(Uri.parse(url))){fail("Only the registered provider can open here.");return;}hideKeyboard();lastRequested=url;boolean deferred=false;if(torController!=null){if(torDefaultForFilms()&&simplifiedDiscoverExperience())deferred=torController.beginPreferredNavigation(url);else torController.beginNavigation(url);}connection.begin(url);connectionWarning="";networkNotice.setVisibility(View.GONE);if(pointerPage&&chrome.getVisibility()!=View.VISIBLE)providerStatus("Opening the registered provider page… Menu and Back remain available.",false);else hideProviderStatus();if(browser==null){fail("Provider browser stopped. Press Retry to reopen it.");return;}if(deferred){showTorStatus("Starting Tor for FlixMomo. Search remains available while the route is prepared.");return;}loadProviderPage(url);if(page)usePage();}
@@ -553,9 +560,9 @@ public class FlixMomoActivity extends Activity {
             .setNegativeButton("Stay direct",(d,w)->{answered[0]=true;callback.answer(false);}).create();
         dialog.setOnCancelListener(d->{if(!answered[0])callback.answer(false);});dialog.show();
     }
-    private void showTorStatus(String message){handler.removeCallbacks(slowLoad);if(simplifiedDiscoverExperience()&&chrome.getVisibility()==View.VISIBLE){credit.setText(ReviewDisplay.details()+torRouteSuffix()+" · "+message);credit.setVisibility(View.VISIBLE);}else if(homeRequested&&homePanel!=null)homePanel.routeStatus(message);else if(pointerPage)providerStatus(message,false);else{networkNotice.setText(message);networkNotice.setVisibility(View.VISIBLE);}}
-    private void showTorFailure(String message){if(homeRequested&&homePanel!=null)homePanel.unavailable(message);else if(pointerPage)providerStatus(message,true);else{networkNotice.setText(message);networkNotice.setVisibility(View.VISIBLE);}}
-    private void reloadForTorRoute(String url){mainFrameError=false;loading=true;if(homeRequested&&homePanel!=null)homePanel.loading();navigate(url,false);}
+    private void showTorStatus(String message){handler.removeCallbacks(slowLoad);keepSubmittedSearchBrowserOnly();if(simplifiedDiscoverExperience()&&chrome.getVisibility()==View.VISIBLE){credit.setText(ReviewDisplay.details()+torRouteSuffix()+" · "+message);credit.setVisibility(View.VISIBLE);}else if(homeRequested&&homePanel!=null)homePanel.routeStatus(message);else if(pointerPage)providerStatus(message,false);else{networkNotice.setText(message);networkNotice.setVisibility(View.VISIBLE);}}
+    private void showTorFailure(String message){keepSubmittedSearchBrowserOnly();if(homeRequested&&homePanel!=null)homePanel.unavailable(message);else if(pointerPage)providerStatus(message,true);else{networkNotice.setText(message);networkNotice.setVisibility(View.VISIBLE);}}
+    private void reloadForTorRoute(String url){mainFrameError=false;loading=true;keepSubmittedSearchBrowserOnly();if(homeRequested&&homePanel!=null)homePanel.loading();navigate(url,false);keepSubmittedSearchBrowserOnly();handler.post(this::keepSubmittedSearchBrowserOnly);}
     private void showTorRoute(){
         if(torController==null){new android.app.AlertDialog.Builder(this).setTitle("FlixMomo route").setMessage("Tor fallback is unavailable in this test harness.").setPositiveButton("Close",null).show();return;}
         java.util.List<String> actions=new java.util.ArrayList<>();
@@ -565,6 +572,7 @@ public class FlixMomoActivity extends Activity {
         new android.app.AlertDialog.Builder(this).setTitle("FlixMomo route").setMessage(message).setItems(actions.toArray(new String[0]),(d,n)->{String choice=actions.get(n);if(choice.startsWith("Use direct"))torController.requestDirect();else if(choice.startsWith("Start Tor"))torController.tryTorNow();else torController.setEnabled(!torController.enabled());}).setNegativeButton("Close",null).show();
     }
     private void openProviderTitle(String url){
+        if(simplifiedDiscoverExperience())browserSearchSubmitted=true;
         if(url==null||!allowedTop(Uri.parse(url))){status.setText("That address is not registered. Current page preserved.");return;}
         if(custom!=null)exitFullScreen();
         if(startMonitor!=null)startMonitor.leave();handler.removeCallbacks(detailWait);handler.removeCallbacks(playDeadline);playUntil=0;
@@ -623,6 +631,7 @@ public class FlixMomoActivity extends Activity {
     private void hideKeyboard(){InputMethodManager keyboard=(InputMethodManager)getSystemService(INPUT_METHOD_SERVICE);if(keyboard!=null)keyboard.hideSoftInputFromWindow(query.getWindowToken(),0);query.clearFocus();}
     private void usePage(){if(pointerPage){homeRequested=false;detailRequested=false;homePanel.setVisibility(View.GONE);detailPanel.setVisibility(View.GONE);liveResults.setVisibility(View.GONE);resumePagePointer(false);return;}inputEpoch++;noteInput("USE_PAGE");credit.setVisibility(View.GONE);networkNotice.setVisibility(View.GONE);playNotice.setVisibility(View.GONE);detailRequested=false;if(detailPanel!=null)detailPanel.setVisibility(View.GONE);homeRequested=false;if(homePanel!=null)homePanel.setVisibility(View.GONE);if(nativeControls!=null){nativeControls.hideAll();if(!mouseActive)nativeControls.resume();}hideKeyboard();chrome.setVisibility(View.GONE);if(browser!=null){browser.requestFocus();cursor.enter();nativeControls.enterPosters();}}
     private void toolbar(){
+        browserSearchSubmitted=false;
         if(custom!=null){exitFullScreen();return;}
         inputEpoch++;noteInput("TOOLBAR_OPEN");
         if(mouseActive)leaveMouse(false);nativeControls.pause();nativeControls.hideAll();cursor.enable(false);

@@ -18,7 +18,7 @@ assert 'playerView.setOnClickListener(view -> showGuide(true, nextButton))' in p
 assert 'MediaStore.ACTION_PICK_IMAGES' in family and 'ACTION_GET_CONTENT' in family and 'takePersistableUriPermission' in family
 assert 'takePlaybackHandoff' in api and 'PLAYBACK_HANDOFF_MS = 20_000L' in api
 gradle=(R/'android-tv/app/build.gradle.kts').read_text()
-assert 'versionCode = 56' in gradle and '0.6.0-rc14.7-search-tor-browser-review' in gradle
+assert 'versionCode = 57' in gradle and '0.6.0-rc14.8-search-browser-invariant-review' in gradle
 films=(J/'FlixMomoActivity.java').read_text();cursor=(J/'RemoteWebCursor.java').read_text();controls=(J/'FilmNativeControls.java').read_text()
 assert 'cursor.handle(event)' in films and 'onRenderProcessGone' in films and 'certificateFailure(handler::cancel,error)' in films and 'cancel.run()' in films and '.proceed()' not in films
 assert 'onPageFinished' in films and 'if(mainFrameError)' in films
@@ -43,7 +43,7 @@ assert 'MovieHubActivity' not in manifest and 'Punjabi +' not in m
 assert 'UnifiedSearch.voice(this)' in m and 'UnifiedSearch.open(this,q)' in m
 assert 'UnifiedSearch.dialog(this)' in player and 'UnifiedSearch.voice(this)' in player
 assert 'FilmHomeView' in films and 'showLiveResults(text)' in films
-assert 'protected boolean simplifiedDiscoverExperience(){return true;}' in films
+assert 'protected boolean simplifiedDiscoverExperience(){return true;}' in films and 'keepSubmittedSearchBrowserOnly' in films and 'browserSearchSubmitted=false;' in films
 assert 'beginPreferredNavigation(url)' in films and 'event_version_code' in films
 assert (R/'android-tv/app/src/androidTest/java/in/ghartv/nova/Review56SimplifiedDiscoverTest.java').is_file()
 assert 'FilmPageFocus.script' in controls and 'pageKey(event)' in films
