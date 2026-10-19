@@ -25,7 +25,7 @@ public class Review53PreviewFailureTest {
     @Test public void reusedGuideIntentPreservesInvalidProbeWithoutRunningIt(){
         ui(()->{MainActivity guide=new MainActivity();Intent invalid=new Intent().putExtra("ghartv_network_probe","bad");guide.onNewIntent(invalid);assertSame(invalid,guide.getIntent());assertEquals("bad",guide.getIntent().getStringExtra("ghartv_network_probe"));});
     }
-    @Test public void dnsFailureIsDistinguishedWithoutPrivateMessage()throws Exception{failure("dns","resolve");}
+    @Test public void dnsFailureIsDistinguishedWithoutPrivateMessage()throws Exception{failure("dns","DNS failed after recovery");}
     @Test public void tlsFailureDoesNotSuggestDisablingSecurity()throws Exception{failure("tls","Secure");}
     @Test public void timeoutIsNotMisreportedAsDns()throws Exception{failure("timeout","timed out");}
     @Test public void connectionFailureDoesNotClaimPlayback()throws Exception{failure("connection","could not be reached");}

@@ -26,6 +26,7 @@ import okhttp3.FormBody;
 import okhttp3.Protocol;
 import okhttp3.Request;
 import okhttp3.Response;
+import okhttp3.ResponseBody;
 import okio.Timeout;
 
 import static org.junit.Assert.*;
@@ -241,6 +242,7 @@ public class Review59NetworkRecoveryTest {
 
     private static Response response(Request request, int code) {
         return new Response.Builder().request(request).protocol(Protocol.HTTP_1_1)
-                .code(code).message(code == 204 ? "No Content" : "Fixture").build();
+                .code(code).message(code == 204 ? "No Content" : "Fixture")
+                .body(ResponseBody.create(new byte[0], null)).build();
     }
 }

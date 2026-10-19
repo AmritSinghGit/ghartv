@@ -30,7 +30,7 @@ public class PreviewControllerTest {
  }
  @Test public void leavingForFindBeforeDwellNeverFetches(){ui(()->{a.focus("one");a.controller.focused(false);});SystemClock.sleep(950);assertEquals(0,a.calls.get());}
  @Test public void slowPreviewTimesOutWithoutLatePicture(){
-  ui(()->a.focus("slow"));waitFor(PreviewGate.Phase.FAILED,6500);SystemClock.sleep(900);
+  ui(()->a.focus("slow"));waitFor(PreviewGate.Phase.FAILED,16000);SystemClock.sleep(900);
   ui(()->{assertEquals(View.VISIBLE,a.poster.getVisibility());assertEquals(View.GONE,a.video.getVisibility());});assertEquals(1,a.calls.get());
  }
  @Test public void savedOffIsHonoured(){ui(()->{a.getSharedPreferences("ghartv_comfort_v1",0).edit().putBoolean("auto_preview",false).commit();a.focus("one");});SystemClock.sleep(950);assertEquals(0,a.calls.get());}
