@@ -52,7 +52,7 @@ public class Review58IptvAndDnsTest {
         List<String> groups=IptvRepository.groups(Arrays.asList(a,b));assertEquals("All",groups.get(0));assertEquals(1,java.util.Collections.frequency(groups,"All"));
     }
 
-    private static InetAddress address()throws Exception{return InetAddress.getByAddress(new byte[]{1,1,1,1});}
+    private static InetAddress address(){return InetAddress.getLoopbackAddress();}
     @Test public void jioDnsUsesSystemBeforeFallback()throws Exception{
         AtomicInteger fallback=new AtomicInteger();Dns system=host->Arrays.asList(address()),secondary=host->{fallback.incrementAndGet();return Arrays.asList(address());};JioSecureDns dns=new JioSecureDns(system,secondary);assertEquals(1,dns.lookup("jiotvapi.cdn.jio.com").size());assertEquals(0,fallback.get());
     }
