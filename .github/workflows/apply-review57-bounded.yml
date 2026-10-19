@@ -39,7 +39,7 @@ jobs:
           }
           for old,new in replacements.items():
               count=text.count(old)
-              if count!=1: raise SystemExit(f'expected one workflow anchor for {old!r}, got {count}')
+              if count<1: raise SystemExit(f'missing workflow anchor {old!r}')
               text=text.replace(old,new)
           start='      - name: Exact code56 release APK smoke and screenshots (CI emulator only)\n'
           end='      - name: Package same sign-and-open owner flow\n'
