@@ -147,7 +147,7 @@ public class FilmCatalogueObservationTest {
                 Field f=NetworkDiagnostics.class.getDeclaredField("HOSTS");f.setAccessible(true);
                 String[][] rows=(String[][])f.get(null);Map<String,String> hosts=new HashMap<>();
                 for(String[] row:rows)assertNull("Service identifiers must be unique",hosts.put(row[0],row[1]));
-                assertEquals(8,hosts.size());
+                assertEquals(9,hosts.size());
                 assertEquals("jiotvapi.media.jio.com",hosts.get("jio_playback"));
                 assertEquals("jiotvapi.cdn.jio.com",hosts.get("jio_guide"));
                 assertEquals("api.github.com",hosts.get("updates"));
@@ -156,6 +156,7 @@ public class FilmCatalogueObservationTest {
                 assertEquals("flixmomo.st",hosts.get("flixmomo_st"));
                 assertEquals("flixmomo.bet",hosts.get("flixmomo_bet"));
                 assertEquals("api.themoviedb.org",hosts.get("film_catalogue"));
+                assertEquals("iptv-org.github.io",hosts.get("iptv_org"));
             }catch(ReflectiveOperationException error){throw new AssertionError(error);}
         });
     }
