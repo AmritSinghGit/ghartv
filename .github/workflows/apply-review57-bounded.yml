@@ -19,7 +19,9 @@ jobs:
           BRANCH='codex/ghartv-remove-auto-preview'
           REMOTE_BEFORE=$(git ls-remote origin "refs/heads/$BRANCH" | cut -f1)
           test "$REMOTE_BEFORE" = "$GITHUB_SHA"
-          base64 -d .github/review57-app.patch.gz.b64 | gzip -d > /tmp/review57.patch
+          cat .github/review57-patch-01.b64 .github/review57-patch-02.b64 .github/review57-patch-03.b64 .github/review57-patch-04.b64 .github/review57-patch-05.b64 | tr -d '\r\n' > /tmp/review57.patch.gz.b64
+          echo '45cae353fb5a23c8f833da23c3077caaebe3633f401b33265435d21243dc434f  /tmp/review57.patch.gz.b64' | sha256sum -c -
+          base64 -d /tmp/review57.patch.gz.b64 | gzip -d > /tmp/review57.patch
           echo 'a06d389a238f6532093e2196cb18740f7d98414ef09a63909cfc98cb0e4f6b6b  /tmp/review57.patch' | sha256sum -c -
           git apply --check /tmp/review57.patch
           git apply /tmp/review57.patch
@@ -47,7 +49,7 @@ jobs:
               text=text[:a]+text[b:]
           path.write_text(text)
           PY
-          rm .github/review57-app.patch.gz.b64 .github/workflows/apply-review57-bounded.yml
+          rm -f .github/review57-app.patch.gz.b64 .github/review57-patch-01.b64 .github/review57-patch-02.b64 .github/review57-patch-03.b64 .github/review57-patch-04.b64 .github/review57-patch-05.b64 .github/workflows/apply-review57-bounded.yml
           python tools/tv-first/check_contract.py
           python -m py_compile tools/tv-first/package_review57.py
           test "$(git diff --name-only | wc -l | tr -d ' ')" -ge 7
