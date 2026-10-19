@@ -19,7 +19,7 @@ jobs:
           BRANCH='codex/ghartv-remove-auto-preview'
           REMOTE_BEFORE=$(git ls-remote origin "refs/heads/$BRANCH" | cut -f1)
           test "$REMOTE_BEFORE" = "$GITHUB_SHA"
-          echo '45cae353fb5a23c8f833da23c3077caaebe3633f401b33265435d21243dc434f  .github/review57-app.patch.gz.b64' | sha256sum -c -
+          echo 'da3577cadf1dac616c78b7966fd028d6aba026716f03d980259356db4e718bd9  .github/review57-app.patch.gz.b64' | sha256sum -c -
           base64 -d .github/review57-app.patch.gz.b64 | gzip -d > /tmp/review57.patch
           echo 'a06d389a238f6532093e2196cb18740f7d98414ef09a63909cfc98cb0e4f6b6b  /tmp/review57.patch' | sha256sum -c -
           git apply --check /tmp/review57.patch
