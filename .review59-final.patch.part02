@@ -1,4 +1,4 @@
- not be reached.";return "This public stream could not play. It may be offline, regional or unsupported.";}
+Retry or choose another channel.";if("TIMED_OUT".equals(code))return "The public stream timed out. Retry or choose another channel.";if("TLS_FAILED".equals(code))return "The public stream failed secure certificate validation. GharTV will not bypass it.";if("CONNECTION_FAILED".equals(code))return "The public stream host could not be reached.";return "This public stream could not play. It may be offline, regional or unsupported.";}
 +    private String message(String code){
 +        if("DNS_UNAVAILABLE".equals(code))return "The public stream host could not be resolved. Check the connection or choose another channel.";
 +        if("TIMED_OUT".equals(code)||"HTTP_PROVIDER_TIMEOUT".equals(code))return "The public stream timed out. Retry later or choose another channel.";
@@ -12,25 +12,11 @@
 +        if("HTTP_PROVIDER_REJECTED".equals(code))return "The public stream provider rejected the request. The source may require unsupported access or request details.";
 +        return "No first picture was confirmed, or the public stream returned an unsupported response. The stream may be offline or unsupported.";
 +    }
+     private String protocol(String url){String lower=url==null?"":url.toLowerCase(Locale.ROOT);return lower.contains(".mpd")?"dash":lower.contains(".m3u8")?"hls":"progressive";}
+     private void releasePlayer(){if(firstFrameDeadline!=null){main.removeCallbacks(firstFrameDeadline);firstFrameDeadline=null;}if(player!=null){playerView.setPlayer(null);player.release();player=null;}}
+     @Override protected void onStop(){if(player!=null)player.pause();super.onStop();}
 diff --git a/android-tv/app/src/androidTest/java/in/ghartv/nova/NetworkFailureHttpClassificationTest.java b/android-tv/app/src/androidTest/java/in/ghartv/nova/NetworkFailureHttpClassificationTest.java
 new file mode 100644
 --- /dev/null
 +++ b/android-tv/app/src/androidTest/java/in/ghartv/nova/NetworkFailureHttpClassificationTest.java
-@@ -0,0 +1,31 @@
-+package in.ghartv.nova;
-+
-+import androidx.test.ext.junit.runners.AndroidJUnit4;
-+import org.junit.Test;
-+import org.junit.runner.RunWith;
-+import static org.junit.Assert.*;
-+
-+/** Focused synthetic HTTP classification tests. No provider request or credentials. */
-+@RunWith(AndroidJUnit4.class)
-+public class NetworkFailureHttpClassificationTest {
-+    @Test public void authorizationAndAccessDenialAreNotNetworkFailures() {
-+        assertEquals("HTTP_AUTH_REQUIRED", NetworkFailure.classifyHttpStatus(401));
-+        assertEquals("HTTP_ACCESS_DENIED", NetworkFailure.classifyHttpStatus(403));
-+    }
-+    @Test public void unavailableAndRateLimitedStreamsRemainProviderOutcomes() {
-+        assertEquals("HTTP_STREAM_UNAVAILABLE", NetworkFailure.classifyHttpStatus(404));
-+        assert
+@@ -0,0 +1,
