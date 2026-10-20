@@ -1,0 +1,38 @@
+Equals("HTTP_STREAM_UNAVAILABLE", NetworkFailure.classifyHttpStatus(410));
++        assertEquals("HTTP_RATE_LIMITED", NetworkFailure.classifyHttpStatus(429));
++    }
++    @Test public void providerTimeoutAndServerErrorsStayDistinctFromDnsAndTls() {
++        assertEquals("HTTP_PROVIDER_TIMEOUT", NetworkFailure.classifyHttpStatus(408));
++        assertEquals("HTTP_PROVIDER_TIMEOUT", NetworkFailure.classifyHttpStatus(504));
++        assertEquals("HTTP_PROVIDER_ERROR", NetworkFailure.classifyHttpStatus(503));
++        assertEquals("DNS_UNAVAILABLE", NetworkFailure.classify(new java.net.UnknownHostException("synthetic")));
++        assertEquals("TLS_FAILED", NetworkFailure.classify(new javax.net.ssl.SSLHandshakeException("synthetic")));
++    }
++    @Test public void nonErrorHttpStatusesDoNotMasqueradeAsFailures() {
++        assertEquals("UNCLASSIFIED", NetworkFailure.classifyHttpStatus(200));
++        assertEquals("UNCLASSIFIED", NetworkFailure.classifyHttpStatus(302));
++    }
++}
+diff --git a/android-tv/app/src/debug/java/in/ghartv/nova/PreviewHarnessActivity.java b/android-tv/app/src/debug/java/in/ghartv/nova/PreviewHarnessActivity.java
+index ed52c48..0000000 100644
+--- a/android-tv/app/src/debug/java/in/ghartv/nova/PreviewHarnessActivity.java
++++ b/android-tv/app/src/debug/java/in/ghartv/nova/PreviewHarnessActivity.java
+@@ -20,6 +20,6 @@ public class PreviewHarnessActivity extends Activity {
+     if("tls".equals(c.id))throw new javax.net.ssl.SSLHandshakeException("private fixture details must not appear");
+     if("timeout".equals(c.id))throw new java.net.SocketTimeoutException("private fixture details must not appear");
+     if("connection".equals(c.id))throw new java.net.ConnectException("private fixture details must not appear");
+-    if("slow".equals(c.id))Thread.sleep(6500);
++    if("slow".equals(c.id))Thread.sleep(16500);
+     PlaybackInfo i=new PlaybackInfo();i.streamUrl="asset:///preview-fixture.mp4";return i;}
+    public void cancel(){cancels.incrementAndGet();}
+diff --git a/android-tv/app/src/androidTest/java/in/ghartv/nova/PreviewControllerTest.java b/android-tv/app/src/androidTest/java/in/ghartv/nova/PreviewControllerTest.java
+index a8157a95558ed9d48185de375c6c6f30b7dfd690..0000000 100644
+--- a/android-tv/app/src/androidTest/java/in/ghartv/nova/PreviewControllerTest.java
++++ b/android-tv/app/src/androidTest/java/in/ghartv/nova/PreviewControllerTest.java
+@@ -32,4 +32,5 @@ public class PreviewControllerTest {
+  @Test public void slowPreviewTimesOutWithoutLatePicture(){
+-  ui(()->a.focus("slow"));waitFor(PreviewGate.Phase.FAILED,16000);SystemClock.sleep(900);
++  assertEquals(15000L,PreviewGate.FIRST_FRAME_BUDGET_MS);
++  ui(()->a.focus("slow"));waitFor(PreviewGate.Phase.FAILED,17000);SystemClock.sleep(2000);
+   ui(()->{assertEquals(View.VISIBLE,a.poster.getVisibility());assertEquals(View.GONE,a.video.getVisibility());});assertEquals(1,a.calls.get());
+  }

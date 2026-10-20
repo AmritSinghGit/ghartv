@@ -1,0 +1,50 @@
+diff --git a/android-tv/app/src/main/java/in/ghartv/nova/NetworkFailure.java b/android-tv/app/src/main/java/in/ghartv/nova/NetworkFailure.java
+index d7b053f..0000000 100644
+--- a/android-tv/app/src/main/java/in/ghartv/nova/NetworkFailure.java
++++ b/android-tv/app/src/main/java/in/ghartv/nova/NetworkFailure.java
+@@ -1,4 +1,6 @@
+ package in.ghartv.nova;
++
++import androidx.media3.datasource.HttpDataSource;
+ /** Root-cause classification independent of Media3's wrapper class and message text. */
+ public final class NetworkFailure {
+     private NetworkFailure() {}
+@@ -5,9 +7,11 @@ public final class NetworkFailure {
+     public static String classify(Throwable error) {
+         for(int i=0; error!=null && i<12; i++,error=error.getCause()) {
++            if(error instanceof HttpDataSource.InvalidResponseCodeException)
++                return classifyHttpStatus(((HttpDataSource.InvalidResponseCodeException) error).responseCode);
+             if(error instanceof java.net.UnknownHostException) return "DNS_UNAVAILABLE";
+             if(error instanceof javax.net.ssl.SSLException) return "TLS_FAILED";
+             if(error instanceof java.net.SocketTimeoutException || error instanceof java.io.InterruptedIOException) return "TIMED_OUT";
+             if(error instanceof java.net.ConnectException || error instanceof java.net.NoRouteToHostException) return "CONNECTION_FAILED";
+         }
+         return "UNCLASSIFIED";
+     }
+@@ -13,2 +17,15 @@
+     }
++
++    /** Classify an HTTP response separately from DNS, transport and TLS failures. */
++    public static String classifyHttpStatus(int status) {
++        if (status == 401) return "HTTP_AUTH_REQUIRED";
++        if (status == 403) return "HTTP_ACCESS_DENIED";
++        if (status == 404 || status == 410) return "HTTP_STREAM_UNAVAILABLE";
++        if (status == 408 || status == 504) return "HTTP_PROVIDER_TIMEOUT";
++        if (status == 429) return "HTTP_RATE_LIMITED";
++        if (status >= 500 && status <= 599) return "HTTP_PROVIDER_ERROR";
++        if (status >= 400 && status <= 499) return "HTTP_PROVIDER_REJECTED";
++        return "UNCLASSIFIED";
++    }
++
+     /** Route failures may use secure DNS/Tor. TLS, HTTP, auth and DRM failures may not. */
+diff --git a/android-tv/app/src/main/java/in/ghartv/nova/PlayerActivity.java b/android-tv/app/src/main/java/in/ghartv/nova/PlayerActivity.java
+index d2dba40652cf87bfffac2eb751fbd28931fa7b4a..0000000 100644
+--- a/android-tv/app/src/main/java/in/ghartv/nova/PlayerActivity.java
++++ b/android-tv/app/src/main/java/in/ghartv/nova/PlayerActivity.java
+@@ -931,10 +931,11 @@ public final class PlayerActivity extends Activity implements ChannelNavigator.Listener {
+         loading.setVisibility(View.GONE);
+         releasePlayer();
+         String technical = diagnostic(error);
+         String lower = technical.toLowerCase(Locale.ROOT);
+-        boolean dns = NetworkFailure.classify(error).equals("DNS_UNAVAILABLE");
+-        boolean auth = lower.contains("401") || lower.contain
