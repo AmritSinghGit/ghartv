@@ -932,10 +932,11 @@ public final class PlayerActivity extends Activity implements ChannelNavigator.L
         releasePlayer();
         String technical = diagnostic(error);
         String lower = technical.toLowerCase(Locale.ROOT);
-        boolean dns = NetworkFailure.classify(error).equals("DNS_UNAVAILABLE");
-        boolean auth = lower.contains("401") || lower.contains("419")
+        String failureCode = NetworkFailure.classify(error);
+        boolean dns = "DNS_UNAVAILABLE".equals(failureCode);
+        boolean auth = "HTTP_AUTH_REQUIRED".equals(failureCode) || lower.contains("401") || lower.contains("419")
                 || lower.contains("token") || lower.contains("unauthor");
-        boolean forbidden = lower.contains("403") || lower.contains("forbidden");
+        boolean forbidden = "HTTP_ACCESS_DENIED".equals(failureCode) || lower.contains("403") || lower.contains("forbidden");
         int httpStatus = forbidden ? 403 : (lower.contains("401") ? 401 : (lower.contains("419") ? 419 : 0));
         String reference = Telemetry.playbackFailure(this, channel, "media3_playback", technical, httpStatus, error);
         String friendly = "This channel could not start. Another channel may still work.";
@@ -946,6 +947,10 @@ public final class PlayerActivity extends Activity implements ChannelNavigator.L
             markAccess(Channel.ACCESS_UNAVAILABLE, technical);
         } else if (dns) {
             friendly = "This TV could not resolve the Jio service address. Check the TV internet or DNS, then retry; other cached screens may still open.";
+        } else if ("TLS_FAILED".equals(failureCode)) {
+            friendly = "The Jio stream failed secure certificate validation. Check the TV date/time or retry later; GharTV will not bypass TLS validation.";
+        } else if (failureCode.startsWith("HTTP_")) {
+            friendly = "The Jio service returned an HTTP/provider response that did not start playback. Check the account or channel availability, then retry later.";
         } else if (lower.contains("timeout") || lower.contains("timed out") || lower.contains("connection reset")) {
             friendly = "The Jio stream took too long to respond. GharTV retried once; you can retry again or continue to the next channel.";
         } else if (lower.contains("drm") || lower.contains("widevine")) {

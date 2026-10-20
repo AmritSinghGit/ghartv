@@ -21,7 +21,7 @@ public class PreviewHarnessActivity extends Activity {
     if("tls".equals(c.id))throw new javax.net.ssl.SSLHandshakeException("private fixture details must not appear");
     if("timeout".equals(c.id))throw new java.net.SocketTimeoutException("private fixture details must not appear");
     if("connection".equals(c.id))throw new java.net.ConnectException("private fixture details must not appear");
-    if("slow".equals(c.id))Thread.sleep(6500);
+    if("slow".equals(c.id))Thread.sleep(16500);
     PlaybackInfo i=new PlaybackInfo();i.streamUrl="asset:///preview-fixture.mp4";return i;}
    public void cancel(){cancels.incrementAndGet();}
   });

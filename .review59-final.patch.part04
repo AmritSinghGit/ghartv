@@ -1,9 +1,0 @@
-eviewControllerTest.java
-+++ b/android-tv/app/src/androidTest/java/in/ghartv/nova/PreviewControllerTest.java
-@@ -32,4 +32,5 @@ public class PreviewControllerTest {
-  @Test public void slowPreviewTimesOutWithoutLatePicture(){
--  ui(()->a.focus("slow"));waitFor(PreviewGate.Phase.FAILED,16000);SystemClock.sleep(900);
-+  assertEquals(15000L,PreviewGate.FIRST_FRAME_BUDGET_MS);
-+  ui(()->a.focus("slow"));waitFor(PreviewGate.Phase.FAILED,17000);SystemClock.sleep(2000);
-   ui(()->{assertEquals(View.VISIBLE,a.poster.getVisibility());assertEquals(View.GONE,a.video.getVisibility());});assertEquals(1,a.calls.get());
-  }
