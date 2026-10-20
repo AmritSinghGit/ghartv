@@ -54,23 +54,25 @@ public class Review60JioBaselineAndIptvCacheTest {
         }
     }
 
-    @Test public void jioApiUsesReview38DirectOkHttpTransport() throws Exception {
+    @Test public void jioApiRetainsOkHttpWithoutTorRouteFactory() throws Exception {
         JioApiClient api = new JioApiClient(context);
         java.lang.reflect.Field field = JioApiClient.class.getDeclaredField("client");
         field.setAccessible(true);
         Object client = field.get(api);
         assertTrue(client instanceof OkHttpClient);
         assertFalse(client instanceof RouteFallbackCallFactory);
-        assertEquals("direct", JioNetwork.recoveryLabel());
-        assertFalse(JioNetwork.fallbackUsedRecently());
         assertFalse(JioNetwork.torUsedRecently());
     }
 
-    @Test public void jioFactoriesAndDnsStayOnTheDirectAndroidPath() {
+    @Test public void jioApiUsesScopedDnsRecoveryWhileMediaAndPreviewStayDirect() {
         assertTrue(JioNetwork.api(context) instanceof OkHttpClient);
+        assertTrue(((OkHttpClient) JioNetwork.api(context)).dns() instanceof JioSecureDns);
+        assertTrue(JioNetwork.dns() instanceof JioSecureDns);
         assertTrue(JioNetwork.media(context) instanceof OkHttpClient);
         assertTrue(JioNetwork.preview(context) instanceof OkHttpClient);
-        assertSame(Dns.SYSTEM, JioNetwork.dns());
+        assertSame(Dns.SYSTEM, ((OkHttpClient) JioNetwork.media(context)).dns());
+        assertSame(Dns.SYSTEM, ((OkHttpClient) JioNetwork.preview(context)).dns());
+        assertFalse(JioNetwork.torUsedRecently());
     }
 
     @Test public void staleVerifiedIptvCacheOpensWithoutWaitingForNetwork() throws Exception {
