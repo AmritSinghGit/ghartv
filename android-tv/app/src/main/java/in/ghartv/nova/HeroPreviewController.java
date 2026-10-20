@@ -14,7 +14,7 @@ import androidx.media3.common.PlaybackException;
 import androidx.media3.common.Player;
 import androidx.media3.common.util.UnstableApi;
 import androidx.media3.datasource.DefaultDataSource;
-import androidx.media3.datasource.okhttp.OkHttpDataSource;
+import androidx.media3.datasource.DefaultHttpDataSource;
 import androidx.media3.exoplayer.ExoPlayer;
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory;
 import androidx.media3.ui.AspectRatioFrameLayout;
@@ -121,8 +121,9 @@ public final class HeroPreviewController {
     }
     private void prepare(PlaybackInfo info,long token){
         Map<String,String> headers=jsonMap(info.streamHeaders);
-        OkHttpDataSource.Factory http=new OkHttpDataSource.Factory(JioNetwork.preview(activity))
+        DefaultHttpDataSource.Factory http=new DefaultHttpDataSource.Factory()
             .setUserAgent(headers.getOrDefault("User-Agent","GharTV-Jio-Live/"+BuildConfig.VERSION_NAME))
+            .setAllowCrossProtocolRedirects(false).setConnectTimeoutMs(4000).setReadTimeoutMs(4000)
             .setDefaultRequestProperties(headers);
         player=new ExoPlayer.Builder(activity)
             .setMediaSourceFactory(new DefaultMediaSourceFactory(new DefaultDataSource.Factory(activity,http))).build();

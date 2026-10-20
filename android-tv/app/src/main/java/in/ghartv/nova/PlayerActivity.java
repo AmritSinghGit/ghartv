@@ -26,7 +26,7 @@ import androidx.media3.common.MimeTypes;
 import androidx.media3.common.PlaybackException;
 import androidx.media3.common.Player;
 import androidx.media3.common.util.UnstableApi;
-import androidx.media3.datasource.okhttp.OkHttpDataSource;
+import androidx.media3.datasource.DefaultHttpDataSource;
 import androidx.media3.exoplayer.ExoPlayer;
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory;
 import androidx.media3.ui.PlayerView;
@@ -440,8 +440,11 @@ public final class PlayerActivity extends Activity implements ChannelNavigator.L
                 || info.streamUrl.toLowerCase(Locale.ROOT).contains(".mpd")) ? "dash" : "hls";
         playbackDrm = info.drm;
         Map<String, String> streamHeaders = jsonMap(info.streamHeaders);
-        OkHttpDataSource.Factory dataSourceFactory = new OkHttpDataSource.Factory(JioNetwork.media(this))
+        DefaultHttpDataSource.Factory dataSourceFactory = new DefaultHttpDataSource.Factory()
                 .setUserAgent(streamHeaders.getOrDefault("User-Agent", "GharTV-Jio-Live/" + BuildConfig.VERSION_NAME))
+                .setAllowCrossProtocolRedirects(true)
+                .setConnectTimeoutMs(15_000)
+                .setReadTimeoutMs(25_000)
                 .setDefaultRequestProperties(streamHeaders);
         DefaultMediaSourceFactory mediaSourceFactory = new DefaultMediaSourceFactory(dataSourceFactory);
         android.app.ActivityManager memory=(android.app.ActivityManager)getSystemService(ACTIVITY_SERVICE);
@@ -455,8 +458,8 @@ public final class PlayerActivity extends Activity implements ChannelNavigator.L
         PictureShape.apply(this, playerView, channel == null ? "" : channel.id);
         if(PlaybackComfort.light(this))player.setTrackSelectionParameters(player.getTrackSelectionParameters().buildUpon().setMaxVideoSize(1280,720).build());
         final int listenerGeneration=playbackGeneration;
-        firstFrameDeadline=()->{if(listenerGeneration==playbackGeneration){repository.api().cancelPlayback();releasePlayer();loading.setVisibility(View.GONE);showPlaybackError(new java.io.IOException("First picture timed out after direct, secure DNS and Tor recovery; retry or select another channel"));}};
-        mainHandler.postDelayed(firstFrameDeadline,120_000L);
+        firstFrameDeadline=()->{if(listenerGeneration==playbackGeneration){repository.api().cancelPlayback();releasePlayer();loading.setVisibility(View.GONE);showPlaybackError(new java.io.IOException("First picture timed out; retry or select another channel"));}};
+        mainHandler.postDelayed(firstFrameDeadline,18_000L);
         player.addListener(new Player.Listener() {
             @Override public void onRenderedFirstFrame(){if(listenerGeneration!=playbackGeneration)return;if(firstFrameDeadline!=null)mainHandler.removeCallbacks(firstFrameDeadline);LocalPerformance.record(PlayerActivity.this,"first_picture_ms",android.os.SystemClock.elapsedRealtime()-tuneElapsed);}
 
