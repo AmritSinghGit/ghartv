@@ -3,6 +3,7 @@ package in.ghartv.nova;
 import android.content.Context;
 
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicLong;
 
 import okhttp3.Call;
 import okhttp3.ConnectionPool;
@@ -10,11 +11,17 @@ import okhttp3.Dns;
 import okhttp3.OkHttpClient;
 
 /**
- * Review38-compatible Jio transport. Jio API and media remain on Android's ordinary
- * direct TLS path; film Tor and public IPTV recovery stay separate.
+ * Jio stays off Tor. API/catalogue names use Android system DNS first and a
+ * TLS-verified, Jio-scoped secure-DNS fallback only after resolution fails.
+ * Media, preview, DRM and entitlement traffic retain the Review38-compatible
+ * direct transport and all provider/TLS restrictions.
  */
 final class JioNetwork {
-    private static final OkHttpClient API_DIRECT = new OkHttpClient.Builder()
+    private static final JioSecureDns API_DNS = new JioSecureDns();
+    private static final AtomicLong REPORTED = new AtomicLong();
+
+    private static final OkHttpClient API = new OkHttpClient.Builder()
+            .dns(API_DNS)
             .connectTimeout(8, TimeUnit.SECONDS)
             .readTimeout(12, TimeUnit.SECONDS)
             .writeTimeout(12, TimeUnit.SECONDS)
@@ -44,16 +51,24 @@ final class JioNetwork {
 
     private JioNetwork() {}
 
-    static Call.Factory api(Context context) { return API_DIRECT; }
+    static Call.Factory api(Context context) { return API; }
     static Call.Factory media(Context context) { return MEDIA_DIRECT; }
     static Call.Factory preview(Context context) { return PREVIEW_DIRECT; }
-    static OkHttpClient directApi() { return API_DIRECT; }
-    static Dns dns() { return Dns.SYSTEM; }
+    static OkHttpClient directApi() { return API; }
+    static Dns dns() { return API_DNS; }
 
-    static boolean fallbackUsedRecently() { return false; }
+    static boolean fallbackUsedRecently() { return API_DNS.usedRecently(); }
     static boolean torUsedRecently() { return false; }
-    static String recoveryLabel() { return "direct"; }
+    static String recoveryLabel() {
+        return fallbackUsedRecently() ? "secure DNS recovery" : "direct";
+    }
     static void reportFallbackIfNew(Context context) {
-        // Direct Review38-compatible Jio transport has no alternate route to report.
+        long count = API_DNS.fallbackCount();
+        long previous = REPORTED.get();
+        if (count > previous && REPORTED.compareAndSet(previous, count)) {
+            Telemetry.event(context, "jio_dns_fallback", Telemetry.data(
+                    "route", "secure_dns_after_system_failure",
+                    "event_version_code", BuildConfig.VERSION_CODE));
+        }
     }
 }
