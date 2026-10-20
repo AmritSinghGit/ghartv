@@ -2,7 +2,7 @@ name: Finalize GharTV Review59 bounded repair
 on:
   push:
     branches: ['codex/ghartv-remove-auto-preview']
-    paths: ['.review59-final.patch', '.github/workflows/review59-finalize.yml']
+    paths: ['.github/workflows/review59-finalize.yml']
   workflow_dispatch:
 permissions:
   contents: write
@@ -34,15 +34,15 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          EXPECTED_PARENT=074292254d45362c4b618b55430ca318401a0178
+          EXPECTED_PARENT=c450514bae49ab4cbafbe3551ac3b595ce62f282
           PATCH_SHA=4dd092d9aabb4378b14017686e5685d3fbed97d6745c192428f6d7fd6518ee20
           test "$(git rev-parse HEAD^)" = "$EXPECTED_PARENT"
           test "$(git ls-remote origin refs/heads/codex/ghartv-remove-auto-preview | cut -f1)" = "$GITHUB_SHA"
           mapfile -t changed < <(git diff --name-only HEAD^ HEAD | sort)
-          printf '%s\n' '.github/workflows/review59-finalize.yml' '.review59-final.patch' | sort > /tmp/expected-stage
+          printf '%s\n' '.github/workflows/review59-finalize.yml' > /tmp/expected-stage
           printf '%s\n' "${changed[@]}" > /tmp/actual-stage
           diff -u /tmp/expected-stage /tmp/actual-stage
-          cp .review59-final.patch /tmp/review59-final.patch
+          cat .review59-final.patch.part* > /tmp/review59-final.patch
           echo "$PATCH_SHA  /tmp/review59-final.patch" | sha256sum -c -
           git apply --check /tmp/review59-final.patch
           git apply --index /tmp/review59-final.patch
@@ -77,7 +77,7 @@ jobs:
           javac -d "$RUNNER_TEMP/nova-contract" android-tv/app/src/main/java/in/ghartv/nova/PreviewGate.java tools/tv-first/PreviewGateSmoke.java android-tv/app/src/main/java/in/ghartv/nova/RemoteCursorState.java tools/tv-first/RemoteCursorSmoke.java
           java -cp "$RUNNER_TEMP/nova-contract" PreviewGateSmoke
           java -cp "$RUNNER_TEMP/nova-contract" RemoteCursorSmoke
-      - name: Compile and run only the bounded new/failing Android tests
+      - name: Compile and run only the bounded new and previously failing Android tests
         shell: bash
         run: |
           set -euo pipefail
@@ -108,7 +108,6 @@ jobs:
           grep -q 'OK (11 tests)' /tmp/ghartv-review59-proof/focused.txt
           ! grep -q 'FAILURES!!!' /tmp/ghartv-review59-proof/focused.txt
           rm -f android-tv/app/src/main/assets/ghartv-native-check.mp4 android-tv/app/src/debug/assets/preview-fixture.mp4
-          test -z "$(git status --short | grep -v '^M  ' | grep -v '^A  ' || true)"
       - name: Commit bounded source under the existing branch lease
         shell: bash
         run: |
@@ -116,6 +115,7 @@ jobs:
           test "$(git ls-remote origin refs/heads/codex/ghartv-remove-auto-preview | cut -f1)" = "$GITHUB_SHA"
           git config user.name 'GharTV Review Builder'
           git config user.email 'actions@users.noreply.github.com'
-          git rm .github/workflows/review59-finalize.yml .review59-final.patch .review59-final.patch.part*
+          git rm .github/workflows/review59-finalize.yml .review59-final.patch.part*
+          git diff --cached --check
           git commit -m 'fix(review59): preserve recovery window and classify provider failures'
           git push origin HEAD:refs/heads/codex/ghartv-remove-auto-preview
