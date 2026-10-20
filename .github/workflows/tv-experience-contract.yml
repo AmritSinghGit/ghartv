@@ -94,7 +94,7 @@ jobs:
           cd android-tv
           chmod +x gradlew
           ./gradlew --no-daemon --max-workers=2 assembleRelease assembleDebug assembleDebugAndroidTest
-          cp app/build/outputs/apk/release/app-release-unsigned.apk /tmp/ghartv-candidate/GharTV-code60-review-unsigned.apk
+          cp app/build/outputs/apk/release/app-release-unsigned.apk /tmp/ghartv-candidate/GharTV-code59-review-unsigned.apk
       - name: Observe the fixed public IPTV-org playlist without asserting stream playback
         run: |
           set -euo pipefail
@@ -127,22 +127,45 @@ jobs:
           cfg=avd/'config.ini';t=re.sub(r'^disk.dataPartition.size=.*$','disk.dataPartition.size=1G',cfg.read_text(),flags=re.M)
           if 'disk.dataPartition.size=' not in t:t+='\ndisk.dataPartition.size=1G\n'
           cfg.write_text(t)
-          with (out/'test-emulator.log').open('w') as log:p=subprocess.Popen([str(sdk/'emulator/emulator'),'-avd','GHARTV_CLOUD_REVIEW_ONLYIË	Ë\Ü	Ë	ÍMN	Ë	Ë[›Ë]Ú[™İÉË	Ë[›ËX]Y[ÉË	Ë[›Ë\Û˜\Úİ	Ë	Ë[›ËX›ÛİX[š[IË	ËYÜIË	ÜİÚYÚY\‰Ë	ËY™X]\™IË	ËU[Ø[‰Ë	Ë[Y[[ÜIË	ÌŒ	×Kİ[\İXœ›ØÙ\ÜË‘U“•Sİİ][ÙËİ\œ[ÙËİ\Û™]×ÜÙ\ÜÚ[ÛUYJBˆ[™][YK›[Û›İÛšXÊ
-JÌNˆÚ[H[YK›[Û›İÛšXÊ
-O[™‚ˆYˆœÛ
-
-H\È›İ›Û™Nœ˜Z\ÙH[[YQ\œ›ÜŠ	ĞÓÕQÑU’PÑWÑVUQ	ÊÊİ]Éİ\İY[][]Ü‹›ÙÉÊKœ™XYİ^
-
-VËLML—JBˆNœ\İXœ›ØÙ\ÜËœ[ŠÉØY‰Ë	Ë\ÉË	Ù[][]Ü‹MMN	Ë	ÜÚ[	Ë	ÙÙ]›Ü	Ë	ÜŞ\Ë˜›ÛİØÛÛ\]Y	×KØ\\™WÛİ]]UYK^UYK[Y[İ]MJBˆ^Ù\İXœ›ØÙ\ÜË•[Y[İ]^\™Y[YKœÛY\
-JNØÛÛ[YBˆYˆ‹œ™]\›˜ÛÙOOL[™‹œİİ]œİš\
-
-OOIÌIÎ˜œ™XZÂˆ[YKœÛY\
-ŠBˆ[ÙNœ˜Z\ÙH[[YQ\œ›ÜŠ	ĞÓÕQÑU’PÑWÕSQSÕU	ÊBˆ›Üˆ\™ÜÈ[ˆ
-ÉİÛIË	ÜÚ^™IË	ÌLÌŒ	×KÉİÛIË	Ù[œÚ]IË	ÌMŒ	×KÉÜÙ][™ÜÉË	Ü]	Ë	ÜÙXİ\™IË	Ú[[Y\œÚ]™WÛ[ÙWØÛÛ™š\›X][ÛœÉË	ØÛÛ™š\›YY	×KÉÚ[œ]	Ë	ÚÙ^Y]™[	Ë	ÒÑVPÓÑWÕĞRÑUT	×KÉİÛIË	Ù\ÛZ\ÜËZÙ^YİX\™	×JNœİXœ›ØÙ\ÜËœ[ŠÉØY‰Ë	Ë\ÉË	Ù[][]Ü‹MMN	Ë	ÜÚ[	×JØ\™ÜËÚXÚÏUYJBˆBˆH˜[YNˆ™\šYLÍN™]Z[™YÛ™]ÈØ\Ù\È\È™]šY]ÌÎš[È˜\Ù[[™H[™˜\İTˆØXÚBˆ[ˆˆÙ]Y][È\Y˜Z[ˆYˆ\È[][]Ü‹MMN[œİ[\ˆ[™›ÚY]‹Ø\ØZ[Ûİ]]ËØ\ËÙXYËØ\YXYË˜\ÂˆYˆ\È[][]Ü‹MMN[œİ[\ˆ[™›ÚY]‹Ø\ØZ[Ûİ]]ËØ\ËØ[™›ÚY\İÙXYËØ\YXYËX[™›ÚY\İ˜\ÂˆYˆ\È[][]Ü‹MMNÚ[[H[œİ[Y[]È\ˆYHÛ\ÜÈ[‹™Ú\‹››İ˜K‘š[UÜ“˜]]™TÛ[ÚÙU\İ[‹™Ú\‹››İ˜K\İØ[™›ÚY\İœ[›™\‹[™›ÚY•[š][›™\ˆYHİ\ÙÚ\‹XØ[™Y]KÜ›ÛÙ‹Ø[™›ÚY]Ü‹[˜]]™K\Û[ÚÙKˆÜ™\\H	ÓÒÈ
-H\İ
-IÈİ\ÙÚ\‹XØ[™Y]KÜ›ÛÙ‹Ø[™›ÚY]Ü‹[˜]]™K\Û[ÚÙKˆYˆ\È[][]Ü‹MMNÚ[[H[œİ[Y[]È\ˆYHÛ\ÜÈ[‹™Ú\‹››İ˜K‘š[PØ][ÙİYSØœÙ\˜][Û•\İ[‹™Ú\‹››İ˜K\İØ[™›ÚY\İœ[›™\‹[™›ÚY•[š][›™\ˆYHİ\ÙÚ\‹XØ[™Y]KÜ›ÛÙ‹Ø[™›ÚYXØ][ÙİYK]\İËˆÜ™\\H	ÓÒÈ
-È\İÊIÈİ\ÙÚ\‹XØ[™Y]KÜ›ÛÙ‹Ø[™›ÚYXØ][ÙİYK]\İËˆÈ™\X]Y™X[[ØÜ™Y[ˆ˜[œÚ][ÛœÈ]\İS\ÜÎÈ\È\È›İ™]K][[YÜ™Y[‹‚ˆ›Üˆ][\[ˆHˆÈHˆÈÈÂˆYˆ\È[][]Ü‹MMNÚ[[H[œİ[Y[]È\ˆYHÛ\ÜÈ	Ú[‹™Ú\‹››İ˜K”™]šY]ÍL™YY˜XÚÕ\İÜ™X[›İšY\‘[ØÜ™Y[Ø[˜XÚÕ[‘‘Ù\Ó›İ™[ØYİÛ™YšY[Ë[‹™Ú\‹››İ˜K”™]šY]ÍÕšY]Ú[™Õ\İÙ^XÚ][ØÜ™Y[Xİ[Û‘[\œĞXİX[ÙX•šY]Ğİ\İÛS[ÙIÈ[‹™Ú\‹››İ˜K\İØ[™›ÚY\İœ[›™\‹[™›ÚY•[š][›™\ˆYH‹İ\ÙÚ\‹XØ[™Y]KÜ›ÛÙ‹Ø[™›ÚYY[ØÜ™Y[‹\™\X]IØ][\K‚ˆÜ™\\H	ÓÒÈ
-ˆ\İÊIÈ‹İ\ÙÚ\‹XØ[™Y]KÜ›ÛÙ‹Ø[™›ÚYY[ØÜ™Y[‹\™\X]IØ][\K‚ˆÛ™BˆYˆ\È[][]Ü‹MMNÚ[[H[œİ[Y[]È\ˆYHÛ\ÜÈ[‹™Ú\‹››İ˜K”™]šY]ÍL™YY˜XÚÕ\İ[‹™Ú\‹››İ˜K”™]šY]ÍLTÚ[\”ÙX\˜Ú\İ[‹™Ú\‹››İ˜K”™]šY]ÍÕšY]Ú[™Õ\İ[‹™Ú\‹››İ˜K”™]šY]ÍL”›İšY\“ZYÜ˜][Û•\İ[‹™Ú\‹››İ˜K”™]šY]ĞÛÛ›Û\•\İ[‹™Ú\‹››İ˜K”™]šY]ÍLÔ™]šY]Ñ˜Z[\™U\İ[‹™Ú\‹››İ˜K”™]šY]ÍLÔ›İšY\”™XÛİ™\U\İ[‹™Ú\‹››İ˜K‘š[PØ][ÙİYSØœÙ\˜][Û•\İ[‹™Ú\‹››İ˜K‘š[UÜÛÛ›Û\•\İ[‹™Ú\‹››İ˜K”™]šY]ÍM”Ú[\YšYY\ØÛİ™\•\İ[‹™Ú\‹››İ˜K”™]šY]ÍN\[™œÕ\İ[‹™Ú\‹››İ˜K”™]šY]ÍNS™]ÛÜšÔ™XÛİ™\U\İ[‹™Ú\‹››İ˜K”™]šY]ÍŒš[Ğ˜\Ù[[™P[™\ØXÚU\İ[‹™Ú\‹››İ˜K\İØ[™›ÚY\İœ[›™\‹[™›ÚY•[š][›™\ˆYHİ\ÙÚ\‹XØ[™Y]KÜ›ÛÙ‹Ø[™›ÚYY›Øİ\ÙY]\İËˆÜ™\\H	ÓÒÈ
-ML\İÊIÈİ\ÙÚ\‹XØ[™Y]KÜ›ÛÙ‹Ø[™›ÚYY›Øİ\ÙY]\İËˆYˆ\È[][]Ü‹MMNÚ[[H[œİ[Y[]È\ˆYHÛ\ÜÈ[‹™Ú\‹››İ˜K”™[[İUÙXİ\œÛÜ•\İ[‹™Ú\‹››İ˜K‘š[S˜]]™PÛÛ›ÛÕ\İ[‹™Ú\‹››İ˜K‘\ØÛİ™\‘^\šY[˜ÙU\İ[‹™Ú\‹››İ˜K”™]šY]ÌÎ™YÜ™\ÜÚ[Û•\İ[‹™Ú\‹››İ˜K”™]šY]ÌÎQ^\šY[˜ÙU\İ[‹™Ú\‹››İ˜K”™]šY]Í^X˜XÚÕ\İ[‹™Ú\‹››İ˜K”™]šY]ÍPÛÛ›™Xİ[Û•[[Y]U\İ[‹™Ú\‹››İ˜K”™]šY]Í”™YÜ™\ÜÚ[Û•\İ[‹™Ú\‹››İ˜K”™]šY]ÍÔ\™›Ü›X[˜ÙU\İ[‹™Ú\‹››İ˜K”™]šY]ÍØY[™Ó[İ\ÙU\İ[‹™Ú\‹››İ˜K”™]šY]ÍT^Q]šY[˜ÙU\İ[‹™Ú\‹››İ˜K”™]šY]Í“˜]]™TÚ[\•\İ[‹™Ú\‹››İ˜K”™]šY]ÍÕšY]Ú[™Õ\İ[‹™Ú\‹››İ˜K”™]šY]Í[œ]İXš[]U\İ[‹™Ú\‹››İ˜K”™]šY]ÍT^X˜XÚĞYÙ]\İ[‹™Ú\‹››İ˜K”™]šY]ÍLÙ\šY\ĞÛÛ›ÛÕ\İ[‹™Ú\‹››İ˜K”™]šY]ÍL™YY˜XÚÕ\İ[‹™Ú\‹››İ˜K”™]šY]ÍLTÚ[\”ÙX\˜Ú\İ[‹™Ú\‹››İ˜K”™]šY]ÍL”›İšY\“ZYÜ˜][Û•\İ[‹™Ú\‹››İ˜K”™]šY]ĞÛÛ›Û\•\İ[‹™Ú\‹››İ˜K”™]šY]ÍLÔ™]šY]Ñ˜Z[\™U\İ[‹™Ú\‹››İ˜K”™]šY]ÍLÔ›İšY\”™XÛİ™\U\İ[‹™Ú\‹››İ˜K‘š[PØ][ÙİYSØœÙ\˜][Û•\İ[‹™Ú\‹››İ˜K‘š[UÜÛÛ›Û\•\İ[‹™Ú\‹››İ˜K”™]šY]ÍM”Ú[\YšYY\ØÛİ™\•\İ[‹™Ú\‹››İ˜K”™]šY]ÍN\[™œÕ\İ[‹™Ú\‹››İ˜K”™]šY]ÍNS™]ÛÜšÔ™XÛİ™\U\İ[‹™Ú\‹››İ˜K”™]šY]ÍŒš[Ğ˜\Ù[[™P[™\ØXÚU\İ[‹™Ú\‹››İ˜K\İØ[™›ÚY\İœ[›™\‹[™›ÚY•[š][›™\ˆYHİ\ÙÚ\‹XØ[™Y]KÜ›ÛÙ‹Ø[™›ÚY]\İËˆÜ™\\H	ÓÒÈ
-ÍN\İÊIÈİ\ÙÚ\‹XØ[™Y]KÜ›ÛÙ‹Ø[™›ÚY]\İËˆ›Üˆ˜[YH[ˆ™]šY]ÍË[İÛ™YY[ØÜ™Y[‹œ™È™]šY]ÍËY[ØÜ™Y[‹[Y[Kœ™È™]šY]ÍË]ÛÛ˜\‹\™]\›‹œ™ÎÈÈYˆ\È[][]Ü‹MMN[ÜÙØ\™Ğ[™›ÚYÙ]KÚ[‹™Ú\‹››İ˜KÙš[\ËÉ˜[YHİ\ÙÚ\‹XØ[™Y]KÜ›ÛÙ‹É˜[YNÈÛ™BˆH˜[YNˆÛÛXİÛÛ›ÛY[Z[™ÈØœÙ\˜][ÛœÂˆ[ˆˆYˆ\È[][]Ü‹MMN[ÜÙØ\™Ğ[™›ÚYÙ]KÚ[‹™Ú\‹››İ˜KÙš[\ËÜ™]šY]ÍK][Z[™ËšœÛÛˆİ\ÙÚ\‹XØ[™Y]KÜ›ÛÙ‹Ü™]šY]ÍK][Z[™ËšœÛÛ‚ˆYˆ\È[][]Ü‹MMN[ÜÙØ\™Ğ[™›ÚYÙ]KÚ[‹™Ú\‹››İ˜KÙš[\ËÜ™]šY]ÍL\Ù\šY\Ë][Z[™ËšœÛÛˆİ\ÙÚ\‹XØ[™Y]KÜ›ÛÙ‹Ü™]šY]ÍL\Ù\šY\Ë][Z[™ËšœÛÛ‚ˆH˜[YNˆXÚØYÙHØ[YHÚYÛ‹X[™[Ü[ˆİÛ™\ˆ›İÂˆ[ˆ]ÛˆÛÛËİ‹Yš\œİÜXÚØYÙWÜ™]šY]ÍŒœBˆH\Ù\ÎˆXİ[ÛœËİ\ØYX\Y˜XİˆYˆ[Ø^\Ê
-BˆÚ]‚ˆ˜[YNˆÚ\‹XÛÙMŒ[İÛ™\‹\™]šY]Âˆ]ˆİ\ÙÚ\‹XØ[™Y]KÂˆ™][[Û‹Y^\ÎˆM
+          with (out/'test-emulator.log').open('w') as log:p=subprocess.Popen([str(sdk/'emulator/emulator'),'-avd','GHARTV_CLOUD_REVIEW_ONLY','-port','5580','-no-window','-no-audio','-no-snapshot','-no-boot-anim','-gpu','swiftshader','-feature','-Vulkan','-memory','2048'],stdin=subprocess.DEVNULL,stdout=log,stderr=log,start_new_session=True)
+          end=time.monotonic()+180
+          while time.monotonic()<end:
+            if p.poll() is not None:raise RuntimeError('CLOUD_DEVICE_EXITED '+(out/'test-emulator.log').read_text()[-1500:])
+            try:r=subprocess.run(['adb','-s','emulator-5580','shell','getprop','sys.boot_completed'],capture_output=True,text=True,timeout=5)
+            except subprocess.TimeoutExpired:time.sleep(1);continue
+            if r.returncode==0 and r.stdout.strip()=='1':break
+            time.sleep(2)
+          else:raise RuntimeError('CLOUD_DEVICE_TIMEOUT')
+          for args in (['wm','size','1280x720'],['wm','density','160'],['settings','put','secure','immersive_mode_confirmations','confirmed'],['input','keyevent','KEYCODE_WAKEUP'],['wm','dismiss-keyguard']):subprocess.run(['adb','-s','emulator-5580','shell']+args,check=True)
+          PY
+      - name: Verify354 retained/new cases plus Jio and IPTV route recovery
+        run: |
+          set -euo pipefail
+          adb -s emulator-5580 install -r android-tv/app/build/outputs/apk/debug/app-debug.apk
+          adb -s emulator-5580 install -r android-tv/app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk
+          adb -s emulator-5580 shell am instrument -w -r -e class in.ghartv.nova.FilmTorNativeSmokeTest in.ghartv.nova.test/androidx.test.runner.AndroidJUnitRunner | tee /tmp/ghartv-candidate/proof/android-tor-native-smoke.txt
+          grep -q 'OK (1 test)' /tmp/ghartv-candidate/proof/android-tor-native-smoke.txt
+          adb -s emulator-5580 shell am instrument -w -r -e class in.ghartv.nova.FilmCatalogueObservationTest in.ghartv.nova.test/androidx.test.runner.AndroidJUnitRunner | tee /tmp/ghartv-candidate/proof/android-catalogue-tests.txt
+          grep -q 'OK (7 tests)' /tmp/ghartv-candidate/proof/android-catalogue-tests.txt
+          # Repeated real fullscreen transitions must ALL pass; this is not retry-until-green.
+          for attempt in 1 2 3 4 5 6 7 8; do
+            adb -s emulator-5580 shell am instrument -w -r -e class 'in.ghartv.nova.Review50FeedbackTest#realProviderFullscreenCallbackThenFDoesNotReloadOwnedVideo,in.ghartv.nova.Review47ViewingTest#explicitFullscreenActionEntersActualWebViewCustomMode' in.ghartv.nova.test/androidx.test.runner.AndroidJUnitRunner | tee "/tmp/ghartv-candidate/proof/android-fullscreen-repeat-${attempt}.txt"
+            grep -q 'OK (2 tests)' "/tmp/ghartv-candidate/proof/android-fullscreen-repeat-${attempt}.txt"
+          done
+          adb -s emulator-5580 shell am instrument -w -r -e class in.ghartv.nova.Review50FeedbackTest,in.ghartv.nova.Review51PointerSearchTest,in.ghartv.nova.Review47ViewingTest,in.ghartv.nova.Review52ProviderMigrationTest,in.ghartv.nova.PreviewControllerTest,in.ghartv.nova.Review53PreviewFailureTest,in.ghartv.nova.Review53ProviderRecoveryTest,in.ghartv.nova.FilmCatalogueObservationTest,in.ghartv.nova.FilmTorControllerTest,in.ghartv.nova.Review56SimplifiedDiscoverTest,in.ghartv.nova.Review58IptvAndDnsTest,in.ghartv.nova.Review59NetworkRecoveryTest in.ghartv.nova.test/androidx.test.runner.AndroidJUnitRunner | tee /tmp/ghartv-candidate/proof/android-focused-tests.txt
+          grep -q 'OK (146 tests)' /tmp/ghartv-candidate/proof/android-focused-tests.txt
+          adb -s emulator-5580 shell am instrument -w -r -e class in.ghartv.nova.RemoteWebCursorTest,in.ghartv.nova.FilmNativeControlsTest,in.ghartv.nova.DiscoverExperienceTest,in.ghartv.nova.Review38RegressionTest,in.ghartv.nova.Review39ExperienceTest,in.ghartv.nova.Review40PlaybackTest,in.ghartv.nova.Review41ConnectionTelemetryTest,in.ghartv.nova.Review42RegressionTest,in.ghartv.nova.Review43PerformanceTest,in.ghartv.nova.Review44LoadingMouseTest,in.ghartv.nova.Review45PlayEvidenceTest,in.ghartv.nova.Review46NativePointerTest,in.ghartv.nova.Review47ViewingTest,in.ghartv.nova.Review48InputStabilityTest,in.ghartv.nova.Review49PlaybackBudgetTest,in.ghartv.nova.Review50SeriesControlsTest,in.ghartv.nova.Review50FeedbackTest,in.ghartv.nova.Review51PointerSearchTest,in.ghartv.nova.Review52ProviderMigrationTest,in.ghartv.nova.PreviewControllerTest,in.ghartv.nova.Review53PreviewFailureTest,in.ghartv.nova.Review53ProviderRecoveryTest,in.ghartv.nova.FilmCatalogueObservationTest,in.ghartv.nova.FilmTorControllerTest,in.ghartv.nova.Review56SimplifiedDiscoverTest,in.ghartv.nova.Review58IptvAndDnsTest,in.ghartv.nova.Review59NetworkRecoveryTest in.ghartv.nova.test/androidx.test.runner.AndroidJUnitRunner | tee /tmp/ghartv-candidate/proof/android-tests.txt
+          grep -q 'OK (354 tests)' /tmp/ghartv-candidate/proof/android-tests.txt
+          for name in review47-owned-fullscreen.png review47-fullscreen-menu.png review47-toolbar-return.png; do adb -s emulator-5580 pull /sdcard/Android/data/in.ghartv.nova/files/$name /tmp/ghartv-candidate/proof/$name; done
+      - name: Collect controlled timing observations
+        run: |
+          adb -s emulator-5580 pull /sdcard/Android/data/in.ghartv.nova/files/review49-timing.json /tmp/ghartv-candidate/proof/review49-timing.json
+          adb -s emulator-5580 pull /sdcard/Android/data/in.ghartv.nova/files/review50-series-timing.json /tmp/ghartv-candidate/proof/review50-series-timing.json
+      - name: Package same sign-and-open owner flow
+        run: python tools/tv-first/package_review59.py
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: ghartv-code59-owner-review
+          path: /tmp/ghartv-candidate/
+          retention-days: 14

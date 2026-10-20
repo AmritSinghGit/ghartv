@@ -1,0 +1,46 @@
+name: GharTV Review60 canonical candidate
+on:
+  push:
+    branches: ['codex/ghartv-remove-auto-preview']
+    paths: ['.github/workflows/review60-candidate.yml','.review60-ci.part*']
+permissions:
+  contents: read
+concurrency:
+  group: ghartv-review60-candidate
+  cancel-in-progress: false
+jobs:
+  candidate:
+    if: github.event.head_commit.message == 'test(review60): run full candidate and owner package'
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      GRADLE_OPTS: '-Dorg.gradle.daemon=false -Dorg.gradle.jvmargs=-Xmx2g'
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+      - uses: android-actions/setup-android@v3
+        with:
+          packages: platform-tools
+          log-accepted-android-sdk-licenses: false
+      - name: Verify and execute exact Review60 CI script
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat .review60-ci.part* > /tmp/review60-ci.sh.gz.b64
+          echo 'f51522f7fc134fe84b1989038828b67d195e28c01bd91f75c67b46220260fb5c  /tmp/review60-ci.sh.gz.b64' | sha256sum -c -
+          base64 --decode /tmp/review60-ci.sh.gz.b64 > /tmp/review60-ci.sh.gz
+          gzip -dc /tmp/review60-ci.sh.gz > /tmp/review60-ci.sh
+          echo '566e8ca401319e83e823e3431a9c4debfa16e37cbe4d2575059089e299cb2fa2  /tmp/review60-ci.sh' | sha256sum -c -
+          bash -n /tmp/review60-ci.sh
+          bash /tmp/review60-ci.sh
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: ghartv-code60-owner-review
+          path: /tmp/ghartv-candidate/
+          retention-days: 14
