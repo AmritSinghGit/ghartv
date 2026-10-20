@@ -62,7 +62,7 @@ jobs:
           python tools/tv-first/test_collect_review_interactions.py
           python tools/tv-first/test_tv_identity.py
           python -m py_compile tools/tv-first/package_review60.py
-      - name: Compile and run the Review38/Jio and IPTV cache recovery gate
+      - name: Compile and run the bounded Jio, IPTV cache and preview recovery gate
         shell: bash
         run: |
           set -euo pipefail
@@ -89,9 +89,10 @@ jobs:
           done
           adb -s emulator-5580 install -r android-tv/app/build/outputs/apk/debug/app-debug.apk
           adb -s emulator-5580 install -r android-tv/app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk
-          adb -s emulator-5580 shell am instrument -w -r -e class in.ghartv.nova.Review60JioBaselineAndIptvCacheTest,in.ghartv.nova.PreviewControllerTest,in.ghartv.nova.Review38RegressionTest in.ghartv.nova.test/androidx.test.runner.AndroidJUnitRunner | tee /tmp/ghartv-review60-proof/focused.txt
-          grep -q 'OK (23 tests)' /tmp/ghartv-review60-proof/focused.txt
+          adb -s emulator-5580 shell am instrument -w -r -e class in.ghartv.nova.Review60JioBaselineAndIptvCacheTest,in.ghartv.nova.PreviewControllerTest in.ghartv.nova.test/androidx.test.runner.AndroidJUnitRunner | tee /tmp/ghartv-review60-proof/focused.txt
+          grep -q 'OK (11 tests)' /tmp/ghartv-review60-proof/focused.txt
           ! grep -q 'FAILURES!!!' /tmp/ghartv-review60-proof/focused.txt
+          # The unchanged Review38 UI regression class remains in the canonical full-suite gate.
           rm -f android-tv/app/src/main/assets/ghartv-native-check.mp4 android-tv/app/src/debug/assets/preview-fixture.mp4
       - name: Commit Review60 application source under the existing branch lease
         shell: bash
