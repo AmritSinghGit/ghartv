@@ -1,0 +1,130 @@
++ * Jio never uses Tor. API and public media names use Android system DNS first,
++ * then independently bootstrapped TLS-verified DNS only when system resolution
++ * fails. Media bytes, DRM, authentication, entitlement and TLS remain direct.
+  */
+ final class JioNetwork {
+     private static final JioSecureDns API_DNS = new JioSecureDns();
+-    private static final AtomicLong REPORTED = new AtomicLong();
++    private static final SecureDns MEDIA_DNS = SecureDns.systemFirst(SecureDns::publicHostname);
++    private static final AtomicLong API_REPORTED = new AtomicLong();
++    private static final AtomicLong MEDIA_REPORTED = new AtomicLong();
+ 
+     private static final OkHttpClient API = new OkHttpClient.Builder()
+             .dns(API_DNS)
+@@ -30,16 +31,19 @@ final class JioNetwork {
+             .connectionPool(new ConnectionPool(8, 5, TimeUnit.MINUTES))
+             .build();
+ 
+-    private static final OkHttpClient MEDIA_DIRECT = new OkHttpClient.Builder()
++    private static final OkHttpClient MEDIA = new OkHttpClient.Builder()
++            .dns(MEDIA_DNS)
+             .connectTimeout(15, TimeUnit.SECONDS)
+             .readTimeout(25, TimeUnit.SECONDS)
++            .callTimeout(40, TimeUnit.SECONDS)
+             .retryOnConnectionFailure(true)
+             .followRedirects(true)
+             .followSslRedirects(false)
+             .connectionPool(new ConnectionPool(10, 5, TimeUnit.MINUTES))
+             .build();
+ 
+-    private static final OkHttpClient PREVIEW_DIRECT = new OkHttpClient.Builder()
++    private static final OkHttpClient PREVIEW = new OkHttpClient.Builder()
++            .dns(MEDIA_DNS)
+             .connectTimeout(4, TimeUnit.SECONDS)
+             .readTimeout(4, TimeUnit.SECONDS)
+             .callTimeout(7, TimeUnit.SECONDS)
+@@ -52,21 +56,42 @@ final class JioNetwork {
+     private JioNetwork() {}
+ 
+     static Call.Factory api(Context context) { return API; }
+-    static Call.Factory media(Context context) { return MEDIA_DIRECT; }
+-    static Call.Factory preview(Context context) { return PREVIEW_DIRECT; }
++    static Call.Factory media(Context context) { return MEDIA; }
++    static Call.Factory preview(Context context) { return PREVIEW; }
+     static OkHttpClient directApi() { return API; }
++    static OkHttpClient mediaClient() { return MEDIA; }
++    static OkHttpClient previewClient() { return PREVIEW; }
+     static Dns dns() { return API_DNS; }
++    static Dns mediaDns() { return MEDIA_DNS; }
+ 
+-    static boolean fallbackUsedRecently() { return API_DNS.usedRecently(); }
++    static boolean apiFallbackUsedRecently() { return API_DNS.usedRecently(); }
++    static boolean mediaFallbackUsedRecently() { return MEDIA_DNS.usedRecently(); }
++    static boolean fallbackUsedRecently() {
++        return apiFallbackUsedRecently() || mediaFallbackUsedRecently();
++    }
+     static boolean torUsedRecently() { return false; }
+     static String recoveryLabel() {
+-        return fallbackUsedRecently() ? "secure DNS recovery" : "direct";
++        return apiFallbackUsedRecently() ? "secure DNS recovery" : "direct";
++    }
++    static String mediaRecoveryLabel() {
++        return mediaFallbackUsedRecently() ? "secure DNS recovery" : "direct";
+     }
+     static void reportFallbackIfNew(Context context) {
+         long count = API_DNS.fallbackCount();
+-        long previous = REPORTED.get();
+-        if (count > previous && REPORTED.compareAndSet(previous, count)) {
++        long previous = API_REPORTED.get();
++        if (count > previous && API_REPORTED.compareAndSet(previous, count)) {
++            Telemetry.event(context, "jio_dns_fallback", Telemetry.data(
++                    "plane", "api",
++                    "route", "secure_dns_after_system_failure",
++                    "event_version_code", BuildConfig.VERSION_CODE));
++        }
++    }
++    static void reportMediaFallbackIfNew(Context context) {
++        long count = MEDIA_DNS.fallbackCount();
++        long previous = MEDIA_REPORTED.get();
++        if (count > previous && MEDIA_REPORTED.compareAndSet(previous, count)) {
+             Telemetry.event(context, "jio_dns_fallback", Telemetry.data(
++                    "plane", "media",
+                     "route", "secure_dns_after_system_failure",
+                     "event_version_code", BuildConfig.VERSION_CODE));
+         }
+diff --git a/android-tv/app/src/main/java/in/ghartv/nova/NetworkDiagnostics.java b/android-tv/app/src/main/java/in/ghartv/nova/NetworkDiagnostics.java
+index 5169751d35e436b128f4994f7a362c8e8041dddd..9ec99e60f1263a8796868e4ed22d2a5c18e89af9 100644
+--- a/android-tv/app/src/main/java/in/ghartv/nova/NetworkDiagnostics.java
++++ b/android-tv/app/src/main/java/in/ghartv/nova/NetworkDiagnostics.java
+@@ -2,6 +2,7 @@ package in.ghartv.nova;
+ 
+ import android.app.Activity;
+ import android.app.AlertDialog;
++import android.media.MediaDrm;
+ import android.content.Context;
+ import android.content.Intent;
+ import android.net.ConnectivityManager;
+@@ -11,6 +12,7 @@ import android.os.Looper;
+ import android.os.SystemClock;
+ import android.provider.Settings;
+ import android.util.Log;
++import androidx.media3.common.C;
+ import org.json.JSONArray;
+ import org.json.JSONObject;
+ import java.net.InetAddress;
+@@ -33,6 +35,7 @@ public final class NetworkDiagnostics {
+         .callTimeout(5, TimeUnit.SECONDS).followRedirects(false).followSslRedirects(false).build();
+     private static final String[][] HOSTS = {
+         {"jio_playback", "jiotvapi.media.jio.com"}, {"jio_guide", "jiotvapi.cdn.jio.com"},
++        {"jio_media_cdn", "jiotv.catchup.cdn.jio.com"},
+         {"updates", "api.github.com"}, {"collector", "ghartv-telemetry.ghartv-47d9a0.workers.dev"},
+         {"flixmomo_app", "flixmomo.app"}, {"flixmomo_st", "flixmomo.st"}, {"flixmomo_bet", "flixmomo.bet"},
+         {"film_catalogue", "api.themoviedb.org"}, {"iptv_org", "iptv-org.github.io"}
+@@ -46,7 +49,7 @@ public final class NetworkDiagnostics {
+     public static void show(Activity activity) {
+         if(activity.isFinishing() || activity.isDestroyed()) return;
+         AlertDialog wait = new AlertDialog.Builder(activity).setTitle("Checking this TV's connection")
+-            .setMessage("Checking DNS and HTTPS separately for Jio, IPTV-org, registered FlixMomo addresses, updates and diagnostics. Jio uses the ordinary direct Android connection retained from Review 38. IPTV and FlixMomo keep their separate recovery routes. No login, stream or private data is sent. This can take up to 15 seconds.")
++            .setMessage("Checking system DNS, recovered HTTPS and Widevine separately for Jio, plus IPTV-org, registered FlixMomo addresses, updates and diagnostics. Jio stays direct and never uses Tor; secure DNS is tried only after Android DNS fails. No login, stream or private data is sent. This can take up to 15 seconds.")
+             .setNegativeButton("Close", null).show();
+         check(activity.getApplicationContext(), "manual_" + SystemClock.elapsedRealtime(), result -> {
+             if(!wait.isShowing() || activity.isFinishing() || activity.isDestroyed()) return;
+@@ -58,6 +61,11 @@ public final class NetworkDiagnostics {
+                 text.append(item.optString("service")).append(": ").append(item.optString("dns")).append(" / ").append(item.optString("https")).append(item.has("tls_reason")?" · "+item.optString("tls_reason"):"").append('\n');
+                 if(item.has("clock_offset_seconds"))text.append("  TV minus verified HTTPS time: ").append(item.optLong("clock_offset_seconds")).append(" seconds").append(Math.abs(item.optLong("clock_offset_seconds"))>120?" — check TV date/time":"").append('\n');
+             }
++            JSONObject drm=result.optJSONObject("widevine");
++            if(drm!=null)text.append("\nWidevine: ")
++                .append(drm.optBoolean("supported")?"SUPPORTED":"NOT SUPPORTED")
++                .append(" · security level ").append(drm.optString("security_level","UNKNOWN"))
++                .append("\n");

@@ -1,0 +1,54 @@
+diff --git a/.github/workflows/tv-experience-contract.yml b/.github/workflows/tv-experience-contract.yml
+index 26dd23292854ed1f70363bf3624bbef2e37e90a7..4fba94b3c450198594caaa6325aaa5e6c456d9a7 100644
+--- a/.github/workflows/tv-experience-contract.yml
++++ b/.github/workflows/tv-experience-contract.yml
+@@ -2,7 +2,7 @@ name: Nova TV experience contract
+ on:
+   push:
+     branches: ['codex/ghartv-remove-auto-preview']
+-    paths: ['android-tv/**','TV_EXPERIENCE_CONTRACT.json','OWNER_REVIEW_REQUIREMENTS.json','tools/tv-first/**','tools/owner_review.command.in','tools/package_owner_review.py','.github/workflows/tv-experience-contract.yml','REVIEW61.md']
++    paths: ['android-tv/**','TV_EXPERIENCE_CONTRACT.json','OWNER_REVIEW_REQUIREMENTS.json','tools/tv-first/**','tools/owner_review.command.in','tools/package_owner_review.py','.github/workflows/tv-experience-contract.yml','REVIEW61.md','REVIEW62.md']
+   workflow_dispatch:
+ permissions:
+   contents: read
+@@ -51,7 +51,7 @@ jobs:
+           javac -d "$RUNNER_TEMP/nova-contract" android-tv/app/src/main/java/in/ghartv/nova/PreviewGate.java tools/tv-first/PreviewGateSmoke.java android-tv/app/src/main/java/in/ghartv/nova/RemoteCursorState.java tools/tv-first/RemoteCursorSmoke.java
+           java -cp "$RUNNER_TEMP/nova-contract" PreviewGateSmoke
+           java -cp "$RUNNER_TEMP/nova-contract" RemoteCursorSmoke
+-          changed="$(git diff --name-only c504379a49b170a1bbbffdfbd1634572c55ce821 HEAD)"
++          changed="$(git diff --name-only ee0cde00f93b1f6798264da72e1381290909587a HEAD)"
+           ! grep -E 'android-tv/app/src/main/java/in/ghartv/nova/(Iptv|FlixMomo|FilmTor)' <<<"$changed"
+   candidate:
+     needs: [source, contract]
+@@ -88,7 +88,7 @@ jobs:
+           sha256sum android-tv/app/src/main/assets/ghartv-native-check.mp4 > /tmp/ghartv-candidate/proof/owned-native-media.sha256
+           sdkmanager 'platforms;android-36' 'build-tools;36.0.0'
+           (cd android-tv && chmod +x gradlew && ./gradlew --no-daemon --max-workers=2 assembleRelease assembleDebug assembleDebugAndroidTest)
+-          cp android-tv/app/build/outputs/apk/release/app-release-unsigned.apk /tmp/ghartv-candidate/GharTV-code61-review-unsigned.apk
++          cp android-tv/app/build/outputs/apk/release/app-release-unsigned.apk /tmp/ghartv-candidate/GharTV-code62-review-unsigned.apk
+       - name: Observe public IPTV catalogue without changing or claiming playback
+         run: |
+           set -euo pipefail
+@@ -154,26 +154,26 @@ jobs:
+             adb -s emulator-5580 shell am instrument -w -r -e class 'in.ghartv.nova.Review50FeedbackTest#realProviderFullscreenCallbackThenFDoesNotReloadOwnedVideo,in.ghartv.nova.Review47ViewingTest#explicitFullscreenActionEntersActualWebViewCustomMode' "$RUNNER" | tee "/tmp/ghartv-candidate/proof/android-fullscreen-repeat-${attempt}.txt"
+             grep -q 'OK (2 tests)' "/tmp/ghartv-candidate/proof/android-fullscreen-repeat-${attempt}.txt"
+           done
+-          FOCUSED=in.ghartv.nova.Review50FeedbackTest,in.ghartv.nova.Review51PointerSearchTest,in.ghartv.nova.Review47ViewingTest,in.ghartv.nova.Review52ProviderMigrationTest,in.ghartv.nova.PreviewControllerTest,in.ghartv.nova.Review53PreviewFailureTest,in.ghartv.nova.Review53ProviderRecoveryTest,in.ghartv.nova.FilmCatalogueObservationTest,in.ghartv.nova.FilmTorControllerTest,in.ghartv.nova.Review56SimplifiedDiscoverTest,in.ghartv.nova.Review58IptvAndDnsTest,in.ghartv.nova.Review59NetworkRecoveryTest,in.ghartv.nova.Review60JioBaselineAndIptvCacheTest,in.ghartv.nova.Review61JioDnsTest
++          FOCUSED=in.ghartv.nova.Review50FeedbackTest,in.ghartv.nova.Review51PointerSearchTest,in.ghartv.nova.Review47ViewingTest,in.ghartv.nova.Review52ProviderMigrationTest,in.ghartv.nova.PreviewControllerTest,in.ghartv.nova.Review53PreviewFailureTest,in.ghartv.nova.Review53ProviderRecoveryTest,in.ghartv.nova.FilmCatalogueObservationTest,in.ghartv.nova.FilmTorControllerTest,in.ghartv.nova.Review56SimplifiedDiscoverTest,in.ghartv.nova.Review58IptvAndDnsTest,in.ghartv.nova.Review59NetworkRecoveryTest,in.ghartv.nova.Review60JioBaselineAndIptvCacheTest,in.ghartv.nova.Review61JioDnsTest,in.ghartv.nova.Review62JioMediaDnsDiagnosticsTest
+           adb -s emulator-5580 shell am instrument -w -r -e class "$FOCUSED" "$RUNNER" | tee /tmp/ghartv-candidate/proof/android-focused-tests.txt
+-          grep -q 'OK (151 tests)' /tmp/ghartv-candidate/proof/android-focused-tests.txt
+-          FULL=in.ghartv.nova.RemoteWebCursorTest,in.ghartv.nova.FilmNativeControlsTest,in.ghartv.nova.DiscoverExperienceTest,in.ghartv.nova.Review38RegressionTest,in.ghartv.nova.Review39ExperienceTest,in.ghartv.nova.Review40PlaybackTest,in.ghartv.nova.Review41ConnectionTelemetryTest,in.ghartv.nova.Review42RegressionTest,in.ghartv.nova.Review43PerformanceTest,in.ghartv.nova.Review44LoadingMouseTest,in.ghartv.nova.Review45PlayEvidenceTest,in.ghartv.nova.Review46NativePointerTest,in.ghartv.nova.Review47ViewingTest,in.ghartv.nova.Review48InputStabilityTest,in.ghartv.nova.Review49PlaybackBudgetTest,in.ghartv.nova.Review50SeriesControlsTest,in.ghartv.nova.Review50FeedbackTest,in.ghartv.nova.Review51PointerSearchTest,in.ghartv.nova.Review52ProviderMigrationTest,in.ghartv.nova.PreviewControllerTest,in.ghartv.nova.Review53PreviewFailureTest,in.ghartv.nova.Review53ProviderRecoveryTest,in.ghartv.nova.FilmCatalogueObservationTest,in.ghartv.nova.FilmTorControllerTest,in.ghartv.nova.Review56SimplifiedDiscoverTest,in.ghartv.nova.Review58IptvAndDnsTest,in.ghartv.nova.Review59NetworkRecoveryTest,in.ghartv.nova.Review60JioBaselineAndIptvCacheTest,in.ghartv.nova.Review61JioDnsTest
++          grep -q 'OK (155 tests)' /tmp/ghartv-candidate/proof/android-focused-tests.txt
++          FULL=in.ghartv.nova.RemoteWebCursorTest,in.ghartv.nova.FilmNativeControlsTest,in.ghartv.nova.DiscoverExperienceTest,in.ghartv.nova.Review38RegressionTest,in.ghartv.nova.Review39ExperienceTest,in.ghartv.nova.Review40PlaybackTest,in.ghartv.nova.Review41ConnectionTelemetryTest,in.ghartv.nova.Review42RegressionTest,in.ghartv.nova.Review43PerformanceTest,in.ghartv.nova.Review44LoadingMouseTest,in.ghartv.nova.Review45PlayEvidenceTest,in.ghartv.nova.Review46NativePointerTest,in.ghartv.nova.Review47ViewingTest,in.ghartv.nova.Review48InputStabilityTest,in.ghartv.nova.Review49PlaybackBudgetTest,in.ghartv.nova.Review50SeriesControlsTest,in.ghartv.nova.Review50FeedbackTest,in.ghartv.nova.Review51PointerSearchTest,in.ghartv.nova.Review52ProviderMigrationTest,in.ghartv.nova.PreviewControllerTest,in.ghartv.nova.Review53PreviewFailureTest,in.ghartv.nova.Review53ProviderRecoveryTest,in.ghartv.nova.FilmCatalogueObservationTest,in.ghartv.nova.FilmTorControllerTest,in.ghartv.nova.Review56SimplifiedDiscoverTest,in.ghartv.nova.Review58IptvAndDnsTest,in.ghartv.nova.Review59NetworkRecoveryTest,in.ghartv.nova.Review60JioBaselineAndIptvCacheTest,in.ghartv.nova.Review61JioDnsTest,in.ghartv.nova.Review62JioMediaDnsDiagnosticsTest
+           adb -s emulator-5580 shell am instrument -w -r -e class "$FULL" "$RUNNER" | tee /tmp/ghartv-candidate/proof/android-tests.txt
+-          grep -q 'OK (359 tests)' /tmp/ghartv-candidate/proof/android-tests.txt
++          grep -q 'OK (363 tests)' /tmp/ghartv-candidate/proof/android-tests.txt
+           python - <<'PY'
+           import json,pathlib
+-          pathlib.Path('/tmp/ghartv-candidate/proof/android-test-count.json').write_text(json.dumps({'deterministic_android_tests_passed':359,'focused_tests_passed':151,'external_tor_smoke_gating':False},indent=2)+'\n')
++          pathlib.Path('/tmp/ghartv-candidate/proof/android-test-count.json').write_text(json.dumps({'deterministic_android_tests_passed':363,'focused_tests_passed':155,'external_tor_smoke_gating':False},indent=2)+'\n')
+           PY
+       - name: Package source-bound unsigned review artifact
+         run: |
+           set -euo pipefail
+-          git archive --format=zip HEAD -o /tmp/ghartv-candidate/GHARTV_CODE61_SOURCE.zip

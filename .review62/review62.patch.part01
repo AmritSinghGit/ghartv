@@ -1,0 +1,91 @@
++          git archive --format=zip HEAD -o /tmp/ghartv-candidate/GHARTV_CODE62_SOURCE.zip
+           python - <<'PY'
+           import hashlib,json,pathlib,subprocess
+-          root=pathlib.Path('/tmp/ghartv-candidate');apk=root/'GharTV-code61-review-unsigned.apk';source=root/'GHARTV_CODE61_SOURCE.zip';sha=subprocess.check_output(['git','rev-parse','HEAD'],text=True).strip()
+-          gradle=pathlib.Path('android-tv/app/build.gradle.kts').read_text();assert 'versionCode = 61' in gradle and '0.6.0-rc15.2-jio-guide-dns-review' in gradle
++          root=pathlib.Path('/tmp/ghartv-candidate');apk=root/'GharTV-code62-review-unsigned.apk';source=root/'GHARTV_CODE62_SOURCE.zip';sha=subprocess.check_output(['git','rev-parse','HEAD'],text=True).strip()
++          gradle=pathlib.Path('android-tv/app/build.gradle.kts').read_text();assert 'versionCode = 62' in gradle and '0.6.0-rc15.3-jio-media-dns-diagnostics-review' in gradle
+           tor=json.loads((root/'proof/tor-smoke-observation.json').read_text())
+-          candidate={'schema':'ghartv.review61-candidate.v1','source':sha,'version_code':61,'version_name':'0.6.0-rc15.2-jio-guide-dns-review','package':'in.ghartv.nova','unsigned_apk_sha256':hashlib.sha256(apk.read_bytes()).hexdigest(),'source_zip_sha256':hashlib.sha256(source.read_bytes()).hexdigest(),'deterministic_android_tests_passed':359,'focused_tests_passed':151,'external_tor_smoke_observed':tor,'iptv_implementation_changed':False,'flixmomo_implementation_changed':False,'jio_tor_enabled':False,'jio_api_dns':'system_first_tls_verified_secure_dns_on_failure','jio_media_preview':'direct_review38_compatible','live_jio_playback':'OWNER_REVIEW_REQUIRED','published':False}
++          candidate={'schema':'ghartv.review62-candidate.v1','source':sha,'version_code':62,'version_name':'0.6.0-rc15.3-jio-media-dns-diagnostics-review','package':'in.ghartv.nova','unsigned_apk_sha256':hashlib.sha256(apk.read_bytes()).hexdigest(),'source_zip_sha256':hashlib.sha256(source.read_bytes()).hexdigest(),'deterministic_android_tests_passed':363,'focused_tests_passed':155,'external_tor_smoke_observed':tor,'iptv_implementation_changed':False,'flixmomo_implementation_changed':False,'jio_tor_enabled':False,'jio_api_dns':'system_first_tls_verified_secure_dns_on_failure','jio_media_preview':'system_first_tls_verified_secure_dns_on_failure_direct_bytes_and_drm','live_jio_playback':'OWNER_REVIEW_REQUIRED','published':False}
+           (root/'CANDIDATE.json').write_text(json.dumps(candidate,indent=2)+'\n')
+           (root/'VALIDATION.json').write_text(json.dumps({'controlled_android_tests':'PASS','real_jio_guide_preview_watch_live':'NOT_VERIFIED','public_iptv_transport':'UNCHANGED_OWNER_CONFIRMED_WORKING','flixmomo':'UNCHANGED_OWNER_CONFIRMED_WORKING','iptv_logos':'existing_tvg_logo_loader_preserved','external_tor_smoke':'OBSERVED_NON_GATING_BECAUSE_IMPLEMENTATION_UNCHANGED'},indent=2)+'\n')
+           (root/'SHA256SUMS').write_text(''.join(hashlib.sha256(p.read_bytes()).hexdigest()+'  '+p.name+'\n' for p in sorted(root.iterdir()) if p.is_file() and p.name!='SHA256SUMS'))
+@@ -182,6 +182,6 @@ jobs:
+       - uses: actions/upload-artifact@v4
+         if: always()
+         with:
+-          name: ghartv-code61-owner-review
++          name: ghartv-code62-owner-review
+           path: /tmp/ghartv-candidate/
+           retention-days: 14
+diff --git a/REVIEW62.md b/REVIEW62.md
+new file mode 100644
+index 0000000000000000000000000000000000000000..a2d256ad95ad9cf8460889a13ef9245925a4da1f
+--- /dev/null
++++ b/REVIEW62.md
+@@ -0,0 +1,9 @@
++# GharTV Review 62 — Jio media DNS and diagnostic closure
++
++Owner evidence on Review 61 showed that the Jio catalogue refresh now succeeds while preview and Watch Live still fail on the Nova emulator. Review 38 and Review 61 use effectively the same Media3 playback code, so the remaining difference is the device/network media plane rather than guide rendering.
++
++Review 62 preserves IPTV and FlixMomo application source. Jio remains direct and never uses Tor. Jio API, manifest, segment and DRM hostnames use Android system DNS first and a TLS-verified public DNS fallback only after resolution failure. Media bytes, account access, TLS, DRM, subscriptions and geographic/provider restrictions are not bypassed.
++
++The connection check now distinguishes system DNS from recovered HTTPS, probes a Jio media CDN separately, and reports whether Widevine is supported and its security level. Preview and live-player failures carry the precise stage, failure class, route, protocol and DRM flag into the existing opt-in privacy-filtered diagnostics.
++
++Success requires owner evidence: guide refresh, preview first frame and Watch Live first frame on at least two Jio channels, plus an acknowledged diagnostic delivery check. Controlled tests are not a claim of live Jio acceptance.
+diff --git a/android-tv/app/build.gradle.kts b/android-tv/app/build.gradle.kts
+index 66f2ee46f4626db700c00b476c6e493c81081037..f0c95b1841be5f037044806846a179075ab3f8d2 100644
+--- a/android-tv/app/build.gradle.kts
++++ b/android-tv/app/build.gradle.kts
+@@ -13,8 +13,8 @@ android {
+         applicationId = "in.ghartv.nova"
+         minSdk = 26
+         targetSdk = 35
+-        versionCode = 61
+-        versionName = "0.6.0-rc15.2-jio-guide-dns-review"
++        versionCode = 62
++        versionName = "0.6.0-rc15.3-jio-media-dns-diagnostics-review"
+         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+     }
+     buildFeatures { buildConfig = true }
+diff --git a/android-tv/app/src/androidTest/java/in/ghartv/nova/Review60JioBaselineAndIptvCacheTest.java b/android-tv/app/src/androidTest/java/in/ghartv/nova/Review60JioBaselineAndIptvCacheTest.java
+index 53448897740f563e6608ec08d76bf4e15b61a1d7..3cfbf3eaa584367e729069f9e9df6aecc7a2a1aa 100644
+--- a/android-tv/app/src/androidTest/java/in/ghartv/nova/Review60JioBaselineAndIptvCacheTest.java
++++ b/android-tv/app/src/androidTest/java/in/ghartv/nova/Review60JioBaselineAndIptvCacheTest.java
+@@ -19,7 +19,6 @@ import java.util.concurrent.atomic.AtomicInteger;
+ 
+ import okhttp3.Call;
+ import okhttp3.Callback;
+-import okhttp3.Dns;
+ import okhttp3.OkHttpClient;
+ import okhttp3.Request;
+ import okhttp3.Response;
+@@ -64,14 +63,15 @@ public class Review60JioBaselineAndIptvCacheTest {
+         assertFalse(JioNetwork.torUsedRecently());
+     }
+ 
+-    @Test public void jioApiUsesScopedDnsRecoveryWhileMediaAndPreviewStayDirect() {
++    @Test public void jioApiAndMediaUseDnsOnlyRecoveryAndNeverTor() {
+         assertTrue(JioNetwork.api(context) instanceof OkHttpClient);
+         assertTrue(((OkHttpClient) JioNetwork.api(context)).dns() instanceof JioSecureDns);
+         assertTrue(JioNetwork.dns() instanceof JioSecureDns);
+         assertTrue(JioNetwork.media(context) instanceof OkHttpClient);
+         assertTrue(JioNetwork.preview(context) instanceof OkHttpClient);
+-        assertSame(Dns.SYSTEM, ((OkHttpClient) JioNetwork.media(context)).dns());
+-        assertSame(Dns.SYSTEM, ((OkHttpClient) JioNetwork.preview(context)).dns());
++        assertTrue(((OkHttpClient) JioNetwork.media(context)).dns() instanceof SecureDns);
++        assertTrue(((OkHttpClient) JioNetwork.preview(context)).dns() instanceof SecureDns);
++        assertSame(JioNetwork.mediaDns(),((OkHttpClient) JioNetwork.media(context)).dns());
+         assertFalse(JioNetwork.torUsedRecently());
+     }
+ 
+diff --git a/android-tv/app/src/androidTest/java/in/ghartv/nova/Review61JioDnsTest.java b/android-tv/app/src/androidTest/java/in/ghartv/nova/Review61JioDnsTest.java
+index d0a29c1f6859c9f42ab07a0259be93a0401c8ff2..2bbb92dacd6bd967e77ff8adcabdafe328859bad 100644
+--- a/android-tv/app/src/androidTest/java/in/ghartv/nova/Review61JioDnsTest.java
++++ b/android-tv/app/src/androidTest/java/in/ghartv/nova/Review61JioDnsTest.java
+@@ -8,14 +8,13 @@ import androidx.test.platform.app.InstrumentationRegistry;
+ import org.junit.Test;
+ import org.junit.runner.RunWith;
+ 
+-import okhttp3.Dns;
