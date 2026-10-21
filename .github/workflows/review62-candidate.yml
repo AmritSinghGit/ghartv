@@ -2,7 +2,7 @@ name: GharTV Review62 candidate
 on:
   push:
     branches: ['codex/ghartv-remove-auto-preview']
-    paths: ['.github/workflows/review62-candidate.yml']
+    paths: ['.github/workflows/review62-candidate.yml','android-tv/**']
   workflow_dispatch:
 permissions:
   contents: read
