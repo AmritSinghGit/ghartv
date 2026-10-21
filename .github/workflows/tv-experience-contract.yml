@@ -2,7 +2,7 @@ name: Nova TV experience contract
 on:
   push:
     branches: ['codex/ghartv-remove-auto-preview']
-    paths: ['android-tv/**','TV_EXPERIENCE_CONTRACT.json','OWNER_REVIEW_REQUIREMENTS.json','tools/tv-first/**','tools/owner_review.command.in','tools/package_owner_review.py','.github/workflows/tv-experience-contract.yml','REVIEW61.md']
+    paths: ['android-tv/**','TV_EXPERIENCE_CONTRACT.json','OWNER_REVIEW_REQUIREMENTS.json','tools/tv-first/**','tools/owner_review.command.in','tools/package_owner_review.py','.github/workflows/tv-experience-contract.yml','REVIEW61.md','REVIEW62.md']
   workflow_dispatch:
 permissions:
   contents: read
@@ -51,7 +51,7 @@ jobs:
           javac -d "$RUNNER_TEMP/nova-contract" android-tv/app/src/main/java/in/ghartv/nova/PreviewGate.java tools/tv-first/PreviewGateSmoke.java android-tv/app/src/main/java/in/ghartv/nova/RemoteCursorState.java tools/tv-first/RemoteCursorSmoke.java
           java -cp "$RUNNER_TEMP/nova-contract" PreviewGateSmoke
           java -cp "$RUNNER_TEMP/nova-contract" RemoteCursorSmoke
-          changed="$(git diff --name-only c504379a49b170a1bbbffdfbd1634572c55ce821 HEAD)"
+          changed="$(git diff --name-only ee0cde00f93b1f6798264da72e1381290909587a HEAD)"
           ! grep -E 'android-tv/app/src/main/java/in/ghartv/nova/(Iptv|FlixMomo|FilmTor)' <<<"$changed"
   candidate:
     needs: [source, contract]
@@ -88,7 +88,7 @@ jobs:
           sha256sum android-tv/app/src/main/assets/ghartv-native-check.mp4 > /tmp/ghartv-candidate/proof/owned-native-media.sha256
           sdkmanager 'platforms;android-36' 'build-tools;36.0.0'
           (cd android-tv && chmod +x gradlew && ./gradlew --no-daemon --max-workers=2 assembleRelease assembleDebug assembleDebugAndroidTest)
-          cp android-tv/app/build/outputs/apk/release/app-release-unsigned.apk /tmp/ghartv-candidate/GharTV-code61-review-unsigned.apk
+          cp android-tv/app/build/outputs/apk/release/app-release-unsigned.apk /tmp/ghartv-candidate/GharTV-code62-review-unsigned.apk
       - name: Observe public IPTV catalogue without changing or claiming playback
         run: |
           set -euo pipefail
@@ -100,7 +100,7 @@ jobs:
             p=subprocess.run(['curl','-fL','--retry','2','--max-time','25','-sS',state['url']],stdout=subprocess.PIPE,stderr=subprocess.PIPE,timeout=35)
             state['curl_exit']=p.returncode
             if p.returncode==0:
-              text=p.stdout.decode('utf-8','replace');state.update(http_reachable=True,bytes=len(p.stdout),m3u=text.startswith('#EXTM3U'),described_entries=sum(x.startswith('#EXTINF:') for x in text.splitlines()),https_stream_lines=sum(x.startswith('https://') for x in text.splitlines()))
+              text=p.stdout.decode('utf-8','replace');state.update(http_reachable=True,bytes=len(p.stdout),m3u=text.startswith('#EXTM3U'),described_entries=sum(x.startswith('#EXTINDš') for x in text.splitlines()),https_stream_lines=sum(x.startswith('https://') for x in text.splitlines()))
             else:state['error']='bounded public playlist request failed'
           except Exception:state['error']='bounded public playlist request did not complete'
           out.write_text(json.dumps(state,indent=2)+'\n');print(json.dumps(state,indent=2))
@@ -122,66 +122,4 @@ jobs:
           cfg.write_text(t)
           with (out/'test-emulator.log').open('w') as log:p=subprocess.Popen([str(sdk/'emulator/emulator'),'-avd','GHARTV_CLOUD_REVIEW_ONLY','-port','5580','-no-window','-no-audio','-no-snapshot','-no-boot-anim','-gpu','swiftshader','-feature','-Vulkan','-memory','2048'],stdin=subprocess.DEVNULL,stdout=log,stderr=log,start_new_session=True)
           end=time.monotonic()+180
-          while time.monotonic()<end:
-            if p.poll() is not None:raise RuntimeError('CLOUD_DEVICE_EXITED '+(out/'test-emulator.log').read_text()[-1500:])
-            try:r=subprocess.run(['adb','-s','emulator-5580','shell','getprop','sys.boot_completed'],capture_output=True,text=True,timeout=5)
-            except subprocess.TimeoutExpired:time.sleep(1);continue
-            if r.returncode==0 and r.stdout.strip()=='1':break
-            time.sleep(2)
-          else:raise RuntimeError('CLOUD_DEVICE_TIMEOUT')
-          for args in (['wm','size','1280x720'],['wm','density','160'],['settings','put','secure','immersive_mode_confirmations','confirmed'],['input','keyevent','KEYCODE_WAKEUP'],['wm','dismiss-keyguard']):subprocess.run(['adb','-s','emulator-5580','shell']+args,check=True)
-          PY
-      - name: Run deterministic Jio/IPTV/film regressions and observe unchanged live Tor smoke
-        run: |
-          set -euo pipefail
-          RUNNER=in.ghartv.nova.test/androidx.test.runner.AndroidJUnitRunner
-          adb -s emulator-5580 install -r android-tv/app/build/outputs/apk/debug/app-debug.apk
-          adb -s emulator-5580 install -r android-tv/app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk
-          set +e
-          adb -s emulator-5580 shell am instrument -w -r -e class in.ghartv.nova.FilmTorNativeSmokeTest "$RUNNER" | tee /tmp/ghartv-candidate/proof/android-tor-native-smoke.txt
-          tor_exit=${PIPESTATUS[0]}
-          set -e
-          TOR_EXIT="$tor_exit" python - <<'PY'
-          import json,os,pathlib
-          text=pathlib.Path('/tmp/ghartv-candidate/proof/android-tor-native-smoke.txt').read_text()
-          result={'scope':'unchanged FlixMomo app-local Tor live smoke','exit_code':int(os.environ['TOR_EXIT']),'passed':'OK (1 test)' in text,'gating':False,'owner_live_acceptance':'ALREADY_REPORTED_WORKING_IN_REVIEW60'}
-          pathlib.Path('/tmp/ghartv-candidate/proof/tor-smoke-observation.json').write_text(json.dumps(result,indent=2)+'\n')
-          print(json.dumps(result,indent=2))
-          PY
-          adb -s emulator-5580 shell am instrument -w -r -e class in.ghartv.nova.FilmCatalogueObservationTest "$RUNNER" | tee /tmp/ghartv-candidate/proof/android-catalogue-tests.txt
-          grep -q 'OK (7 tests)' /tmp/ghartv-candidate/proof/android-catalogue-tests.txt
-          for attempt in 1 2 3 4 5 6 7 8; do
-            adb -s emulator-5580 shell am instrument -w -r -e class 'in.ghartv.nova.Review50FeedbackTest#realProviderFullscreenCallbackThenFDoesNotReloadOwnedVideo,in.ghartv.nova.Review47ViewingTest#explicitFullscreenActionEntersActualWebViewCustomMode' "$RUNNER" | tee "/tmp/ghartv-candidate/proof/android-fullscreen-repeat-${attempt}.txt"
-            grep -q 'OK (2 tests)' "/tmp/ghartv-candidate/proof/android-fullscreen-repeat-${attempt}.txt"
-          done
-          FOCUSED=in.ghartv.nova.Review50FeedbackTest,in.ghartv.nova.Review51PointerSearchTest,in.ghartv.nova.Review47ViewingTest,in.ghartv.nova.Review52ProviderMigrationTest,in.ghartv.nova.PreviewControllerTest,in.ghartv.nova.Review53PreviewFailureTest,in.ghartv.nova.Review53ProviderRecoveryTest,in.ghartv.nova.FilmCatalogueObservationTest,in.ghartv.nova.FilmTorControllerTest,in.ghartv.nova.Review56SimplifiedDiscoverTest,in.ghartv.nova.Review58IptvAndDnsTest,in.ghartv.nova.Review59NetworkRecoveryTest,in.ghartv.nova.Review60JioBaselineAndIptvCacheTest,in.ghartv.nova.Review61JioDnsTest
-          adb -s emulator-5580 shell am instrument -w -r -e class "$FOCUSED" "$RUNNER" | tee /tmp/ghartv-candidate/proof/android-focused-tests.txt
-          grep -q 'OK (151 tests)' /tmp/ghartv-candidate/proof/android-focused-tests.txt
-          FULL=in.ghartv.nova.RemoteWebCursorTest,in.ghartv.nova.FilmNativeControlsTest,in.ghartv.nova.DiscoverExperienceTest,in.ghartv.nova.Review38RegressionTest,in.ghartv.nova.Review39ExperienceTest,in.ghartv.nova.Review40PlaybackTest,in.ghartv.nova.Review41ConnectionTelemetryTest,in.ghartv.nova.Review42RegressionTest,in.ghartv.nova.Review43PerformanceTest,in.ghartv.nova.Review44LoadingMouseTest,in.ghartv.nova.Review45PlayEvidenceTest,in.ghartv.nova.Review46NativePointerTest,in.ghartv.nova.Review47ViewingTest,in.ghartv.nova.Review48InputStabilityTest,in.ghartv.nova.Review49PlaybackBudgetTest,in.ghartv.nova.Review50SeriesControlsTest,in.ghartv.nova.Review50FeedbackTest,in.ghartv.nova.Review51PointerSearchTest,in.ghartv.nova.Review52ProviderMigrationTest,in.ghartv.nova.PreviewControllerTest,in.ghartv.nova.Review53PreviewFailureTest,in.ghartv.nova.Review53ProviderRecoveryTest,in.ghartv.nova.FilmCatalogueObservationTest,in.ghartv.nova.FilmTorControllerTest,in.ghartv.nova.Review56SimplifiedDiscoverTest,in.ghartv.nova.Review58IptvAndDnsTest,in.ghartv.nova.Review59NetworkRecoveryTest,in.ghartv.nova.Review60JioBaselineAndIptvCacheTest,in.ghartv.nova.Review61JioDnsTest
-          adb -s emulator-5580 shell am instrument -w -r -e class "$FULL" "$RUNNER" | tee /tmp/ghartv-candidate/proof/android-tests.txt
-          grep -q 'OK (359 tests)' /tmp/ghartv-candidate/proof/android-tests.txt
-          python - <<'PY'
-          import json,pathlib
-          pathlib.Path('/tmp/ghartv-candidate/proof/android-test-count.json').write_text(json.dumps({'deterministic_android_tests_passed':359,'focused_tests_passed':151,'external_tor_smoke_gating':False},indent=2)+'\n')
-          PY
-      - name: Package source-bound unsigned review artifact
-        run: |
-          set -euo pipefail
-          git archive --format=zip HEAD -o /tmp/ghartv-candidate/GHARTV_CODE61_SOURCE.zip
-          python - <<'PY'
-          import hashlib,json,pathlib,subprocess
-          root=pathlib.Path('/tmp/ghartv-candidate');apk=root/'GharTV-code61-review-unsigned.apk';source=root/'GHARTV_CODE61_SOURCE.zip';sha=subprocess.check_output(['git','rev-parse','HEAD'],text=True).strip()
-          gradle=pathlib.Path('android-tv/app/build.gradle.kts').read_text();assert 'versionCode = 61' in gradle and '0.6.0-rc15.2-jio-guide-dns-review' in gradle
-          tor=json.loads((root/'proof/tor-smoke-observation.json').read_text())
-          candidate={'schema':'ghartv.review61-candidate.v1','source':sha,'version_code':61,'version_name':'0.6.0-rc15.2-jio-guide-dns-review','package':'in.ghartv.nova','unsigned_apk_sha256':hashlib.sha256(apk.read_bytes()).hexdigest(),'source_zip_sha256':hashlib.sha256(source.read_bytes()).hexdigest(),'deterministic_android_tests_passed':359,'focused_tests_passed':151,'external_tor_smoke_observed':tor,'iptv_implementation_changed':False,'flixmomo_implementation_changed':False,'jio_tor_enabled':False,'jio_api_dns':'system_first_tls_verified_secure_dns_on_failure','jio_media_preview':'direct_review38_compatible','live_jio_playback':'OWNER_REVIEW_REQUIRED','published':False}
-          (root/'CANDIDATE.json').write_text(json.dumps(candidate,indent=2)+'\n')
-          (root/'VALIDATION.json').write_text(json.dumps({'controlled_android_tests':'PASS','real_jio_guide_preview_watch_live':'NOT_VERIFIED','public_iptv_transport':'UNCHANGED_OWNER_CONFIRMED_WORKING','flixmomo':'UNCHANGED_OWNER_CONFIRMED_WORKING','iptv_logos':'existing_tvg_logo_loader_preserved','external_tor_smoke':'OBSERVED_NON_GATING_BECAUSE_IMPLEMENTATION_UNCHANGED'},indent=2)+'\n')
-          (root/'SHA256SUMS').write_text(''.join(hashlib.sha256(p.read_bytes()).hexdigest()+'  '+p.name+'\n' for p in sorted(root.iterdir()) if p.is_file() and p.name!='SHA256SUMS'))
-          print(json.dumps(candidate,indent=2))
-          PY
-      - uses: actions/upload-artifact@v4
-        if: always()
-        with:
-          name: ghartv-code61-owner-review
-          path: /tmp/ghartv-candidate/
-          retention-days: 14
+          while time.monoton²È="25áÁ¥É•éÑ¥µ”¹Í±••À Ä¤í½¹Ñ¥¹Õ”(€€€€€€€€€€€¥˜È¹É•ÑÕÉ¹½‘”ôôÀ…¹È¹ÍÑ‘½ÕÐ¹ÍÑÉ¥À ¤ôôœÄœé‰É•…¬(€€€€€€€€€€€Ñ¥µ”¹Í±••À È¤(€€€€€€€€€•±Í”éÉ…¥Í”IÕ¹Ñ¥µ•ÉÉ½È 1=U}Y%}Q%5=UPœ¤(€€€€€€€€€™½È…ÉÌ¥¸€¡lÝ´œ°Í¥é”œ°œÄÈàÁàÜÈÀt±lÝ´œ°‘•¹Í¥Ñäœ°œÄØÀt±lÍ•ÑÑ¥¹Ìœ°ÁÕÐœ°Í•ÕÉ”œ°¥µµ•ÉÍ¥Ù•}µ½‘•}½¹™¥Éµ…Ñ¥½¹Ìœ°½¹™¥Éµ•t±l¥¹ÁÕÐœ°­•å•Ù•¹Ðœ°-e=}]-U@t±lÝ´œ°‘¥Íµ¥ÍÌµ­•åÕ…Ét¤éÍÕ‰ÁÉ½•ÍÌ¹ÉÕ¸¡l…‘ˆœ°œµÌœ°•µÕ±…Ñ½È´ÔÔàÀœ°Í¡•±°t­…ÉÌ±¡•¬õQÉÕ”¤(€€€€€€€€€Ad(€€€€€€´¹…µ”èIÕ¸‘•Ñ•Éµ¥¹¥ÍÑ¥Œ)¥¼½%AQX½™¥±´É•É•ÍÍ¥½¹Ì…¹½‰Í•ÉÙ”Õ¹¡…¹•±¥Ù”Q½ÈÍµ½­”(€€€€€€€ÉÕ¸èð(€€€€€€€€€Í•Ð€µ•Õ¼Á¥Á•™…¥°(€€€€€€€€€IU99Hõ¥¸¹¡…ÉÑØ¹¹½Ù„¹Ñ•ÍÐ½…¹‘É½¥‘à¹Ñ•ÍÐ¹ÉÕ¹¹•È¹¹‘É½¥‘)U¹¥ÑIÕ¹¹•È(€€€€€€€€€…‘ˆ€µÌ•µÕ±…Ñ½È´ÔÔàÀ¥¹ÍÑ…±°€µÈ…¹‘É½¥µÑØ½…ÁÀ½‰Õ¥±½½ÕÑÁÕÑÌ½…Á¬½‘•‰Õœ½…ÁÀµ‘•‰Õœ¹…Á¬(€€€€€€€€€…‘ˆ€µÌ•µÕ±…Ñ½È´ÔÔàÀ¥¹ÍÑ…±°€µÈ…¹‘É½¥µÑØ½…ÁÀ½‰Õ¥±½½ÕÑÁÕÑÌ½…Á¬½…¹‘É½¥‘Q•ÍÐ½‘•‰Õœ½…ÁÀµ‘•‰Õœµ…¹‘É½¥‘Q•ÍÐ¹…Á¬(€€€€€€€€€Í•Ð€­”(€€€€€€€€€…‘ˆ€µÌ•µÕ±…Ñ½È´ÔÔàÀÍ¡•±°…´¥¹ÍÑÉÕµ•¹Ð€µÜ€µÈ€µ”±…ÍÌ¥¸¹¡…ÉÑØ¹¹½Ù„¹¥±µQ½É9…Ñ¥Ù•Mµ½­•Q•ÍÐ€ˆ‘IU99HˆðÑ•”€½ÑµÀ½¡…ÉÑØµ…¹‘¥‘…Ñ”½ÁÉ½½˜½…¹‘É½¥µÑ½Èµ¹…Ñ¥Ù”µÍµ½­”¹ÑáÐ(€€€€€€€€€Ñ½É}•á¥Ðô‘íA%AMQQUMlÁuô(€€€€€€€€€Í•Ð€µ”(€€€€€€€€€Q=I}a%Pôˆ‘Ñ½É}•á¥ÐˆÁåÑ¡½¸€´€ððAdœ(€€€€€€€€€¥µÁ½ÉÐ©Í½¸±½Ì±Á…Ñ¡±¥ˆ(€€€€€€€€€Ñ•áÐõÁ…Ñ¡±¥ˆ¹A…Ñ  œ½ÑµÀ½¡…ÉÑØµ…¹‘¥‘…Ñ”½ÁÉ½½˜½…¹‘É½¥µÑ½Èµ¹…Ñ¥Ù”µÍµ½­”¹ÑáÐœ¤¹É•…‘}Ñ•áÐ ¤(€€€€€€€€€É•ÍÕ±ÐõìÍ½Á”œèÕ¹¡…¹•±¥á5½µ¼…ÁÀµ±½…°Q½È±¥Ù”Íµ½­”œ°•á¥Ñ}½‘”œé¥¹Ð¡½Ì¹•¹Ù¥É½¹lQ=I}a%Pt¤°Á…ÍÍ•œè=,€ ÄÑ•ÍÐ¤œ¥¸Ñ•áÐ°…Ñ¥¹œœé…±Í”°½Ý¹•É}±¥Ù•}…•ÁÑ…¹”œè1Ie}IA=IQ}]=I-%9}%9}IY%\ØÀô(€€€€€€€€€Á…Ñ¡±¥ˆ¹A…Ñ  œ½ÑµÀ½¡…ÉÑØµ…¹‘¥‘…Ñ”½ÁÉ½½˜½Ñ½ÈµÍµ½­”µ½‰Í•ÉÙ…Ñ¥½¸¹©Í½¸œ¤¹ÝÉ¥Ñ•}Ñ•áÐ¡©Í½¸¹‘ÕµÁÌ¡É•ÍÕ±Ð±¥¹‘•¹ÐôÈ¤¬q¸œ¤(€€€€€€€€€ÁÉ¥¹Ð¡©Í½¸¹‘ÕµÁÌ¡É•ÍÕ±Ð±¥¹‘•¹ÐôÈ¤¤(€€€€€€€€€Ad(€€€€€€€€€…‘ˆ€µÌ•µÕ±…Ñ½È´ÔÔàÀÍ¡•±°…´¥¹ÍÑÉÕµ•¹Ð€µÜ€µÈ€µ”±…ÍÌ¥¸¹¡…ÉÑØ¹¹½Ù„¹¥±µ…Ñ…±½Õ•=‰Í•ÉÙ…Ñ¥½¹Q•ÍÐ€ˆ‘IU99HˆðÑ•”€½ÑµÀ½¡…ÉÑØµ…¹‘¥‘…Ñ”½ÁÉ½½˜½…¹‘É½¥µ…Ñ…±½Õ”µÑ•ÍÑÌ¹ÑáÐ(€€€€€€€€€É•À€µÄ€=,€ ÜÑ•ÍÑÌ¤œ€½ÑµÀ½¡…ÉÑØµ…¹‘¥‘…Ñ”½ÁÉ½½˜½…¹‘É½¥µ…Ñ…±½Õ”µÑ•ÍÑÌ¹ÑáÐ(€€€€€€€€€™½È…ÑÑ•µÁÐ¥¸€Ä€È€Ì€Ð€Ô€Ø€Ü€àì‘¼(€€€€€€€€€€€…‘ˆ€µÌ•µÕ±…Ñ½È´ÔÔàÀÍ¡•±°…´¥¹ÍÑÉÕµ•¹Ð€µÜ€µÈ€µ”±…ÍÌ€¥¸¹¡…ÉÑØ¹¹½Ù„¹I•Ù¥•ÜÔÁ••‘‰…­Q•ÍÐÉ•…±AÉ½Ù¥‘•ÉÕ±±ÍÉ••¹…±±‰…­Q¡•¹½•Í9½ÑI•±½…‘=Ý¹•‘Y¥‘•¼±¥¸¹¡…ÉÑØ¹¹½Ù„¹I•Ù¥•ÜÐÝY¥•Ý¥¹Q•ÍÐ•áÁ±¥¥ÑÕ±±ÍÉ••¹Ñ¥½¹¹Ñ•ÉÍÑÕ…±]•‰Y¥•ÝÕÍÑ½µ5½‘”œ€ˆ‘IU99HˆðÑ•”€ˆ½ÑµÀ½¡…ÉÑØµ…¹‘¥‘…Ñ”½ÁÉ½½˜½…¹‘É½¥µ™Õ±±ÍÉ••¸µÉ•Á•…Ð´‘í…ÑÑ•µÁÑô¹ÑáÐˆ(€€€€€€€€€€€É•À€µÄ€=,€ ÈÑ•ÍÑÌ¤œ€ˆ½ÑµÀ½¡…ÉÑØµ…¹‘¥‘…Ñ”½ÁÉ½½˜½…¹‘É½¥µ™Õ±±ÍÉ••¸µÉ•Á•…Ð´‘í…ÑÑ•µÁÑô¹ÑáÐˆ(€€€€€€€€€‘½¹”(€€€€€€€€€=UMõ¥¸¹¡…ÉÑØ¹¹½Ù„¹I•Ù¥•ÜÔÁ••‘‰…­Q•ÍÐ±¥¸¹¡…ÉÑØ¹¹½Ù„¹I•Ù¥•ÜÔÅA½¥¹Ñ•ÉM•…É¡Q•ÍÐ±¥¸¹¡…ÉÑØ¹¹½Ù„¹I•Ù¥•ÜÐÝY¥•Ý¥¹Q•ÍÐ±¥¸¹¡…ÉÑØ¹¹½Ù„¹I•Ù¥•ÜÔÉAÉ½Ù¥‘•É5¥É…Ñ¥½¹Q•ÍÐ±¥¸¹¡…ÉÑØ¹¹½Ù„¹AÉ•Ù¥•Ý½¹ÑÉ½±±•ÉQ•ÍÐ±¥¸¹¡…ÉÑØ¹¹½Ù„¹I•Ù¥•ÜÔÍAÉ•Ù¥•Ý…¥±ÕÉ•Q•ÍÐ±¥¸¹¡…ÉÑØ¹¹½Ù„¹I•Ù¥•ÜÔÍAÉ½Ù¥‘•ÉI•½Ù•ÉåQ•ÍÐ±¥¸¹¡…ÉÑØ¹¹½Ù„¹¥±µ…Ñ…±½Õ•=‰Í•ÉÙ…Ñ¥½¹Q•ÍÐ±¥¸¹¡…ÉÑØ¹¹½Ù„¹¥±µQ½É½¹ÑÉ½±±•ÉQ•ÍÐ±¥¸¹¡…ÉÑØ¹¹½Ù„¹I•Ù¥•ÜÔÙM¥µÁ±¥™¥•‘¥Í½Ù•ÉQ•ÍÐ±¥¸¹¡…ÉÑØ¹¹½Ù„¹I•Ù¥•ÜÔá%ÁÑÙ¹‘¹ÍQ•ÍÐ±¥¸¹¡…ÉÑØ¹¹½Ù„¹I•Ù¥•ÜÔå9•ÑÝ½É­I•½Ù•ÉåQ•ÍÐ±¥¸¹¡…ÉÑØ¹¹½Ù„¹I•Ù¥•ÜØÁ)¥½	…Í•±¥¹•¹‘%ÁÑÙ…¡•Q•ÍÐ±¥¸¹¡…ÉÑØ¹¹½Ù„¹I•Ù¥•ÜØÅ)¥½¹ÍQ•ÍÐ±¥¸¹¡…ÉÑØ¹¹½Ù„¹I•Ù¥•ÜØÉ)¥½5•‘¥…¹Í¥…¹½ÍÑ¥ÍQ•ÍÐ(€€€€€€€€€…‘ˆ€µÌ•µÕ±…Ñ½È´ÔÔàÀÍ¡•±°…´¥¹ÍÑÉÕµ•¹Ð€µÜ€µÈ€µ”±…ÍÌ€ˆ‘=UMˆ€ˆ‘IU99HˆðÑ•”€½ÑµÀ½¡…ÉÑØµ…¹‘¥‘…Ñ”½ÁÉ½½˜½…¹‘É½¥µ™½ÕÍ•µÑ•ÍÑÌ¹ÑáÐ(€€€€€€€€€É•À€µÄ€=,€ ÄÔÔÑ•ÍÑÌ¤œ€½ÑµÀ½¡…ÉÑØµ…¹‘¥‘…Ñ”½ÁÉ½½˜½…¹‘É½¥µ™½ÕÍ•µÑ•ÍÑÌ¹ÑáÐ(€€€€€€€€€U10õ¥¸¹¡…ÉÑØ¹¹½Ù„¹I•µ½Ñ•]•‰ÕÉÍ½ÉQ•ÍÐ±¥¸¹¡…ÉÑØ¹¹½Ù„¹¥±µ9…Ñ¥Ù•½¹ÑÉ½±ÍQ•ÍÐ±¥¸¹¡…ÉÑØ¹¹½Ù„¹¥Í½Ù•ÉáÁ•É¥•¹•Q•ÍÐ±¥¸¹¡…ÉÑØ¹¹½Ù„¹I•Ù¥•ÜÌáI•É•ÍÍ¥½¹Q•ÍÐ±¥¸¹¡…ÉÑØ¹¹½Ù„¹I•Ù¥•ÜÌåáÁ•É¥•¹•Q•ÍÐ±¥¸¹¡…ÉÑØ¹¹½Ù„¹I•Ù¥•ÜÐÁA±…å‰…­Q•ÍÐ±¥¸¹¡…ÉÑØ¹¹½Ù„¹I•Ù¥•ÜÐÅ½¹¹•Ñ¥½¹Q•±•µ•ÑÉåQ•ÍÐ±¥¸¹¡…ÉÑØ¹¹½Ù„¹I•Ù¥•ÜÐÉI•É•ÍÍ¥½¹Q•ÍÐ±¥¸¹¡…ÉÑØ¹¹½Ù„¹I•Ù¥•ÜÐÍA•É™½Éµ…¹•Q•ÍÐ±¥¸¹¡…ÉÑØ¹¹½Ù„¹I•Ù¥•ÜÐÑ1½…‘¥¹5½ÕÍ•Q•ÍÐ±¥¸¹¡…ÉÑØ¹¹½Ù„¹I•Ù¥•ÜÐÕA±…åÙ¥‘•¹•Q•ÍÐ±¥¸¹¡…ÉÑØ¹¹½Ù„¹I•Ù¥•ÜÐÙ9…Ñ¥Ù•A½¥¹Ñ•ÉQ•ÍÐ±¥¸¹¡…ÉÑØ¹¹½Ù„¹I•Ù¥•ÜÐÝY¥•Ý¥¹Q•ÍÐ±¥¸¹¡…ÉÑØ¹¹½Ù„¹I•Ù¥•ÜÐá%¹ÁÕÑMÑ…‰¥±¥ÑåQ•ÍÐ±¥¸¹¡…ÉÑØ¹¹½Ù„¹I•Ù¥•ÜÐåA±…å‰…­	Õ‘•ÑQ•ÍÐ±¥¸¹¡…ÉÑØ¹¹½Ù„¹I•Ù¥•ÜÔÁM•É¥•Í½¹ÑÉ½±ÍQ•ÍÐ±¥¸¹¡…ÉÑØ¹¹½Ù„¹I•Ù¥•ÜÔÁ••‘‰…­Q•ÍÐ±¥¸¹¡…ÉÑØ¹¹½Ù„¹I•Ù¥•ÜÔÅA½¥¹Ñ•ÉM•…É¡Q•ÍÐ±¥¸¹¡…ÉÑØ¹¹½Ù„¹I•Ù¥•ÜÔÉAÉ½Ù¥‘•É5¥É…Ñ¥½¹Q•ÍÐ±¥¸¹¡…ÉÑØ¹¹½Ù„¹AÉ•Ù¥•Ý½¹ÑÉ½±±•ÉQ•ÍÐ±¥¸¹¡…ÉÑØ¹¹½Ù„¹I•Ù¥•ÜÔÍAÉ•Ù¥•Ý…¥±ÕÉ•Q•ÍÐ±¥¸¹¡…ÉÑØ¹¹½Ù„¹I•Ù¥•ÜÔÍAÉ½Ù¥‘•ÉI•½Ù•ÉåQ•ÍÐ±¥¸¹¡…ÉÑØ¹¹½Ù„¹¥±µ…Ñ…±½Õ•=‰Í•ÉÙ…Ñ¥½¹Q•ÍÐ±¥¸¹¡…ÉÑØ¹¹½Ù„¹¥±µQ½É½¹ÑÉ½±±•ÉQ•ÍÐ±¥¸¹¡…ÉÑØ¹¹½Ù„¹I•Ù¥•ÜÔÙM¥µÁ±¥™¥•‘¥Í½Ù•ÉQ•ÍÐ±¥¸¹¡…ÉÑØ¹¹½Ù„¹I•Ù¥•ÜÔá%ÁÑÙ¹‘¹ÍQ•ÍÐ±¥¸¹¡…ÉÑØ¹¹½Ù„¹I•Ù¥•ÜÔå9•ÑÝ½É­I•½Ù•ÉåQ•ÍÐ±¥¸¹¡…ÉÑØ¹¹½Ù„¹I•Ù¥•ÜØÁ)¥½	…Í•±¥¹•¹‘%ÁÑÙ…¡•Q•ÍÐ±¥¸¹¡…ÉÑØ¹¹½Ù„¹I•Ù¥•ÜØÅ)¥½¹ÍQ•ÍÐ±¥¸¹¡…ÉÑØ¹¹½Ù„¹I•Ù¥•ÜØÉ)¥½5•‘¥…¹Í¥…¹½ÍÑ¥ÍQ•ÍÐ(€€€€€€€€€…‘ˆ€µÌ•µÕ±…Ñ½È´ÔÔàÀÍ¡•±°…´¥¹ÍÑÉÕµ•¹Ð€µÜ€µÈ€µ”±…ÍÌ€ˆ‘U10ˆ€ˆ‘IU99HˆðÑ•”€½ÑµÀ½¡…ÉÑØµ…¹‘¥‘…Ñ”½ÁÉ½½˜½…¹‘É½¥µÑ•ÍÑÌ¹ÑáÐ(€€€€€€€€€É•À€µÄ€=,€ ÌØÌÑ•ÍÑÌ¤œ€½ÑµÀ½¡…ÉÑØµ…¹‘¥‘…Ñ”½ÁÉ½½˜½…¹‘É½¥µÑ•ÍÑÌ¹ÑáÐ(€€€€€€€€€ÁåÑ¡½¸€´€ððAdœ(€€€€€€€€€¥µÁ½ÉÐ©Í½¸±Á…Ñ¡±¥ˆ(€€€€€€€€€Á…Ñ¡±¥ˆ¹A…Ñ  œ½ÑµÀ½¡…ÉÑØµ…¹‘¥‘…Ñ”½ÁÉ½½˜½…¹‘É½¥µÑ•ÍÐµ½Õ¹Ð¹©Í½¸œ¤¹ÝÉ¥Ñ•}Ñ•áÐ¡©Í½¸¹‘ÕµÁÌ¡ì‘•Ñ•Éµ¥¹¥ÍÑ¥}…¹‘É½¥‘}Ñ•ÍÑÍ}Á…ÍÍ•œèÌØÌ°™½ÕÍ•‘}Ñ•ÍÑÍ}Á…ÍÍ•œèÄÔÔ°•áÑ•É¹…±}Ñ½É}Íµ½­•}…Ñ¥¹œœé…±Í•ô±¥¹‘•¹ÐôÈ¤¬q¸œ¤(€€€€€€€€€Ad(€€€€€€´¹…µ”èA…­…”Í½ÕÉ”µ‰½Õ¹Õ¹Í¥¹•É•Ù¥•Ü…ÉÑ¥™…Ð(€€€€€€€ÉÕ¸èð(€€€€€€€€€Í•Ð€µ•Õ¼Á¥Á•™…¥°(€€€€€€€€€¥Ð…É¡¥Ù”€´µ™½Éµ…Ðõé¥À!€µ¼€½ÑµÀ½¡…ÉÑØµ…¹‘¥‘…Ñ”½!IQY}=ØÉ}M=UI¹é¥À(€€€€€€€€€ÁåÑ¡½¸€´€ððAdœ(€€€€€€€€€¥µÁ½ÉÐ¡…Í¡±¥ˆ±©Í½¸±Á…Ñ¡±¥ˆ±ÍÕ‰ÁÉ½•ÍÌ(€€€€€€€€€É½½ÐõÁ…Ñ¡±¥ˆ¹A…Ñ  œ½ÑµÀ½¡…ÉÑØµ…¹‘¥‘…Ñ”œ¤í…Á¬õÉ½½Ð¼¡…ÉQXµ½‘”ØÈµÉ•Ù¥•ÜµÕ¹Í¥¹•¹…Á¬œíÍ½ÕÉ”õÉ½½Ð¼!IQY}=ØÉ}M=UI¹é¥ÀœíÍ¡„õÍÕ‰ÁÉ½•ÍÌ¹¡•­}½ÕÑÁÕÐ¡l¥Ðœ°É•ØµÁ…ÉÍ”œ°!t±Ñ•áÐõQÉÕ”¤¹ÍÑÉ¥À ¤(€€€€€€€€€É…‘±”õÁ…Ñ¡±¥ˆ¹A…Ñ  …¹‘É½¥µÑØ½…ÁÀ½‰Õ¥±¹É…‘±”¹­ÑÌœ¤¹É•…‘}Ñ•áÐ ¤í…ÍÍ•ÉÐ€Ù•ÉÍ¥½¹½‘”€ô€ØÈœ¥¸É…‘±”…¹€œÀ¸Ø¸ÀµÉŒÄÔ¸Ìµ©¥¼µµ•‘¥„µ‘¹Ìµ‘¥…¹½ÍÑ¥ÌµÉ•Ù¥•Üœ¥¸É…‘±”(€€€€€€€€€Ñ½Èõ©Í½¸¹±½…‘Ì ¡É½½Ð¼ÁÉ½½˜½Ñ½ÈµÍµ½­”µ½‰Í•ÉÙ…Ñ¥½¸¹©Í½¸œ¤¹É•…‘}Ñ•áÐ ¤¤(€€€€€€€€€…¹‘¥‘…Ñ”õìÍ¡•µ„œè¡…ÉÑØ¹É•Ù¥•ÜØÈµ…¹‘¥‘…Ñ”¹ØÄœ°Í½ÕÉ”œéÍ¡„°Ù•ÉÍ¥½¹}½‘”œèØÈ°Ù•ÉÍ¥½¹}¹…µ”œèœÀ¸Ø¸ÀµÉŒÄÔ¸Ìµ©¥¼µµ•‘¥„µ‘¹Ìµ‘¥…¹½ÍÑ¥ÌµÉ•Ù¥•Üœ°Á…­…”œè¥¸¹¡…ÉÑØ¹¹½Ù„œ°Õ¹Í¥¹•‘}…Á­}Í¡„ÈÔØœé¡…Í¡±¥ˆ¹Í¡„ÈÔØ¡…Á¬¹É•…‘}‰åÑ•Ì ¤¤¹¡•á‘¥•ÍÐ ¤°Í½ÕÉ•}é¥Á}Í¡„ÈÔØœé¡…Í¡±¥ˆ¹Í¡„ÈÔØ¡Í½ÕÉ”¹É•…‘}‰åÑ•Ì ¤¤¹¡•á‘¥•ÍÐ ¤°‘•Ñ•Éµ¥¹¥ÍÑ¥}…¹‘É½¥‘}Ñ•ÍÑÍ}Á…ÍÍ•œèÌØÌ°™½ÕÍ•‘}Ñ•ÍÑÍ}Á…ÍÍ•œèÄÔÔ°•áÑ•É¹…±}Ñ½É}Íµ½­•}½‰Í•ÉÙ•œéÑ½È°¥ÁÑÙ}¥µÁ±•µ•¹Ñ…Ñ¥½¹}¡…¹•œé…±Í”°™±¥áµ½µ½}¥µÁ±•µ•¹Ñ…Ñ¥½¹}¡…¹•œé…±Í”°©¥½}Ñ½É}•¹…‰±•œé…±Í”°©¥½}…Á¥}‘¹ÌœèÍåÍÑ•µ}™¥ÉÍÑ}Ñ±Í}Ù•É¥™¥•‘}Í•ÕÉ•}‘¹Í}½¹}™…¥±ÕÉ”œ°©¥½}µ•‘¥…}ÁÉ•Ù¥•ÜœèÍåÍÑ•µ}™¥ÉÍÑ}Ñ±Í}Ù•É¥™¥•‘}Í•ÕÉ•}‘¹Í}½¹}™…¥±ÕÉ•}‘¥É•Ñ}‰åÑ•Í}…¹‘}‘É´œ°±¥Ù•}©¥½}Á±…å‰…¬œè=]9I}IY%]}IEU%Iœ°ÁÕ‰±¥Í¡•œé…±Í•ô(€€€€€€€€€€¡É½½Ð¼9%Q¹©Í½¸œ¤¹ÝÉ¥Ñ•}Ñ•áÐ¡©Í½¸¹‘ÕµÁÌ¡…¹‘¥‘…Ñ”±¥¹‘•¹ÐôÈ¤¬q¸œ¤(€€€€€€€€€€¡É½½Ð¼Y1%Q%=8¹©Í½¸œ¤¹ÝÉ¥Ñ•}Ñ•áÐ¡©Í½¸¹‘ÕµÁÌ¡ì½¹ÑÉ½±±•‘}…¹‘É½¥‘}Ñ•ÍÑÌœèAMLœ°É•…±}©¥½}Õ¥‘•}ÁÉ•Ù¥•Ý}Ý…Ñ¡}±¥Ù”œè9=Q}YI%%œ°ÁÕ‰±¥}¥ÁÑÙ}ÑÉ…¹ÍÁ½ÉÐœèU9!9}=]9I}=9%I5}]=I-%9œ°™±¥áµ½µ¼œèU9!9}=]9I}=9%I5}]=I-%9œ°¥ÁÑÙ}±½½Ìœè•á¥ÍÑ¥¹}ÑÙ}±½½}±½…‘•É}ÁÉ•Í•ÉÙ•œ°•áÑ•É¹…±}Ñ½É}Íµ½­”œè=	MIY}9=9}Q%9}	UM}%5A159QQ%=9}U9!9ô±¥¹‘•¹ÐôÈ¤¬q¸œ¤(€€€€€€€€€€¡É½½Ð¼M!ÈÔÙMU5Lœ¤¹ÝÉ¥Ñ•}Ñ•áÐ œœ¹©½¥¸¡¡…Í¡±¥ˆ¹Í¡„ÈÔØ¡À¹É•…‘}‰åÑ•Ì ¤¤¹¡•á‘¥•ÍÐ ¤¬œ€€œ­À¹¹…µ”¬q¸œ™½ÈÀ¥¸Í½ÉÑ•¡É½½Ð¹¥Ñ•É‘¥È ¤¤¥˜À¹¥Í}™¥±” ¤…¹À¹¹…µ”„ôM!ÈÔÙMU5Lœ¤¤(€€€€€€€€€ÁÉ¥¹Ð¡©Í½¸¹‘ÕµÁÌ¡…¹‘¥‘…Ñ”±¥¹‘•¹ÐôÈ¤¤(€€€€€€€€€Ad(€€€€€€´ÕÍ•Ìè…Ñ¥½¹Ì½ÕÁ±½…µ…ÉÑ¥™…ÑØÐ(€€€€€€€¥˜è…±Ý…åÌ ¤(€€€€€€€Ý¥Ñ è(€€€€€€€€€¹…µ”è¡…ÉÑØµ½‘”ØÈµ½Ý¹•ÈµÉ•Ù¥•Ü(€€€€€€€€€Á…Ñ è€½ÑµÀ½¡…ÉÑØµ…¹‘¥‘…Ñ”¼(€€€€€€€€€É•Ñ•¹Ñ¥½¸µ‘…åÌè€ÄÐ(
