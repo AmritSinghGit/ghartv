@@ -1,4 +1,4 @@
-name: Apply Review62 compile-only correction
+name: Apply Review62 source-only compile correction
 on:
   push:
     branches: ['codex/ghartv-remove-auto-preview']
@@ -10,7 +10,6 @@ concurrency:
   cancel-in-progress: false
 jobs:
   apply:
-    if: "${{ github.event.head_commit.message == 'chore(review62): apply compile-only telemetry correction' }}"
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
@@ -18,11 +17,11 @@ jobs:
         with:
           fetch-depth: 0
           persist-credentials: true
-      - name: Verify exact head, correct field access, and publish
+      - name: Correct Media3 telemetry field and publish source-only commit
         shell: bash
         run: |
           set -euo pipefail
-          expected_parent=61ebf4c26ab25472d3ca40814a95ba39e813135d
+          expected_parent=5d7f2f6dd19422fba885317b64d06f13790f9661
           test "$(git rev-parse HEAD^)" = "$expected_parent"
           python - <<'PY'
           from pathlib import Path
@@ -32,18 +31,11 @@ jobs:
           new='? Integer.toString(((PlaybackException)error).errorCode) : "none"));'
           assert text.count(old)==1, text.count(old)
           player.write_text(text.replace(old,new))
-          workflow=Path('.github/workflows/review62-candidate.yml')
-          value=workflow.read_text()
-          before="    paths: ['.github/workflows/review62-candidate.yml']"
-          after="    paths: ['.github/workflows/review62-candidate.yml','android-tv/**']"
-          assert value.count(before)==1, value.count(before)
-          workflow.write_text(value.replace(before,after))
           PY
           grep -q 'Integer.toString(((PlaybackException)error).errorCode)' android-tv/app/src/main/java/in/ghartv/nova/PlayerActivity.java
           python tools/tv-first/check_contract.py
           git diff --check
-          git rm .github/workflows/review62-compile-fix.yml
-          git add android-tv/app/src/main/java/in/ghartv/nova/PlayerActivity.java .github/workflows/review62-candidate.yml
+          git add android-tv/app/src/main/java/in/ghartv/nova/PlayerActivity.java
           git config user.name 'Amrit Singh'
           git config user.email '66160706+AmritSinghGit@users.noreply.github.com'
           git commit -m 'fix(review62): use stable Media3 error code telemetry'
