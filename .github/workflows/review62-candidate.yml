@@ -1,3 +1,4 @@
+# Exact-source trigger after the source-only Media3 telemetry correction.
 name: GharTV Review62 candidate
 on:
   push:
