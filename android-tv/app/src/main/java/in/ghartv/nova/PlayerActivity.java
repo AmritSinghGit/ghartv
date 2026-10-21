@@ -967,7 +967,7 @@ public final class PlayerActivity extends Activity implements ChannelNavigator.L
                 "protocol",playbackProtocol,
                 "drm",playbackDrm,
                 "player_error_code",error instanceof PlaybackException
-                        ? ((PlaybackException)error).errorCodeName : "none"));
+                        ? Integer.toString(((PlaybackException)error).errorCode) : "none"));
         String reference = Telemetry.playbackFailure(this, channel, stage,
                 technical, httpStatus, error);
         String friendly = "This channel could not start. Another channel may still work.";
