@@ -1,0 +1,50 @@
+name: Apply Review62 compile-only correction
+on:
+  push:
+    branches: ['codex/ghartv-remove-auto-preview']
+    paths: ['.github/workflows/review62-compile-fix.yml']
+permissions:
+  contents: write
+concurrency:
+  group: ghartv-review62-compile-fix
+  cancel-in-progress: false
+jobs:
+  apply:
+    if: "${{ github.event.head_commit.message == 'chore(review62): apply compile-only telemetry correction' }}"
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+          persist-credentials: true
+      - name: Verify exact head, correct field access, and publish
+        shell: bash
+        run: |
+          set -euo pipefail
+          expected_parent=61ebf4c26ab25472d3ca40814a95ba39e813135d
+          test "$(git rev-parse HEAD^)" = "$expected_parent"
+          python - <<'PY'
+          from pathlib import Path
+          player=Path('android-tv/app/src/main/java/in/ghartv/nova/PlayerActivity.java')
+          text=player.read_text()
+          old='? ((PlaybackException)error).errorCodeName : "none"));'
+          new='? Integer.toString(((PlaybackException)error).errorCode) : "none"));'
+          assert text.count(old)==1, text.count(old)
+          player.write_text(text.replace(old,new))
+          workflow=Path('.github/workflows/review62-candidate.yml')
+          value=workflow.read_text()
+          before="    paths: ['.github/workflows/review62-candidate.yml']"
+          after="    paths: ['.github/workflows/review62-candidate.yml','android-tv/**']"
+          assert value.count(before)==1, value.count(before)
+          workflow.write_text(value.replace(before,after))
+          PY
+          grep -q 'Integer.toString(((PlaybackException)error).errorCode)' android-tv/app/src/main/java/in/ghartv/nova/PlayerActivity.java
+          python tools/tv-first/check_contract.py
+          git diff --check
+          git rm .github/workflows/review62-compile-fix.yml
+          git add android-tv/app/src/main/java/in/ghartv/nova/PlayerActivity.java .github/workflows/review62-candidate.yml
+          git config user.name 'Amrit Singh'
+          git config user.email '66160706+AmritSinghGit@users.noreply.github.com'
+          git commit -m 'fix(review62): use stable Media3 error code telemetry'
+          git push origin HEAD:codex/ghartv-remove-auto-preview
