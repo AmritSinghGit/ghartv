@@ -2,6 +2,7 @@ package in.ghartv.nova;
 
 import android.app.Activity;
 import android.app.AlertDialog;
+import android.media.MediaDrm;
 import android.content.Context;
 import android.content.Intent;
 import android.net.ConnectivityManager;
@@ -11,6 +12,7 @@ import android.os.Looper;
 import android.os.SystemClock;
 import android.provider.Settings;
 import android.util.Log;
+import androidx.media3.common.C;
 import org.json.JSONArray;
 import org.json.JSONObject;
 import java.net.InetAddress;
@@ -33,6 +35,7 @@ public final class NetworkDiagnostics {
         .callTimeout(5, TimeUnit.SECONDS).followRedirects(false).followSslRedirects(false).build();
     private static final String[][] HOSTS = {
         {"jio_playback", "jiotvapi.media.jio.com"}, {"jio_guide", "jiotvapi.cdn.jio.com"},
+        {"jio_media_cdn", "jiotv.catchup.cdn.jio.com"},
         {"updates", "api.github.com"}, {"collector", "ghartv-telemetry.ghartv-47d9a0.workers.dev"},
         {"flixmomo_app", "flixmomo.app"}, {"flixmomo_st", "flixmomo.st"}, {"flixmomo_bet", "flixmomo.bet"},
         {"film_catalogue", "api.themoviedb.org"}, {"iptv_org", "iptv-org.github.io"}
@@ -46,7 +49,7 @@ public final class NetworkDiagnostics {
     public static void show(Activity activity) {
         if(activity.isFinishing() || activity.isDestroyed()) return;
         AlertDialog wait = new AlertDialog.Builder(activity).setTitle("Checking this TV's connection")
-            .setMessage("Checking DNS and HTTPS separately for Jio, IPTV-org, registered FlixMomo addresses, updates and diagnostics. Jio uses the ordinary direct Android connection retained from Review 38. IPTV and FlixMomo keep their separate recovery routes. No login, stream or private data is sent. This can take up to 15 seconds.")
+            .setMessage("Checking system DNS, recovered HTTPS and Widevine separately for Jio, plus IPTV-org, registered FlixMomo addresses, updates and diagnostics. Jio stays direct and never uses Tor; secure DNS is tried only after Android DNS fails. No login, stream or private data is sent. This can take up to 15 seconds.")
             .setNegativeButton("Close", null).show();
         check(activity.getApplicationContext(), "manual_" + SystemClock.elapsedRealtime(), result -> {
             if(!wait.isShowing() || activity.isFinishing() || activity.isDestroyed()) return;
@@ -58,6 +61,11 @@ public final class NetworkDiagnostics {
                 text.append(item.optString("service")).append(": ").append(item.optString("dns")).append(" / ").append(item.optString("https")).append(item.has("tls_reason")?" · "+item.optString("tls_reason"):"").append('\n');
                 if(item.has("clock_offset_seconds"))text.append("  TV minus verified HTTPS time: ").append(item.optLong("clock_offset_seconds")).append(" seconds").append(Math.abs(item.optLong("clock_offset_seconds"))>120?" — check TV date/time":"").append('\n');
             }
+            JSONObject drm=result.optJSONObject("widevine");
+            if(drm!=null)text.append("\nWidevine: ")
+                .append(drm.optBoolean("supported")?"SUPPORTED":"NOT SUPPORTED")
+                .append(" · security level ").append(drm.optString("security_level","UNKNOWN"))
+                .append("\n");
             text.append("\nTV clock: ").append(new java.util.Date()).append("\nA date/certificate failure can be caused by the TV clock or the server certificate. Do not disable verification.\n");
             text.append("\nHTTPS reachable does not prove account access or playback.\n\nDiagnostics: ")
                 .append(Telemetry.isEnabled(activity)?"enabled":"off; error references are not uploaded")
@@ -72,22 +80,58 @@ public final class NetworkDiagnostics {
         });
     }
     private static JSONObject probe(String[] host) {
-        long start=SystemClock.elapsedRealtime(); JSONObject r=Telemetry.data("service",host[0],"dns","NOT_CHECKED","https","NOT_CHECKED");
+        long start=SystemClock.elapsedRealtime();
+        JSONObject r=Telemetry.data("service",host[0],"dns","NOT_CHECKED","https","NOT_CHECKED");
         try {
-            boolean jio=host[0].startsWith("jio_");
-            try {InetAddress.getAllByName(host[1]);r.put("dns","RESOLVED");}
-            catch(java.net.UnknownHostException direct){throw direct;}
-            OkHttpClient client=jio?JioNetwork.directApi():CLIENT;
-            try(Response response=client.newCall(new Request.Builder().url("https://"+host[1]+"/").head().build()).execute()) {
-                r.put("https","REACHABLE"); r.put("http",response.code());
+            try {
+                InetAddress.getAllByName(host[1]);
+                r.put("dns","RESOLVED");
+            } catch(java.net.UnknownHostException direct) {
+                r.put("dns","DNS_UNAVAILABLE");
+                r.put("dns_cause",NetworkFailure.rootType(direct));
+            }
+            OkHttpClient client;
+            if(host[0].equals("jio_media_cdn"))client=JioNetwork.mediaClient();
+            else if(host[0].startsWith("jio_"))client=JioNetwork.directApi();
+            else client=CLIENT;
+            try(Response response=client.newCall(new Request.Builder()
+                    .url("https://"+host[1]+"/").head().build()).execute()) {
+                r.put("https","REACHABLE");
+                r.put("http",response.code());
+                if(host[0].equals("jio_media_cdn"))
+                    r.put("route",JioNetwork.mediaRecoveryLabel());
+                else if(host[0].startsWith("jio_"))
+                    r.put("route",JioNetwork.recoveryLabel());
                 java.util.Date serverDate=response.headers().getDate("Date");
-                if(serverDate!=null)r.put("clock_offset_seconds",(System.currentTimeMillis()-serverDate.getTime())/1000);
+                if(serverDate!=null)r.put("clock_offset_seconds",
+                        (System.currentTimeMillis()-serverDate.getTime())/1000);
             }
         } catch(Exception e) {
             String code=NetworkFailure.classify(e);
-            try {if(code.equals("DNS_UNAVAILABLE"))r.put("dns",code);else r.put("https",code);r.put("cause",NetworkFailure.rootType(e));if(code.equals("TLS_FAILED"))r.put("tls_reason",NetworkFailure.tlsReason(e));}catch(Exception ignored){}
+            try {
+                r.put("https",code);
+                r.put("cause",NetworkFailure.rootType(e));
+                if(code.equals("TLS_FAILED"))r.put("tls_reason",NetworkFailure.tlsReason(e));
+            }catch(Exception ignored){}
         }
-        try{r.put("elapsed_ms",SystemClock.elapsedRealtime()-start);}catch(Exception ignored){} return r;
+        try{r.put("elapsed_ms",SystemClock.elapsedRealtime()-start);}catch(Exception ignored){}
+        return r;
+    }
+
+    private static JSONObject widevine() {
+        JSONObject result=Telemetry.data("supported",false,"security_level","UNKNOWN");
+        MediaDrm drm=null;
+        try {
+            boolean supported=MediaDrm.isCryptoSchemeSupported(C.WIDEVINE_UUID);
+            result.put("supported",supported);
+            if(!supported)return result;
+            drm=new MediaDrm(C.WIDEVINE_UUID);
+            String level=drm.getPropertyString("securityLevel");
+            result.put("security_level",level==null||level.trim().isEmpty()?"UNKNOWN":level);
+        } catch(Exception error) {
+            try{result.put("error",NetworkFailure.rootType(error));}catch(Exception ignored){}
+        } finally {if(drm!=null)try{drm.release();}catch(Exception ignored){}}
+        return result;
     }
     interface Done { void result(JSONObject r); }
     private static void check(Context context, String id, Done done) {
@@ -104,7 +148,18 @@ public final class NetworkDiagnostics {
                 JSONArray checks=new JSONArray();long deadline=SystemClock.elapsedRealtime()+12000;
                 for(int i=0;i<jobs.size();i++)try{checks.put(jobs.get(i).get(Math.max(1,deadline-SystemClock.elapsedRealtime()),TimeUnit.MILLISECONDS));}
                 catch(Exception e){jobs.get(i).cancel(true);checks.put(Telemetry.data("service",HOSTS[i][0],"dns","CHECK_TIMED_OUT","https","NOT_CHECKED"));}
-                result.put("checks",checks); result.put("status","COMPLETE");
+                result.put("checks",checks);
+                result.put("widevine",widevine());
+                result.put("status","COMPLETE");
+                if(Telemetry.isEnabled(context)){
+                    JSONObject drm=result.optJSONObject("widevine");
+                    Telemetry.event(context,"network_diagnostic_completed",Telemetry.data(
+                        "jio_api_route",JioNetwork.recoveryLabel(),
+                        "jio_media_route",JioNetwork.mediaRecoveryLabel(),
+                        "widevine_supported",drm!=null&&drm.optBoolean("supported"),
+                        "widevine_level",drm==null?"UNKNOWN":drm.optString("security_level","UNKNOWN")));
+                    Telemetry.enqueueUpload(context,false);
+                }
                 // This tag contains a fixed, non-secret technical schema for the owner-run probe only.
                 Log.i("GharTVNetwork", "GHNET_V1 "+result.toString());
             } catch(Exception ignored) {try{result.put("status","CHECK_FAILED");}catch(Exception e){} }

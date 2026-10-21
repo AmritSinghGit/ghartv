@@ -19,7 +19,6 @@ import java.util.concurrent.atomic.AtomicInteger;
 
 import okhttp3.Call;
 import okhttp3.Callback;
-import okhttp3.Dns;
 import okhttp3.OkHttpClient;
 import okhttp3.Request;
 import okhttp3.Response;
@@ -64,14 +63,15 @@ public class Review60JioBaselineAndIptvCacheTest {
         assertFalse(JioNetwork.torUsedRecently());
     }
 
-    @Test public void jioApiUsesScopedDnsRecoveryWhileMediaAndPreviewStayDirect() {
+    @Test public void jioApiAndMediaUseDnsOnlyRecoveryAndNeverTor() {
         assertTrue(JioNetwork.api(context) instanceof OkHttpClient);
         assertTrue(((OkHttpClient) JioNetwork.api(context)).dns() instanceof JioSecureDns);
         assertTrue(JioNetwork.dns() instanceof JioSecureDns);
         assertTrue(JioNetwork.media(context) instanceof OkHttpClient);
         assertTrue(JioNetwork.preview(context) instanceof OkHttpClient);
-        assertSame(Dns.SYSTEM, ((OkHttpClient) JioNetwork.media(context)).dns());
-        assertSame(Dns.SYSTEM, ((OkHttpClient) JioNetwork.preview(context)).dns());
+        assertTrue(((OkHttpClient) JioNetwork.media(context)).dns() instanceof SecureDns);
+        assertTrue(((OkHttpClient) JioNetwork.preview(context)).dns() instanceof SecureDns);
+        assertSame(JioNetwork.mediaDns(),((OkHttpClient) JioNetwork.media(context)).dns());
         assertFalse(JioNetwork.torUsedRecently());
     }
 

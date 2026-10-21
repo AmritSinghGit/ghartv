@@ -13,10 +13,7 @@ import androidx.media3.common.MimeTypes;
 import androidx.media3.common.PlaybackException;
 import androidx.media3.common.Player;
 import androidx.media3.common.util.UnstableApi;
-import androidx.media3.datasource.DefaultDataSource;
-import androidx.media3.datasource.DefaultHttpDataSource;
 import androidx.media3.exoplayer.ExoPlayer;
-import androidx.media3.exoplayer.source.DefaultMediaSourceFactory;
 import androidx.media3.ui.AspectRatioFrameLayout;
 import androidx.media3.ui.PlayerView;
 import org.json.JSONObject;
@@ -96,7 +93,8 @@ public final class HeroPreviewController {
         deadline=()->{
             LocalPerformance.record(activity,"preview_timeout_ms",
                     android.os.SystemClock.elapsedRealtime()-previewStartedAt);
-            finish(token,true,"Preview did not start in time · OK still opens live TV","STARTUP_TIMEOUT");
+            failed(token,new java.net.SocketTimeoutException(
+                    "Preview first picture deadline reached"),"guide_preview_first_frame");
         };
         main.postDelayed(deadline,PreviewGate.FIRST_FRAME_BUDGET_MS);
         Telemetry.event(activity,"guide_preview_request",Telemetry.data("automatic",true,
@@ -112,21 +110,18 @@ public final class HeroPreviewController {
                             info.authRequired?"Reconnect your account to preview":"Preview unavailable · OK still opens live TV");return;
                     }
                     try{prepare(info,token);}
-                    catch(RuntimeException e){failed(token,e);}
+                    catch(RuntimeException e){failed(token,e,"guide_preview_prepare");}
                 });
             }catch(Exception error){
-                main.post(()->{if(gate.current(token))failed(token,error);});
+                main.post(()->{if(gate.current(token))
+                    failed(token,error,"guide_preview_authorization");});
             }
         });
     }
     private void prepare(PlaybackInfo info,long token){
         Map<String,String> headers=jsonMap(info.streamHeaders);
-        DefaultHttpDataSource.Factory http=new DefaultHttpDataSource.Factory()
-            .setUserAgent(headers.getOrDefault("User-Agent","GharTV-Jio-Live/"+BuildConfig.VERSION_NAME))
-            .setAllowCrossProtocolRedirects(false).setConnectTimeoutMs(4000).setReadTimeoutMs(4000)
-            .setDefaultRequestProperties(headers);
         player=new ExoPlayer.Builder(activity)
-            .setMediaSourceFactory(new DefaultMediaSourceFactory(new DefaultDataSource.Factory(activity,http))).build();
+            .setMediaSourceFactory(JioMediaDataSource.previewSourceFactory(activity,headers)).build();
         player.setTrackSelectionParameters(player.getTrackSelectionParameters().buildUpon()
             .setMaxVideoSize(640,360).setForceLowestBitrate(true).setTrackTypeDisabled(C.TRACK_TYPE_AUDIO,true).build());
         player.setVolume(0f);playerView.setPlayer(player);
@@ -138,7 +133,10 @@ public final class HeroPreviewController {
                 if(deadline!=null)main.removeCallbacks(deadline);deadline=null;
                 poster.setVisibility(View.GONE);loading.setVisibility(View.GONE);
                 copy("Muted preview · OK to watch",TvUi.MINT);
-                Telemetry.event(activity,"guide_preview_ready",Telemetry.data("automatic",true,"drm",info.drm));
+                JioNetwork.reportMediaFallbackIfNew(activity);
+                Telemetry.event(activity,"guide_preview_ready",Telemetry.data(
+                    "automatic",true,"drm",info.drm,
+                    "media_route",JioNetwork.mediaRecoveryLabel()));
                 autoStop=()->finish(token,false,"OK to watch live");
                 main.postDelayed(autoStop,PreviewGate.VISIBLE_PREVIEW_MS);
             }
@@ -147,7 +145,9 @@ public final class HeroPreviewController {
                 if(state==Player.STATE_ENDED)finish(token,false,"OK to watch live");
                 // READY is not proof of a rendered picture. Buffering never renews the budget.
             }
-            @Override public void onPlayerError(PlaybackException error){failed(token,error);}
+            @Override public void onPlayerError(PlaybackException error){
+                failed(token,error,"guide_preview_media3");
+            }
         });
         MediaItem.Builder item=new MediaItem.Builder().setUri(info.streamUrl);
         String mime=safe(info.mimeType).toLowerCase(Locale.ROOT),uri=safe(info.streamUrl).toLowerCase(Locale.ROOT);
@@ -159,7 +159,15 @@ public final class HeroPreviewController {
         player.setMediaItem(item.build());player.prepare();player.play();
     }
     private void failed(long token,Throwable error){
+        failed(token,error,"guide_preview_media");
+    }
+    private void failed(long token,Throwable error,String stage){
         String code=NetworkFailure.classify(error);
+        JioNetwork.reportMediaFallbackIfNew(activity);
+        Telemetry.event(activity,"guide_preview_failure_context",Telemetry.data(
+            "automatic",true,"stage",stage,"reason",code,
+            "media_route",JioNetwork.mediaRecoveryLabel()));
+        Telemetry.playbackFailure(activity,selected,stage,code,0,error);
         String cause;
         switch(code){
             case "DNS_UNAVAILABLE":cause="Channel DNS failed after recovery";break;
@@ -175,7 +183,9 @@ public final class HeroPreviewController {
         if(!gate.finish(token,error))return;
         // Existing consent gate/envelope; never include exception messages, URLs,
         // channel titles, tokens or successful viewing history in this event.
-        if(error)Telemetry.event(activity,"guide_preview_failed",Telemetry.data("automatic",true,"reason",code));
+        if(error)Telemetry.event(activity,"guide_preview_failed",Telemetry.data(
+            "automatic",true,"reason",code,
+            "media_route",JioNetwork.mediaRecoveryLabel()));
         cancelWork();resetVisual();copy(message,TvUi.MUTED);
     }
     private void cancelWork(){

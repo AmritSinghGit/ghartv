@@ -26,7 +26,6 @@ import androidx.media3.common.MimeTypes;
 import androidx.media3.common.PlaybackException;
 import androidx.media3.common.Player;
 import androidx.media3.common.util.UnstableApi;
-import androidx.media3.datasource.DefaultHttpDataSource;
 import androidx.media3.exoplayer.ExoPlayer;
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory;
 import androidx.media3.ui.PlayerView;
@@ -424,7 +423,8 @@ public final class PlayerActivity extends Activity implements ChannelNavigator.L
                 mainHandler.post(() -> {
                     if (generation != playbackGeneration || isFinishing()) return;
                     loading.setVisibility(View.GONE);
-                    if (!maybeAutoRecover(error, "playback_authorization")) showPlaybackError(error);
+                    if (!maybeAutoRecover(error, "playback_authorization"))
+                        showPlaybackError(error,"playback_authorization");
                 });
             }
         });
@@ -433,20 +433,21 @@ public final class PlayerActivity extends Activity implements ChannelNavigator.L
     private void preparePlayer(PlaybackInfo info) {
         info.normalizeAliases();
         if (info.streamUrl == null || info.streamUrl.trim().isEmpty()) {
-            showPlaybackError(new IllegalStateException("Jio returned no playable stream URL"));
+            showPlaybackError(new IllegalStateException(
+                    "Jio returned no playable stream URL"),"playback_response");
             return;
         }
         playbackProtocol = (info.mimeType.toLowerCase(Locale.ROOT).contains("dash")
                 || info.streamUrl.toLowerCase(Locale.ROOT).contains(".mpd")) ? "dash" : "hls";
         playbackDrm = info.drm;
         Map<String, String> streamHeaders = jsonMap(info.streamHeaders);
-        DefaultHttpDataSource.Factory dataSourceFactory = new DefaultHttpDataSource.Factory()
-                .setUserAgent(streamHeaders.getOrDefault("User-Agent", "GharTV-Jio-Live/" + BuildConfig.VERSION_NAME))
-                .setAllowCrossProtocolRedirects(true)
-                .setConnectTimeoutMs(15_000)
-                .setReadTimeoutMs(25_000)
-                .setDefaultRequestProperties(streamHeaders);
-        DefaultMediaSourceFactory mediaSourceFactory = new DefaultMediaSourceFactory(dataSourceFactory);
+        DefaultMediaSourceFactory mediaSourceFactory =
+                JioMediaDataSource.liveSourceFactory(this, streamHeaders);
+        Telemetry.event(this,"jio_media_attempt",Telemetry.data(
+                "stage","player_prepare",
+                "protocol",playbackProtocol,
+                "drm",playbackDrm,
+                "media_route",JioNetwork.mediaRecoveryLabel()));
         android.app.ActivityManager memory=(android.app.ActivityManager)getSystemService(ACTIVITY_SERVICE);
         int targetBytes=(memory!=null&&memory.isLowRamDevice()?16:32)*1024*1024;
         androidx.media3.exoplayer.DefaultLoadControl loadControl=new androidx.media3.exoplayer.DefaultLoadControl.Builder()
@@ -458,10 +459,20 @@ public final class PlayerActivity extends Activity implements ChannelNavigator.L
         PictureShape.apply(this, playerView, channel == null ? "" : channel.id);
         if(PlaybackComfort.light(this))player.setTrackSelectionParameters(player.getTrackSelectionParameters().buildUpon().setMaxVideoSize(1280,720).build());
         final int listenerGeneration=playbackGeneration;
-        firstFrameDeadline=()->{if(listenerGeneration==playbackGeneration){repository.api().cancelPlayback();releasePlayer();loading.setVisibility(View.GONE);showPlaybackError(new java.io.IOException("First picture timed out; retry or select another channel"));}};
+        firstFrameDeadline=()->{if(listenerGeneration==playbackGeneration){
+            repository.api().cancelPlayback();releasePlayer();loading.setVisibility(View.GONE);
+            showPlaybackError(new java.net.SocketTimeoutException(
+                    "First picture timed out; retry or select another channel"),"first_frame");
+        }};
         mainHandler.postDelayed(firstFrameDeadline,18_000L);
         player.addListener(new Player.Listener() {
-            @Override public void onRenderedFirstFrame(){if(listenerGeneration!=playbackGeneration)return;if(firstFrameDeadline!=null)mainHandler.removeCallbacks(firstFrameDeadline);LocalPerformance.record(PlayerActivity.this,"first_picture_ms",android.os.SystemClock.elapsedRealtime()-tuneElapsed);}
+            @Override public void onRenderedFirstFrame(){
+                if(listenerGeneration!=playbackGeneration)return;
+                if(firstFrameDeadline!=null)mainHandler.removeCallbacks(firstFrameDeadline);
+                JioNetwork.reportMediaFallbackIfNew(PlayerActivity.this);
+                LocalPerformance.record(PlayerActivity.this,"first_picture_ms",
+                        android.os.SystemClock.elapsedRealtime()-tuneElapsed);
+            }
 
             @Override public void onPlaybackStateChanged(int state) {
                 if(listenerGeneration!=playbackGeneration)return;
@@ -507,7 +518,8 @@ public final class PlayerActivity extends Activity implements ChannelNavigator.L
                 endBuffering();
                 loading.setVisibility(View.GONE);
                 cancelBufferingWatchdog();
-                if (!maybeAutoRecover(error, "media3_playback")) showPlaybackError(error);
+                if (!maybeAutoRecover(error, "media3_playback"))
+                    showPlaybackError(error,"media3_playback");
             }
         });
 
@@ -783,7 +795,8 @@ public final class PlayerActivity extends Activity implements ChannelNavigator.L
         Telemetry.event(this, "transport_action", Telemetry.data(
                 "action", deltaMs < 0 ? "rewind_15s" : "forward_15s",
                 "seekable", true, "live", player.isCurrentMediaItemLive(),
-                "guide_scope", scopeLabel));
+                "guide_scope", scopeLabel,
+                "media_route", JioNetwork.mediaRecoveryLabel()));
         refreshTransportState();
         notePanelInteraction();
     }
@@ -915,7 +928,8 @@ public final class PlayerActivity extends Activity implements ChannelNavigator.L
                 return;
             }
             showPlaybackError(new IllegalStateException(
-                    "The live stream remained buffering after an automatic refresh"));
+                    "The live stream remained buffering after an automatic refresh"),
+                    "buffer_watchdog");
         };
         mainHandler.postDelayed(bufferingWatchdog, threshold);
     }
@@ -928,6 +942,10 @@ public final class PlayerActivity extends Activity implements ChannelNavigator.L
     }
 
     private void showPlaybackError(Throwable error) {
+        showPlaybackError(error,"media3_playback");
+    }
+
+    private void showPlaybackError(Throwable error,String stage) {
         if(isFinishing()||isDestroyed()||(errorDialog!=null&&errorDialog.isShowing()))return;
         recoveryPending=false;
         cancelBufferingWatchdog();
@@ -941,7 +959,17 @@ public final class PlayerActivity extends Activity implements ChannelNavigator.L
                 || lower.contains("token") || lower.contains("unauthor");
         boolean forbidden = "HTTP_ACCESS_DENIED".equals(failureCode) || lower.contains("403") || lower.contains("forbidden");
         int httpStatus = forbidden ? 403 : (lower.contains("401") ? 401 : (lower.contains("419") ? 419 : 0));
-        String reference = Telemetry.playbackFailure(this, channel, "media3_playback", technical, httpStatus, error);
+        JioNetwork.reportMediaFallbackIfNew(this);
+        Telemetry.event(this,"jio_playback_failure_context",Telemetry.data(
+                "stage",stage,
+                "failure_kind",failureCode,
+                "media_route",JioNetwork.mediaRecoveryLabel(),
+                "protocol",playbackProtocol,
+                "drm",playbackDrm,
+                "player_error_code",error instanceof PlaybackException
+                        ? ((PlaybackException)error).errorCodeName : "none"));
+        String reference = Telemetry.playbackFailure(this, channel, stage,
+                technical, httpStatus, error);
         String friendly = "This channel could not start. Another channel may still work.";
         if (auth) {
             friendly = "The Jio session needs to be connected again before this channel can play.";
@@ -949,7 +977,7 @@ public final class PlayerActivity extends Activity implements ChannelNavigator.L
             friendly = "Jio did not authorise this channel after refreshing the session. It may need a subscription or may be restricted on this TV.";
             markAccess(Channel.ACCESS_UNAVAILABLE, technical);
         } else if (dns) {
-            friendly = "This TV could not resolve the Jio service address. Check the TV internet or DNS, then retry; other cached screens may still open.";
+            friendly = "This TV could not resolve the Jio media address through system or secure DNS. Retry once; cached guide screens may still open.";
         } else if ("TLS_FAILED".equals(failureCode)) {
             friendly = "The Jio stream failed secure certificate validation. Check the TV date/time or retry later; GharTV will not bypass TLS validation.";
         } else if (failureCode.startsWith("HTTP_")) {
@@ -1058,7 +1086,8 @@ public final class PlayerActivity extends Activity implements ChannelNavigator.L
                 "buffer_ms", totalBufferingMs,
                 "category", channel == null ? "unknown" : channel.category,
                 "language", channel == null ? "unknown" : channel.language,
-                "guide_scope", scopeLabel));
+                "guide_scope", scopeLabel,
+                "media_route", JioNetwork.mediaRecoveryLabel()));
     }
 
     private void reportPlaybackSession(String reason) {

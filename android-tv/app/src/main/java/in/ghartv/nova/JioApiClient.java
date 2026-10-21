@@ -623,7 +623,8 @@ public final class JioApiClient {
             if (!value.isEmpty() && !"Host".equalsIgnoreCase(key)) headers.add(key, value);
         }
         Request request = new Request.Builder().url(url).headers(headers.build()).get().build();
-        try (Response response = client.newCall(request).execute()) {
+        try (Response response = JioNetwork.media(context).newCall(request).execute()) {
+            JioNetwork.reportMediaFallbackIfNew(context);
             List<String> setCookies = response.headers("Set-Cookie");
             StringBuilder cookie = new StringBuilder();
             for (String setCookie : setCookies) {
@@ -633,7 +634,10 @@ public final class JioApiClient {
                 cookie.append(pair);
             }
             return cookie.toString();
-        } catch (Exception ignored) {
+        } catch (Exception error) {
+            Telemetry.error(context,"jio_manifest_cookie",error,Telemetry.data(
+                    "failure_kind",NetworkFailure.classify(error),
+                    "media_route",JioNetwork.mediaRecoveryLabel()));
             return "";
         }
     }
