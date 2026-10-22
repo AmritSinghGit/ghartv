@@ -133,13 +133,13 @@ def report_failure(r, sha, code):
     summary = ('Failed step: ' + ('; '.join(steps) or 'unknown') + '\n```\n' + key[-3500:] + '\n```\n'
                f'Evidence saved on the owner\'s Mac: {folder}')
     record(sha, code, r, 'FAILED', summary)
-    # Event for the Operon follow-up task: a scheduled Claude run picks it up and investigates.
-    events = Path.home() / 'operon-tools/state/events'
-    events.mkdir(parents=True, exist_ok=True)
-    ev = events / f"{time.strftime('%Y%m%d-%H%M%S')}-{LANE}-ci-failed-{run_id}.json"
-    ev.write_text(json.dumps({'lane': LANE, 'kind': 'ci_failed', 'repo': REPO, 'run_id': run_id, 'run_url': r['url'],
-                              'commit': sha, 'version_code': code, 'failed_steps': steps, 'evidence': str(folder),
-                              'worktree': str(ROOT), 'created': time.strftime('%Y-%m-%d %H:%M %Z')}, indent=2) + '\n')
+    # Operon event (same format as `operon`'s ~/operon-tools/state/events.jsonl) so every chat/agent sees it.
+    events = Path.home() / 'operon-tools/state/events.jsonl'
+    events.parent.mkdir(parents=True, exist_ok=True)
+    with events.open('a') as f:
+        f.write(json.dumps({'ts': time.time(), 'at': time.strftime('%Y-%m-%d %H:%M %Z'), 'kind': 'ci_failed', 'lane': LANE,
+                            'repo': REPO, 'run_id': run_id, 'run_url': r['url'], 'commit': sha, 'version_code': code,
+                            'failed_steps': steps, 'evidence': str(folder), 'worktree': str(ROOT)}) + '\n')
     marker = f'<!-- operon-ci-failure run {run_id} -->'
     pr = run(['gh', 'pr', 'view', '--repo', REPO, '--json', 'number', '-q', '.number'], timeout=60).stdout.strip() or '1'
     existing = run(['gh', 'api', f'repos/{REPO}/issues/{pr}/comments', '--paginate', '-q', '.[].body'], timeout=120).stdout
