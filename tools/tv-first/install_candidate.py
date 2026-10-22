@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """Install the GitHub-built GharTV review candidate on the Nova emulator.
 
-    python3 tools/tv-first/install_candidate.py
+    python3 tools/tv-first/install_candidate.py            # GitHub build (default)
+    python3 tools/tv-first/install_candidate.py --local    # build on this Mac instead (when GitHub can't hand over the APK)
 
 1. Finds the reviewNN-candidate GitHub Actions run for the current commit (waits while it runs).
 2. Downloads its owner-review artifact and checks it was built from exactly this commit and
@@ -13,7 +14,7 @@
 
 It never creates a key, never uninstalls, never publishes, and never prints passwords.
 """
-import hashlib, json, os, re, shlex, subprocess, sys, tempfile, time
+import hashlib, json, os, re, shlex, shutil, subprocess, sys, tempfile, time
 from pathlib import Path
 
 REPO = 'AmritSinghGit/ghartv'
@@ -132,6 +133,13 @@ def report_failure(r, sha, code):
     summary = ('Failed step: ' + ('; '.join(steps) or 'unknown') + '\n```\n' + key[-3500:] + '\n```\n'
                f'Evidence saved on the owner\'s Mac: {folder}')
     record(sha, code, r, 'FAILED', summary)
+    # Event for the Operon follow-up task: a scheduled Claude run picks it up and investigates.
+    events = Path.home() / 'operon-tools/state/events'
+    events.mkdir(parents=True, exist_ok=True)
+    ev = events / f"{time.strftime('%Y%m%d-%H%M%S')}-{LANE}-ci-failed-{run_id}.json"
+    ev.write_text(json.dumps({'lane': LANE, 'kind': 'ci_failed', 'repo': REPO, 'run_id': run_id, 'run_url': r['url'],
+                              'commit': sha, 'version_code': code, 'failed_steps': steps, 'evidence': str(folder),
+                              'worktree': str(ROOT), 'created': time.strftime('%Y-%m-%d %H:%M %Z')}, indent=2) + '\n')
     marker = f'<!-- operon-ci-failure run {run_id} -->'
     pr = run(['gh', 'pr', 'view', '--repo', REPO, '--json', 'number', '-q', '.number'], timeout=60).stdout.strip() or '1'
     existing = run(['gh', 'api', f'repos/{REPO}/issues/{pr}/comments', '--paginate', '-q', '.[].body'], timeout=120).stdout
@@ -141,6 +149,45 @@ def report_failure(r, sha, code):
         subprocess.run(['gh', 'pr', 'comment', pr, '--repo', REPO, '--body-file', '-'], input=body, text=True, capture_output=True)
         print(f'Failure report posted on PR #{pr} and saved in {folder}')
     print('\n' + summary)
+
+
+def java_env(sdk):
+    env = dict(os.environ, ANDROID_HOME=str(sdk), ANDROID_SDK_ROOT=str(sdk))
+    def major(home):
+        out = run([Path(home) / 'bin/java', '-version']).stderr if home else ''
+        m = re.search(r'version "(\d+)', out)
+        return int(m.group(1)) if m else 0
+    candidates = [os.environ.get('JAVA_HOME'),
+                  run(['/usr/libexec/java_home', '-v', '17+']).stdout.strip() if Path('/usr/libexec/java_home').exists() else '',
+                  '/Applications/Android Studio.app/Contents/jbr/Contents/Home']
+    for home in candidates:
+        if home and Path(home, 'bin/java').exists() and major(home) >= 17:
+            env['JAVA_HOME'] = home
+            return env
+    die('no Java 17+ found (install Android Studio or a JDK 17+)')
+
+
+def build_local(sdk, sha, code, out_dir):
+    if run(['git', '-C', ROOT, 'status', '--porcelain', '--', 'android-tv']).stdout.strip():
+        die('android-tv has uncommitted changes; a local candidate must match a commit exactly')
+    env = java_env(sdk)
+    assets = ROOT / 'android-tv/app/src/main/assets'
+    clip = assets / 'ghartv-native-check.mp4'
+    if not clip.exists() and shutil.which('ffmpeg'):
+        assets.mkdir(parents=True, exist_ok=True)
+        run(['ffmpeg', '-nostdin', '-hide_banner', '-loglevel', 'error', '-f', 'lavfi', '-i', 'testsrc2=size=320x180:rate=24',
+             '-t', '30', '-an', '-c:v', 'libx264', '-preset', 'fast', '-crf', '32', '-pix_fmt', 'yuv420p', '-movflags', '+faststart', clip])
+    print(f'Building code{code} on this Mac (first build downloads Gradle and libraries; 3-10 minutes)...', flush=True)
+    p = subprocess.run(['./gradlew', '--no-daemon', 'assembleRelease'], cwd=ROOT / 'android-tv', env=env, text=True,
+                       capture_output=True, timeout=3600)
+    if p.returncode:
+        CI_STATE.mkdir(parents=True, exist_ok=True)
+        (CI_STATE / f'local-build-{sha[:12]}.log').write_text(p.stdout + p.stderr)
+        die('local build failed; log saved in ' + str(CI_STATE / f'local-build-{sha[:12]}.log') + '\n' + (p.stdout + p.stderr)[-1500:])
+    apk = ROOT / 'android-tv/app/build/outputs/apk/release/app-release-unsigned.apk'
+    dest = out_dir / f'GharTV-code{code}-review-unsigned.apk'
+    dest.write_bytes(apk.read_bytes())
+    return dest
 
 
 def signing_values():
@@ -225,27 +272,38 @@ def main():
     # later commits that only touch tools/docs do not trigger (or need) a new build.
     sha = must(['git', '-C', ROOT, 'log', '-1', '--format=%H', '--', 'android-tv',
                 f'.github/workflows/review{code}-candidate.yml'], 'git').strip()
-    print(f'GharTV code{code} candidate for commit {sha[:12]}', flush=True)
-    r = wait_for_ci(sha, code)
+    local = '--local' in sys.argv[1:]
+    print(f'GharTV code{code} candidate for commit {sha[:12]}' + (' (local build)' if local else ''), flush=True)
     sdk = find_sdk()
     tools = build_tools(sdk)
+    if local:
+        print('NOTE: built on this Mac; GitHub tests are not required for this install - test carefully.', flush=True)
+        r = {'url': 'local build on ' + os.uname().nodename, 'databaseId': 0}
+    else:
+        r = wait_for_ci(sha, code)
     with tempfile.TemporaryDirectory(prefix='ghartv-candidate-') as tmp:
         tmp = Path(tmp)
-        must(['gh', 'run', 'download', str(r['databaseId']), '--repo', REPO, '-n', f'ghartv-code{code}-owner-review', '-D', tmp],
-             'downloading the build from GitHub')
-        meta = json.loads((tmp / 'CANDIDATE.json').read_text())
-        unsigned = tmp / f'GharTV-code{code}-review-unsigned.apk'
-        if meta.get('source') != sha or meta.get('version_code') != code or meta.get('package') != PACKAGE:
-            die('the downloaded build is not from this exact commit/version; nothing installed')
-        if sha256(unsigned) != meta.get('unsigned_apk_sha256'):
-            die('the downloaded APK does not match the checksum CI recorded; nothing installed')
-        print('Download verified: built from this exact commit, checksum matches.', flush=True)
+        if local:
+            unsigned = build_local(sdk, sha, code, tmp)
+        else:
+            got = run(['gh', 'run', 'download', str(r['databaseId']), '--repo', REPO, '-n', f'ghartv-code{code}-owner-review', '-D', tmp], timeout=600)
+            if got.returncode or not (tmp / 'CANDIDATE.json').exists():
+                print('GitHub tests passed but the APK could not be downloaded (artifact storage full?) - building the same commit here.', flush=True)
+                unsigned = build_local(sdk, sha, code, tmp)
+            else:
+                meta = json.loads((tmp / 'CANDIDATE.json').read_text())
+                unsigned = tmp / f'GharTV-code{code}-review-unsigned.apk'
+                if meta.get('source') != sha or meta.get('version_code') != code or meta.get('package') != PACKAGE:
+                    die('the downloaded build is not from this exact commit/version; nothing installed')
+                if sha256(unsigned) != meta.get('unsigned_apk_sha256'):
+                    die('the downloaded APK does not match the checksum CI recorded; nothing installed')
+                print('Download verified: built from this exact commit, checksum matches.', flush=True)
         signed = sign(unsigned, tools, tmp)
         KEEP.mkdir(parents=True, exist_ok=True)
         kept = KEEP / f'GharTV-code{code}-{sha[:12]}-signed.apk'
         kept.write_bytes(signed.read_bytes())
         print(f'Signed with your existing GharTV key: {kept}', flush=True)
-    record(sha, code, r, 'INSTALLED', f'Installed on the emulator as {kept.name}; owner testing pending.')
+    record(sha, code, r, 'INSTALLED-LOCAL-BUILD (GitHub tests not required)' if local else 'INSTALLED', f'Installed on the emulator as {kept.name}; owner testing pending.')
     adb, serial = emulator(sdk)
     p = run([adb, '-s', serial, 'install', '-r', kept], timeout=300)
     if p.returncode or 'Success' not in p.stdout:

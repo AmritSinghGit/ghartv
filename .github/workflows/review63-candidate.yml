@@ -59,7 +59,7 @@ jobs:
           echo no | avdmanager create avd --name GHARTV_R63_CI --package 'system-images;android-36;google_apis;x86_64' --path "$ANDROID_AVD_HOME/GHARTV_R63_CI.avd"
           echo 'disk.dataPartition.size=1G' >> "$ANDROID_AVD_HOME/GHARTV_R63_CI.avd/config.ini"
           nohup "$ANDROID_HOME/emulator/emulator" -avd GHARTV_R63_CI -port 5580 -no-window -no-audio -no-snapshot -no-boot-anim -gpu swiftshader -feature -Vulkan -memory 2048 > /tmp/ghartv-review63/proof/emulator.log 2>&1 &
-          for n in $(seq 1 90); do
+          for n in $(seq 1 150); do  # cold CI emulators sometimes need >3 min
             test "$(adb -s emulator-5580 shell getprop sys.boot_completed 2>/dev/null | tr -d '\r')" = 1 && break
             sleep 2
           done
@@ -92,6 +92,7 @@ jobs:
           PY
       - uses: actions/upload-artifact@v4
         if: always()
+        continue-on-error: true  # artifact quota must not hide a green test run; the installer can build locally
         with:
           name: ghartv-code63-owner-review
           path: /tmp/ghartv-review63/
