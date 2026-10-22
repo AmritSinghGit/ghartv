@@ -30,7 +30,18 @@ KEYS = ('GHARTV_SIGNING_STORE', 'GHARTV_SIGNING_STORE_PASSWORD', 'GHARTV_SIGNING
 
 
 def die(msg):
+    remember('STOP: ' + msg)
     sys.exit('\nSTOP: ' + msg)
+
+
+def remember(text):
+    """Every run's outcome is saved where Claude (and operon) can read it - no copy-pasting from Terminal."""
+    try:
+        CI_STATE.mkdir(parents=True, exist_ok=True)
+        with (CI_STATE / 'installer.log').open('a') as f:
+            f.write(f"{time.strftime('%Y-%m-%d %H:%M:%S %Z')} {' '.join(sys.argv[1:])}\n{text.rstrip()}\n\n")
+    except OSError:
+        pass
 
 
 def run(args, env=None, timeout=600):
@@ -162,19 +173,19 @@ def java_major(home):
 
 def private_jdk21():
     """Download Eclipse Temurin 21 into GharTV's own folder (no admin password), verify its SHA-256."""
-    import platform, tarfile, urllib.request
+    import platform, tarfile
     home = JDK_HOME / 'Contents/Home'
     if (home / 'bin/java').exists():
         return home
     arch = 'aarch64' if platform.machine() in ('arm64', 'aarch64') else 'x64'
     api = f'https://api.adoptium.net/v3/assets/latest/21/hotspot?architecture={arch}&image_type=jdk&os=mac&vendor=eclipse'
     print(f'Downloading a private Java 21 for building ({arch}, about 200 MB, one time only)...', flush=True)
-    with urllib.request.urlopen(api, timeout=60) as r:
-        pkg = json.load(r)[0]['binary']['package']
+    # curl uses the macOS certificate store (python.org Pythons often lack CA certificates).
+    pkg = json.loads(must(['curl', '-fsSL', '--max-time', '60', api], 'asking adoptium.net for Java 21'))[0]['binary']['package']
     JDK_HOME.parent.mkdir(parents=True, exist_ok=True)
     with tempfile.TemporaryDirectory(dir=JDK_HOME.parent) as tmp:
         tgz = Path(tmp) / 'jdk.tar.gz'
-        urllib.request.urlretrieve(pkg['link'], tgz)
+        must(['curl', '-fL', '--max-time', '1800', '-o', tgz, pkg['link']], 'downloading Java 21', timeout=1900)
         if sha256(tgz) != pkg['checksum']:
             die('the downloaded Java 21 failed its checksum; nothing installed')
         with tarfile.open(tgz) as t:
@@ -366,5 +377,13 @@ def main():
 if __name__ == '__main__':
     try:
         main()
+        remember('finished OK')
     except KeyboardInterrupt:
+        remember('cancelled by owner')
         sys.exit('\ncancelled - nothing else was changed')
+    except SystemExit:
+        raise
+    except Exception:
+        import traceback
+        remember('CRASH\n' + traceback.format_exc())
+        raise
