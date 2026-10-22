@@ -23,6 +23,8 @@ AVD = 'GharTV_Nova_Manual_google_tv_API36'
 SIGNING = Path.home() / 'Library/Application Support/GharTV/signing'
 KEEP = Path.home() / 'Library/Application Support/GharTV/owner-review/candidates'
 ROOT = Path(__file__).resolve().parents[2]
+LANE = 'ghartv-nova'
+CI_STATE = Path.home() / 'operon-tools/state/ci' / LANE
 KEYS = ('GHARTV_SIGNING_STORE', 'GHARTV_SIGNING_STORE_PASSWORD', 'GHARTV_SIGNING_KEY_ALIAS', 'GHARTV_SIGNING_KEY_PASSWORD')
 
 
@@ -83,8 +85,10 @@ def wait_for_ci(sha, code):
             r = runs[0]
             if r['status'] == 'completed':
                 if r['conclusion'] != 'success':
+                    report_failure(r, sha, code)
                     die(f"GitHub's build/tests did not pass ({r['conclusion']}). Nothing was installed. Details: {r['url']}")
                 print(f"GitHub build and tests passed: {r['url']}")
+                record(sha, code, r, 'PASSED', 'GitHub build and deterministic tests passed.')
                 return r
             if not told:
                 print(f"GitHub is building and testing code{code} ({r['url']}). Waiting - usually 25-40 minutes...", flush=True)
@@ -94,6 +98,49 @@ def wait_for_ci(sha, code):
             told = True
         time.sleep(30)
     die('gave up after 2 hours of waiting for GitHub')
+
+
+KEY_LINES = re.compile(r'FAILURES!!!|Tests run:|OK \(\d+ tests?\)|There (?:was|were) \d+ failure|^\d+\) \w+\(in\.ghartv|AssertionError|'
+                       r'Exception:|error:|FAILED|BUILD FAILED|What went wrong|Process completed with exit code|Traceback|assert ', re.I)
+
+
+def record(sha, code, r, state, summary):
+    """Latest CI result for this lane, read by operon's packets so every chat/AI sees it."""
+    CI_STATE.mkdir(parents=True, exist_ok=True)
+    (CI_STATE / 'latest.md').write_text(
+        f"CI {state} · code{code} · commit {sha[:12]} · {time.strftime('%Y-%m-%d %H:%M %Z')}\n"
+        f"Run: {r['url']}\n{summary.strip()}\n")
+
+
+def report_failure(r, sha, code):
+    """Save the failure evidence locally and post a short report on the lane's PR (once per run)."""
+    run_id = str(r['databaseId'])
+    folder = CI_STATE / f'run-{run_id}'
+    folder.mkdir(parents=True, exist_ok=True)
+    log = run(['gh', 'run', 'view', run_id, '--repo', REPO, '--log-failed'], timeout=300).stdout
+    (folder / 'failed.log').write_text(log)
+    run(['gh', 'run', 'download', run_id, '--repo', REPO, '-n', f'ghartv-code{code}-owner-review', '-D', folder / 'artifact'], timeout=600)
+    jobs = json.loads(run(['gh', 'run', 'view', run_id, '--repo', REPO, '--json', 'jobs']).stdout or '{"jobs":[]}')
+    steps = [f"{j['name']} -> {s['name']}" for j in jobs.get('jobs', []) for s in j.get('steps', []) if s.get('conclusion') == 'failure']
+    lines = [l.split('\t')[-1].strip() for l in log.splitlines() if KEY_LINES.search(l)]
+    proof = folder / 'artifact' / 'proof'
+    for name in ('focused.txt', 'full.txt'):
+        f = proof / name
+        if f.is_file():
+            lines += [f'[{name}] ' + l.strip() for l in f.read_text(errors='replace').splitlines() if KEY_LINES.search(l)]
+    key = '\n'.join(dict.fromkeys(lines[-40:])) or '(no recognisable failure lines - see the run log)'
+    summary = ('Failed step: ' + ('; '.join(steps) or 'unknown') + '\n```\n' + key[-3500:] + '\n```\n'
+               f'Evidence saved on the owner\'s Mac: {folder}')
+    record(sha, code, r, 'FAILED', summary)
+    marker = f'<!-- operon-ci-failure run {run_id} -->'
+    pr = run(['gh', 'pr', 'view', '--repo', REPO, '--json', 'number', '-q', '.number'], timeout=60).stdout.strip() or '1'
+    existing = run(['gh', 'api', f'repos/{REPO}/issues/{pr}/comments', '--paginate', '-q', '.[].body'], timeout=120).stdout
+    if marker not in existing:
+        body = (f'{marker}\nOperon CI report · lane {LANE} · code{code} · commit `{sha[:12]}` · **FAILED** · nothing installed\n'
+                f'Run: {r["url"]}\n' + summary)
+        subprocess.run(['gh', 'pr', 'comment', pr, '--repo', REPO, '--body-file', '-'], input=body, text=True, capture_output=True)
+        print(f'Failure report posted on PR #{pr} and saved in {folder}')
+    print('\n' + summary)
 
 
 def signing_values():
@@ -198,6 +245,7 @@ def main():
         kept = KEEP / f'GharTV-code{code}-{sha[:12]}-signed.apk'
         kept.write_bytes(signed.read_bytes())
         print(f'Signed with your existing GharTV key: {kept}', flush=True)
+    record(sha, code, r, 'INSTALLED', f'Installed on the emulator as {kept.name}; owner testing pending.')
     adb, serial = emulator(sdk)
     p = run([adb, '-s', serial, 'install', '-r', kept], timeout=300)
     if p.returncode or 'Success' not in p.stdout:
