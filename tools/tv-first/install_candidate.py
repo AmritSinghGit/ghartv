@@ -151,27 +151,63 @@ def report_failure(r, sha, code):
     print('\n' + summary)
 
 
+JDK_HOME = Path.home() / 'Library/Application Support/GharTV/jdk-21'
+
+
+def java_major(home):
+    out = run([Path(home) / 'bin/java', '-version']).stderr if home else ''
+    m = re.search(r'version "(\d+)', out)
+    return int(m.group(1)) if m else 0
+
+
+def private_jdk21():
+    """Download Eclipse Temurin 21 into GharTV's own folder (no admin password), verify its SHA-256."""
+    import platform, tarfile, urllib.request
+    home = JDK_HOME / 'Contents/Home'
+    if (home / 'bin/java').exists():
+        return home
+    arch = 'aarch64' if platform.machine() in ('arm64', 'aarch64') else 'x64'
+    api = f'https://api.adoptium.net/v3/assets/latest/21/hotspot?architecture={arch}&image_type=jdk&os=mac&vendor=eclipse'
+    print(f'Downloading a private Java 21 for building ({arch}, about 200 MB, one time only)...', flush=True)
+    with urllib.request.urlopen(api, timeout=60) as r:
+        pkg = json.load(r)[0]['binary']['package']
+    JDK_HOME.parent.mkdir(parents=True, exist_ok=True)
+    with tempfile.TemporaryDirectory(dir=JDK_HOME.parent) as tmp:
+        tgz = Path(tmp) / 'jdk.tar.gz'
+        urllib.request.urlretrieve(pkg['link'], tgz)
+        if sha256(tgz) != pkg['checksum']:
+            die('the downloaded Java 21 failed its checksum; nothing installed')
+        with tarfile.open(tgz) as t:
+            t.extractall(tmp)
+        top = next(d for d in Path(tmp).iterdir() if d.is_dir())
+        top.rename(JDK_HOME)
+    return home
+
+
 def java_env(sdk):
+    """Gradle 8.11 runs on Java 17-23; tor-android 0.4.8.22 needs a Java 21+ compiler. So: Java 21-23 (CI uses 21)."""
     env = dict(os.environ, ANDROID_HOME=str(sdk), ANDROID_SDK_ROOT=str(sdk))
-    def major(home):
-        out = run([Path(home) / 'bin/java', '-version']).stderr if home else ''
-        m = re.search(r'version "(\d+)', out)
-        return int(m.group(1)) if m else 0
-    # Java 21, as in CI: tor-android 0.4.8.22 ships Java 21 class files that a Java 17 compiler cannot read.
     jh = Path('/usr/libexec/java_home')
-    candidates = [os.environ.get('JAVA_HOME'),
-                  '/Applications/Android Studio.app/Contents/jbr/Contents/Home',
-                  run([jh, '-v', '21+']).stdout.strip() if jh.exists() else '']
-    found = []
-    for home in candidates:
-        if home and Path(home, 'bin/java').exists():
-            found.append(f'{home} (Java {major(home)})')
-            if major(home) >= 21:
+    candidates = [os.environ.get('JAVA_HOME'), str(JDK_HOME / 'Contents/Home'),
+                  run([jh, '-v', '21']).stdout.strip() if jh.exists() else '']
+    for root in (Path('/Library/Java/JavaVirtualMachines'), Path.home() / 'Library/Java/JavaVirtualMachines'):
+        candidates += [str(d / 'Contents/Home') for d in sorted(root.glob('*'))] if root.exists() else []
+    candidates += [str(d) for d in sorted((Path.home() / '.gradle/jdks').glob('*'))] if (Path.home() / '.gradle/jdks').exists() else []
+    candidates += ['/opt/homebrew/opt/openjdk@21', '/usr/local/opt/openjdk@21', '/Applications/Android Studio.app/Contents/jbr/Contents/Home']
+    seen = []
+    for home in dict.fromkeys(c for c in candidates if c):
+        if Path(home, 'bin/java').exists():
+            v = java_major(home)
+            seen.append(f'Java {v}')
+            if 21 <= v <= 23:
                 env['JAVA_HOME'] = home
-                print(f'Using Java {major(home)}: {home}', flush=True)
+                print(f'Using Java {v}: {home}', flush=True)
                 return env
-    die('Java 21 or newer is needed to build GharTV (found: ' + (', '.join(found) or 'none') + '). '
-        'Install it with `brew install --cask temurin@21` or update Android Studio, then rerun.')
+    print('No Java 21-23 on this Mac (found: ' + (', '.join(seen) or 'none') + ').', flush=True)
+    home = str(private_jdk21())
+    env['JAVA_HOME'] = home
+    print(f'Using Java {java_major(home)}: {home}', flush=True)
+    return env
 
 
 def build_local(sdk, sha, code, out_dir):
@@ -272,7 +308,7 @@ def emulator(sdk):
 
 
 def main():
-    if run(['git', '-C', ROOT, 'status', '--porcelain']).stdout.strip():
+    if run(['git', '-C', ROOT, 'status', '--porcelain', '--untracked-files=no']).stdout.strip():
         print('note: you have uncommitted changes; the candidate is built from the last pushed commit only.')
     code = version_code()
     # The candidate is built from the newest commit that changed the app or its workflow;
