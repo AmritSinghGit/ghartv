@@ -175,7 +175,7 @@ def java_env(sdk):
 
 
 def build_local(sdk, sha, code, out_dir):
-    if run(['git', '-C', ROOT, 'status', '--porcelain', '--', 'android-tv']).stdout.strip():
+    if run(['git', '-C', ROOT, 'status', '--porcelain', '--untracked-files=no', '--', 'android-tv']).stdout.strip():
         die('android-tv has uncommitted changes; a local candidate must match a commit exactly')
     env = java_env(sdk)
     assets = ROOT / 'android-tv/app/src/main/assets'
