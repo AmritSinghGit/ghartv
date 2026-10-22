@@ -157,14 +157,21 @@ def java_env(sdk):
         out = run([Path(home) / 'bin/java', '-version']).stderr if home else ''
         m = re.search(r'version "(\d+)', out)
         return int(m.group(1)) if m else 0
+    # Java 21, as in CI: tor-android 0.4.8.22 ships Java 21 class files that a Java 17 compiler cannot read.
+    jh = Path('/usr/libexec/java_home')
     candidates = [os.environ.get('JAVA_HOME'),
-                  run(['/usr/libexec/java_home', '-v', '17+']).stdout.strip() if Path('/usr/libexec/java_home').exists() else '',
-                  '/Applications/Android Studio.app/Contents/jbr/Contents/Home']
+                  '/Applications/Android Studio.app/Contents/jbr/Contents/Home',
+                  run([jh, '-v', '21+']).stdout.strip() if jh.exists() else '']
+    found = []
     for home in candidates:
-        if home and Path(home, 'bin/java').exists() and major(home) >= 17:
-            env['JAVA_HOME'] = home
-            return env
-    die('no Java 17+ found (install Android Studio or a JDK 17+)')
+        if home and Path(home, 'bin/java').exists():
+            found.append(f'{home} (Java {major(home)})')
+            if major(home) >= 21:
+                env['JAVA_HOME'] = home
+                print(f'Using Java {major(home)}: {home}', flush=True)
+                return env
+    die('Java 21 or newer is needed to build GharTV (found: ' + (', '.join(found) or 'none') + '). '
+        'Install it with `brew install --cask temurin@21` or update Android Studio, then rerun.')
 
 
 def build_local(sdk, sha, code, out_dir):
