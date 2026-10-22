@@ -70,7 +70,14 @@ def ci_passed(sha, code):
         jobs = gh_json(['run', 'view', str(r['databaseId']), '--repo', REPO, '--json', 'jobs'], 'reading the test run')
         steps = {s['name']: s.get('conclusion') for j in jobs['jobs'] for s in j.get('steps', [])}
         ok = steps.get('Run focused and complete deterministic suites') == 'success'
-        return ok, r['url'] + ('' if ok else ' (tests did not pass)')
+        if not ok:  # keep the evidence where Claude/operon can read it - no copy-pasting
+            ic.CI_STATE.mkdir(parents=True, exist_ok=True)
+            log = ic.CI_STATE / f"run-{r['databaseId']}-failed.log"
+            log.write_text(ic.run(['gh', 'run', 'view', str(r['databaseId']), '--repo', REPO, '--log-failed'], timeout=300).stdout)
+            failed = [n for n, c in steps.items() if c == 'failure']
+            ic.remember(f"publish check: tests not passed in run {r['databaseId']} (failed steps: {failed}); log {log}")
+            return False, r['url'] + f" (failed: {', '.join(failed) or 'unknown'}; log saved for Claude)"
+        return ok, r['url']
     return False, 'no completed GitHub test run for this app source yet'
 
 
