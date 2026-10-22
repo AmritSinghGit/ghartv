@@ -72,11 +72,13 @@ def build_tools(sdk):
 
 def wait_for_ci(sha, code):
     wf = f'review{code}-candidate.yml'
+    name = f'GharTV Review{code} candidate'
     told = False
     for _ in range(240):
-        out = must(['gh', 'run', 'list', '--repo', REPO, '--workflow', wf, '--commit', sha,
-                    '--json', 'databaseId,status,conclusion,url', '-L', '5'], 'reading GitHub Actions')
-        runs = json.loads(out or '[]')
+        # Not filtered with --workflow: GitHub only resolves workflow names that exist on the default branch.
+        out = must(['gh', 'run', 'list', '--repo', REPO, '--commit', sha,
+                    '--json', 'databaseId,status,conclusion,url,workflowName', '-L', '50'], 'reading GitHub Actions')
+        runs = [r for r in json.loads(out or '[]') if r.get('workflowName') == name]
         if runs:
             r = runs[0]
             if r['status'] == 'completed':
@@ -171,8 +173,11 @@ def emulator(sdk):
 def main():
     if run(['git', '-C', ROOT, 'status', '--porcelain']).stdout.strip():
         print('note: you have uncommitted changes; the candidate is built from the last pushed commit only.')
-    sha = must(['git', '-C', ROOT, 'rev-parse', 'HEAD'], 'git').strip()
     code = version_code()
+    # The candidate is built from the newest commit that changed the app or its workflow;
+    # later commits that only touch tools/docs do not trigger (or need) a new build.
+    sha = must(['git', '-C', ROOT, 'log', '-1', '--format=%H', '--', 'android-tv',
+                f'.github/workflows/review{code}-candidate.yml'], 'git').strip()
     print(f'GharTV code{code} candidate for commit {sha[:12]}', flush=True)
     r = wait_for_ci(sha, code)
     sdk = find_sdk()
