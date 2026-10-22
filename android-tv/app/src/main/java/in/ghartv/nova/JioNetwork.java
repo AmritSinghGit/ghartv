@@ -33,20 +33,22 @@ final class JioNetwork {
 
     private static final OkHttpClient MEDIA = new OkHttpClient.Builder()
             .dns(MEDIA_DNS)
+            // Review38 (DefaultHttpDataSource): 15 s connect, 25 s read, no whole-call cap
+            // (a cap also cuts off slow segment bodies) and cross-protocol CDN redirects allowed.
             .connectTimeout(15, TimeUnit.SECONDS)
             .readTimeout(25, TimeUnit.SECONDS)
-            .callTimeout(40, TimeUnit.SECONDS)
             .retryOnConnectionFailure(true)
             .followRedirects(true)
-            .followSslRedirects(false)
+            .followSslRedirects(true)
             .connectionPool(new ConnectionPool(10, 5, TimeUnit.MINUTES))
             .build();
 
     private static final OkHttpClient PREVIEW = new OkHttpClient.Builder()
             .dns(MEDIA_DNS)
-            .connectTimeout(4, TimeUnit.SECONDS)
-            .readTimeout(4, TimeUnit.SECONDS)
-            .callTimeout(7, TimeUnit.SECONDS)
+            // The 15 s first-picture budget bounds previews; a 7 s whole-call cap
+            // killed manifest/segment downloads that were still progressing.
+            .connectTimeout(6, TimeUnit.SECONDS)
+            .readTimeout(8, TimeUnit.SECONDS)
             .retryOnConnectionFailure(true)
             .followRedirects(true)
             .followSslRedirects(false)

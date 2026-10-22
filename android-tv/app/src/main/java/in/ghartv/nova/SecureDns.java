@@ -8,6 +8,11 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeoutException;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
 
@@ -25,6 +30,13 @@ final class SecureDns implements Dns {
     interface HostScope { boolean allows(String host); }
 
     private static final long CACHE_MS = 10L * 60L * 1000L;
+    /** A hung emulator/router resolver must not consume the whole request budget. */
+    static final long SYSTEM_DNS_BUDGET_MS = 3000L;
+    private static final ExecutorService SYSTEM_LOOKUPS = Executors.newCachedThreadPool(task -> {
+        Thread thread = new Thread(task, "ghartv-system-dns");
+        thread.setDaemon(true);
+        return thread;
+    });
     private static final class Cached {
         final long until;
         final List<InetAddress> addresses;
@@ -61,16 +73,27 @@ final class SecureDns implements Dns {
         String host = normalize(hostname);
         if (host.isEmpty()) throw new UnknownHostException("empty hostname");
         UnknownHostException directFailure = null;
+        boolean recoverable = scope.allows(host);
+        if (recoverable) {
+            // A name that needed recovery minutes ago reuses that answer instead of
+            // waiting on the same failing system resolver for every HLS/DASH connection.
+            Cached recent = cache.get(host);
+            if (recent != null && recent.until > android.os.SystemClock.elapsedRealtime()
+                    && !recent.addresses.isEmpty()) {
+                noteFallback();
+                return recent.addresses;
+            }
+        }
         if (usePrimary) {
             try {
-                List<InetAddress> direct = primary.lookup(host);
+                List<InetAddress> direct = recoverable ? boundedPrimary(host) : primary.lookup(host);
                 if (direct != null && !direct.isEmpty()) return direct;
                 directFailure = new UnknownHostException(host + " returned no system DNS addresses");
             } catch (UnknownHostException failure) {
                 directFailure = failure;
             }
         }
-        if (!scope.allows(host)) {
+        if (!recoverable) {
             if (directFailure != null) throw directFailure;
             throw new UnknownHostException(host + " is outside the secure DNS recovery scope");
         }
@@ -101,6 +124,28 @@ final class SecureDns implements Dns {
         }
         if (aggregate != null) throw aggregate;
         throw new UnknownHostException(host + " has no available DNS route");
+    }
+
+    private List<InetAddress> boundedPrimary(String host) throws UnknownHostException {
+        if (primary != Dns.SYSTEM) return primary.lookup(host);
+        Future<List<InetAddress>> pending = SYSTEM_LOOKUPS.submit(() -> primary.lookup(host));
+        try {
+            return pending.get(SYSTEM_DNS_BUDGET_MS, TimeUnit.MILLISECONDS);
+        } catch (TimeoutException slow) {
+            pending.cancel(true);
+            throw new UnknownHostException(host + " system DNS gave no answer within "
+                    + SYSTEM_DNS_BUDGET_MS + " ms");
+        } catch (ExecutionException failed) {
+            Throwable cause = failed.getCause();
+            if (cause instanceof UnknownHostException) throw (UnknownHostException) cause;
+            UnknownHostException wrapped = new UnknownHostException(host + " system DNS failed");
+            wrapped.initCause(cause);
+            throw wrapped;
+        } catch (InterruptedException interrupted) {
+            pending.cancel(true);
+            Thread.currentThread().interrupt();
+            throw new UnknownHostException(host + " DNS lookup interrupted");
+        }
     }
 
     long fallbackCount() { return fallbackCount.get(); }
@@ -144,9 +189,9 @@ final class SecureDns implements Dns {
             for (byte[] value : addresses) bootstrap.add(InetAddress.getByAddress(value));
             OkHttpClient client = new OkHttpClient.Builder()
                     .dns(Dns.SYSTEM)
-                    .connectTimeout(6, TimeUnit.SECONDS)
-                    .readTimeout(8, TimeUnit.SECONDS)
-                    .callTimeout(10, TimeUnit.SECONDS)
+                    .connectTimeout(3, TimeUnit.SECONDS)
+                    .readTimeout(4, TimeUnit.SECONDS)
+                    .callTimeout(4, TimeUnit.SECONDS)
                     .retryOnConnectionFailure(true)
                     .build();
             providers.add(new DnsOverHttps.Builder()

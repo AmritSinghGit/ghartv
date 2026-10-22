@@ -1,8 +1,6 @@
 name: Nova TV experience contract
 on:
-  push:
-    branches: ['codex/ghartv-remove-auto-preview']
-    paths: ['android-tv/**','TV_EXPERIENCE_CONTRACT.json','OWNER_REVIEW_REQUIREMENTS.json','tools/tv-first/**','tools/owner_review.command.in','tools/package_owner_review.py','.github/workflows/tv-experience-contract.yml','REVIEW61.md']
+  # Superseded for this branch by review63-candidate.yml (it still asserted code61); run by hand if needed.
   workflow_dispatch:
 permissions:
   contents: read

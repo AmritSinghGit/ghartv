@@ -321,6 +321,10 @@ public class FlixMomoActivity extends Activity {
         CookieManager.getInstance().setAcceptThirdPartyCookies(browser,false);
         browser.setDownloadListener((u,a,d,m,n)->status.setText("Downloads are not enabled in this provider view."));
         browser.setOnFocusChangeListener((v,focused)->{
+            // Simplified Discover: moving down from the search toolbar into the page hands
+            // the page to the remote pointer (Review56 left the toolbar up and the pointer off).
+            if(focused&&simplifiedDiscoverExperience()&&pointerPage&&custom==null&&!mouseActive
+                    &&!homeRequested&&!detailRequested&&chrome.getVisibility()==View.VISIBLE){enterPagePointer();return;}
             // Browser focus moves during clicks/fullscreen/dialogs. Pointer mode owns
             // its own visibility; a WebView focus callback must not dismiss it.
             if(!mouseActive&&custom==null){if(focused)cursor.enter();else cursor.leave();}
@@ -592,6 +596,13 @@ public class FlixMomoActivity extends Activity {
         cursor.target(browser);cursor.scrollMode(false);cursor.enable(true);browser.requestFocus();
         if(center)cursor.center();cursor.enter();modeButton.setText("Cursor: on");
     }
+    /** Explicit owner request for the page pointer: hide the search toolbar first so the guard below admits it. */
+    private void enterPagePointer(){
+        if(simplifiedDiscoverExperience()&&chrome!=null&&chrome.getVisibility()==View.VISIBLE){
+            chrome.setVisibility(View.GONE);hideKeyboard();
+        }
+        resumePagePointer(true);
+    }
     private void pointerNavigation(){
         if(!pointerPage){showOptions();return;}
         if(custom!=null){showFullscreenMenu();return;}
@@ -599,7 +610,7 @@ public class FlixMomoActivity extends Activity {
         String[] choices=simplifiedDiscoverExperience()?new String[]{"Return to page / pointer","Search films or series","Back to TV guide","Reload current page","Connection details","FlixMomo route","Recent technical errors"}:new String[]{"Return to page / pointer","Search GharTV · TV + films","Go back one page","Reload current page","Connection details","FlixMomo route","Recent interaction log"};
         optionsDialog=new android.app.AlertDialog.Builder(this).setTitle(ReviewDisplay.details())
             .setItems(choices,(dialog,which)->{
-                if(which==0){resumePagePointer(false);}
+                if(which==0){enterPagePointer();}
                 else if(which==1){toolbar();query.requestFocus();if(!simplifiedDiscoverExperience())UnifiedSearch.dialog(this);}
                 else if(which==2){if(simplifiedDiscoverExperience())finish();else pointerBack();}
                 else if(which==3){if(browser!=null){navigate(lastRequested,false);resumePagePointer(false);}}
