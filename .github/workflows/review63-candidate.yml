@@ -63,7 +63,12 @@ jobs:
             test "$(adb -s emulator-5580 shell getprop sys.boot_completed 2>/dev/null | tr -d '\r')" = 1 && break
             sleep 2
           done
-          test "$(adb -s emulator-5580 shell getprop sys.boot_completed | tr -d '\r')" = 1
+          if [ "$(adb -s emulator-5580 shell getprop sys.boot_completed 2>/dev/null | tr -d '\r')" != 1 ]; then
+            echo '::error::CI emulator did not boot (infrastructure, not app code). Emulator log tail:'
+            tail -120 /tmp/ghartv-review63/proof/emulator.log || true
+            adb devices -l || true
+            exit 1
+          fi
           adb -s emulator-5580 shell wm size 1280x720
           adb -s emulator-5580 shell wm density 160
       - name: Run focused and complete deterministic suites
