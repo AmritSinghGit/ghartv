@@ -83,12 +83,18 @@ def ci_passed(sha, code):
 
 def publish(go, without_ci):
     code, name = ic.version_code(), version_name()
-    sha = ic.must(['git', '-C', ROOT, 'log', '-1', '--format=%H', '--', 'android-tv',
-                   f'.github/workflows/review{code}-candidate.yml'], 'git').strip()
-    apk = ic.KEEP / f'GharTV-code{code}-{sha[:12]}-signed.apk'
-    print(f'GharTV code{code} ({name}) from commit {sha[:12]}')
-    if not apk.is_file():
-        ic.die(f'no tested signed APK for this commit at {apk} - run install_candidate.py first and test it')
+    # Match the tested APK by the app's source (android-tv tree), so CI/tool-only commits don't matter.
+    tree = ic.must(['git', '-C', ROOT, 'rev-parse', 'HEAD:android-tv'], 'git').strip()
+    apk, sha = None, ''
+    for f in sorted(ic.KEEP.glob(f'GharTV-code{code}-*-signed.apk'), key=lambda f: f.stat().st_mtime, reverse=True):
+        short = f.name.split('-')[2]
+        full = ic.run(['git', '-C', ROOT, 'rev-parse', '--verify', '-q', short + '^{commit}']).stdout.strip()
+        if full and ic.run(['git', '-C', ROOT, 'rev-parse', f'{full}:android-tv']).stdout.strip() == tree:
+            apk, sha = f, full
+            break
+    if not apk:
+        ic.die(f'no tested signed APK of code{code} matches the current app source - run install_candidate.py first and test it')
+    print(f'GharTV code{code} ({name}) from commit {sha[:12]} (same app source as your checkout)')
     tools = ic.build_tools(ic.find_sdk())
     certs = ic.must([tools / 'apksigner', 'verify', '--print-certs', apk], 'verifying the APK signature')
     if ic.CERT not in certs:
