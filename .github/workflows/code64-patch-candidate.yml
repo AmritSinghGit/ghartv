@@ -1,5 +1,7 @@
 # Lane ghartv-nova: build and test the code64 one-click-play patch against the exact published code63 source,
 # without touching PR1's branch. Same steps as review64-candidate.yml (which the patch itself adds to PR1).
+# Adding patches/code64-one-click-play/BASELINE_NO_PATCH makes a run test the unpatched base instead, to tell
+# old failures from new ones; remove the file again afterwards.
 name: GharTV code64 patch candidate
 on:
   push:
@@ -9,7 +11,7 @@ on:
 permissions:
   contents: read
 concurrency:
-  group: ghartv-code64-patch-candidate
+  group: ghartv-code64-patch-candidate-${{ github.sha }}
   cancel-in-progress: true
 jobs:
   candidate:
@@ -35,11 +37,17 @@ jobs:
       - name: Apply the code64 patch to the published code63 source
         run: |
           set -euo pipefail
-          git apply --check ../lane/patches/code64-one-click-play/code64-one-click-play.patch
-          git apply ../lane/patches/code64-one-click-play/code64-one-click-play.patch
-          git add -A
-          git -c user.name=ci -c user.email=ci@example.invalid commit -qm "code64 patch on code63 source (CI-local, not pushed)"
-          git diff --stat HEAD~1 HEAD | tail -1
+          if [ -f ../lane/patches/code64-one-click-play/BASELINE_NO_PATCH ]; then
+            echo "APPLY_PATCH=false" >> "$GITHUB_ENV"
+            echo "BASELINE RUN: the unpatched code63 source is built and tested"
+          else
+            echo "APPLY_PATCH=true" >> "$GITHUB_ENV"
+            git apply --check ../lane/patches/code64-one-click-play/code64-one-click-play.patch
+            git apply ../lane/patches/code64-one-click-play/code64-one-click-play.patch
+            git add -A
+            git -c user.name=ci -c user.email=ci@example.invalid commit -qm "code64 patch on code63 source (CI-local, not pushed)"
+            git diff --stat HEAD~1 HEAD | tail -1
+          fi
       - uses: actions/setup-java@v5
         with:
           distribution: temurin
@@ -94,20 +102,22 @@ jobs:
           RUNNER=in.ghartv.nova.test/androidx.test.runner.AndroidJUnitRunner
           adb -s emulator-5580 install -r android-tv/app/build/outputs/apk/debug/app-debug.apk
           adb -s emulator-5580 install -r android-tv/app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk
-          FOCUSED=in.ghartv.nova.Review64OneClickPlayTest,in.ghartv.nova.Review50FeedbackTest,in.ghartv.nova.Review51PointerSearchTest,in.ghartv.nova.Review47ViewingTest,in.ghartv.nova.Review52ProviderMigrationTest,in.ghartv.nova.PreviewControllerTest,in.ghartv.nova.Review53PreviewFailureTest,in.ghartv.nova.Review53ProviderRecoveryTest,in.ghartv.nova.FilmCatalogueObservationTest,in.ghartv.nova.FilmTorControllerTest,in.ghartv.nova.Review56SimplifiedDiscoverTest,in.ghartv.nova.Review58IptvAndDnsTest,in.ghartv.nova.Review59NetworkRecoveryTest,in.ghartv.nova.Review60JioBaselineAndIptvCacheTest,in.ghartv.nova.Review61JioDnsTest,in.ghartv.nova.Review64JioMediaDnsDiagnosticsTest
+          FOCUSED=in.ghartv.nova.Review64OneClickPlayTest,in.ghartv.nova.Review50FeedbackTest,in.ghartv.nova.Review51PointerSearchTest,in.ghartv.nova.Review47ViewingTest,in.ghartv.nova.Review52ProviderMigrationTest,in.ghartv.nova.PreviewControllerTest,in.ghartv.nova.Review53PreviewFailureTest,in.ghartv.nova.Review53ProviderRecoveryTest,in.ghartv.nova.FilmCatalogueObservationTest,in.ghartv.nova.FilmTorControllerTest,in.ghartv.nova.Review56SimplifiedDiscoverTest,in.ghartv.nova.Review58IptvAndDnsTest,in.ghartv.nova.Review59NetworkRecoveryTest,in.ghartv.nova.Review60JioBaselineAndIptvCacheTest,in.ghartv.nova.Review61JioDnsTest,in.ghartv.nova.Review62JioMediaDnsDiagnosticsTest
+          if [ "$APPLY_PATCH" != true ]; then FOCUSED=${FOCUSED//in.ghartv.nova.Review64OneClickPlayTest,/}; fi
           adb -s emulator-5580 shell am instrument -w -r -e class "$FOCUSED" "$RUNNER" | tee /tmp/ghartv-review64/proof/focused.txt
-          grep -q 'OK (161 tests)' /tmp/ghartv-review64/proof/focused.txt
-          FULL=in.ghartv.nova.Review64OneClickPlayTest,in.ghartv.nova.RemoteWebCursorTest,in.ghartv.nova.FilmNativeControlsTest,in.ghartv.nova.DiscoverExperienceTest,in.ghartv.nova.Review38RegressionTest,in.ghartv.nova.Review39ExperienceTest,in.ghartv.nova.Review40PlaybackTest,in.ghartv.nova.Review41ConnectionTelemetryTest,in.ghartv.nova.Review42RegressionTest,in.ghartv.nova.Review43PerformanceTest,in.ghartv.nova.Review44LoadingMouseTest,in.ghartv.nova.Review45PlayEvidenceTest,in.ghartv.nova.Review46NativePointerTest,in.ghartv.nova.Review47ViewingTest,in.ghartv.nova.Review48InputStabilityTest,in.ghartv.nova.Review49PlaybackBudgetTest,in.ghartv.nova.Review50SeriesControlsTest,in.ghartv.nova.Review50FeedbackTest,in.ghartv.nova.Review51PointerSearchTest,in.ghartv.nova.Review52ProviderMigrationTest,in.ghartv.nova.PreviewControllerTest,in.ghartv.nova.Review53PreviewFailureTest,in.ghartv.nova.Review53ProviderRecoveryTest,in.ghartv.nova.FilmCatalogueObservationTest,in.ghartv.nova.FilmTorControllerTest,in.ghartv.nova.Review56SimplifiedDiscoverTest,in.ghartv.nova.Review58IptvAndDnsTest,in.ghartv.nova.Review59NetworkRecoveryTest,in.ghartv.nova.Review60JioBaselineAndIptvCacheTest,in.ghartv.nova.Review61JioDnsTest,in.ghartv.nova.Review64JioMediaDnsDiagnosticsTest
+          grep -Eq '^OK \([0-9]+ tests?\)' /tmp/ghartv-review64/proof/focused.txt
+          FULL=in.ghartv.nova.Review64OneClickPlayTest,in.ghartv.nova.RemoteWebCursorTest,in.ghartv.nova.FilmNativeControlsTest,in.ghartv.nova.DiscoverExperienceTest,in.ghartv.nova.Review38RegressionTest,in.ghartv.nova.Review39ExperienceTest,in.ghartv.nova.Review40PlaybackTest,in.ghartv.nova.Review41ConnectionTelemetryTest,in.ghartv.nova.Review42RegressionTest,in.ghartv.nova.Review43PerformanceTest,in.ghartv.nova.Review44LoadingMouseTest,in.ghartv.nova.Review45PlayEvidenceTest,in.ghartv.nova.Review46NativePointerTest,in.ghartv.nova.Review47ViewingTest,in.ghartv.nova.Review48InputStabilityTest,in.ghartv.nova.Review49PlaybackBudgetTest,in.ghartv.nova.Review50SeriesControlsTest,in.ghartv.nova.Review50FeedbackTest,in.ghartv.nova.Review51PointerSearchTest,in.ghartv.nova.Review52ProviderMigrationTest,in.ghartv.nova.PreviewControllerTest,in.ghartv.nova.Review53PreviewFailureTest,in.ghartv.nova.Review53ProviderRecoveryTest,in.ghartv.nova.FilmCatalogueObservationTest,in.ghartv.nova.FilmTorControllerTest,in.ghartv.nova.Review56SimplifiedDiscoverTest,in.ghartv.nova.Review58IptvAndDnsTest,in.ghartv.nova.Review59NetworkRecoveryTest,in.ghartv.nova.Review60JioBaselineAndIptvCacheTest,in.ghartv.nova.Review61JioDnsTest,in.ghartv.nova.Review62JioMediaDnsDiagnosticsTest
+          if [ "$APPLY_PATCH" != true ]; then FULL=${FULL//in.ghartv.nova.Review64OneClickPlayTest,/}; fi
           adb -s emulator-5580 shell am instrument -w -r -e class "$FULL" "$RUNNER" | tee /tmp/ghartv-review64/proof/full.txt
-          grep -q 'OK (369 tests)' /tmp/ghartv-review64/proof/full.txt
+          grep -Eq '^OK \([0-9]+ tests?\)' /tmp/ghartv-review64/proof/full.txt
       - name: Package source-bound evidence
         run: |
           set -euo pipefail
           git archive --format=zip HEAD -o /tmp/ghartv-review64/GHARTV_CODE64_SOURCE.zip
           python - <<'PY'
-          import hashlib,json,pathlib,subprocess
+          import hashlib,json,pathlib,re,subprocess
           root=pathlib.Path('/tmp/ghartv-review64'); apk=root/'GharTV-code64-review-unsigned.apk'; src=root/'GHARTV_CODE64_SOURCE.zip'
-          data={'schema':'ghartv.review64-candidate.v1','source':subprocess.check_output(['git','rev-parse','HEAD'],text=True).strip(),'version_code':64,'version_name':'0.6.0-rc15.5-one-click-play-review','package':'in.ghartv.nova','unsigned_apk_sha256':hashlib.sha256(apk.read_bytes()).hexdigest(),'source_zip_sha256':hashlib.sha256(src.read_bytes()).hexdigest(),'focused_tests_passed':161,'deterministic_tests_passed':369,'jio_tor':False,'iptv_changed':False,'flixmomo_changed':'one_click_play_from_title_click','live_jio_acceptance':'OWNER_REQUIRED','published':False,'base_source':'d0dea76361fa3f92f643f7436ada7cf65cc30a10','patch_sha256':hashlib.sha256(pathlib.Path('../lane/patches/code64-one-click-play/code64-one-click-play.patch').read_bytes()).hexdigest(),'source_note':'source is a CI-local commit of base_source plus the patch; it is not an upstream SHA'}
+          data={'schema':'ghartv.review64-candidate.v1','source':subprocess.check_output(['git','rev-parse','HEAD'],text=True).strip(),'version_code':64,'version_name':'0.6.0-rc15.5-one-click-play-review','package':'in.ghartv.nova','unsigned_apk_sha256':hashlib.sha256(apk.read_bytes()).hexdigest(),'source_zip_sha256':hashlib.sha256(src.read_bytes()).hexdigest(),'focused_tests_passed':int(re.search(r'OK \((\d+) tests?\)',(root/'proof/focused.txt').read_text()).group(1)),'deterministic_tests_passed':int(re.search(r'OK \((\d+) tests?\)',(root/'proof/full.txt').read_text()).group(1)),'jio_tor':False,'iptv_changed':False,'flixmomo_changed':'one_click_play_from_title_click','live_jio_acceptance':'OWNER_REQUIRED','published':False,'apply_patch':__import__('os').environ.get('APPLY_PATCH'),'base_source':'d0dea76361fa3f92f643f7436ada7cf65cc30a10','patch_sha256':hashlib.sha256(pathlib.Path('../lane/patches/code64-one-click-play/code64-one-click-play.patch').read_bytes()).hexdigest(),'source_note':'source is a CI-local commit of base_source plus the patch (or base_source itself on a baseline run); it is not an upstream SHA'}
           (root/'CANDIDATE.json').write_text(json.dumps(data,indent=2)+'\n')
           (root/'SHA256SUMS').write_text(''.join(hashlib.sha256(p.read_bytes()).hexdigest()+'  '+p.name+'\n' for p in sorted(root.iterdir()) if p.is_file() and p.name!='SHA256SUMS'))
           print(json.dumps(data,indent=2))

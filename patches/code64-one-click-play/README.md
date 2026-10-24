@@ -8,7 +8,7 @@ branch does not carry a second copy of the app. Nothing here is a release, a fee
 | --- | --- |
 | Base source | `d0dea76361fa3f92f643f7436ada7cf65cc30a10` (published code63; android-tv is identical at PR1 head `56426dbefd00`) |
 | Patch | `code64-one-click-play.patch` |
-| Patch SHA-256 | `7c88cc8bfb3b7cbcb1059635f2d6c2917f8db81c3ce798c46ae114345a7c3ab1` |
+| Patch SHA-256 | `a8685ab0476edbca15e1c6f696d5f387b53452e2ce7cf5b05d6cd1429d4541c3` |
 | Result | versionCode 64, `0.6.0-rc15.5-one-click-play-review` |
 
 What it changes is written up in the patch's own `REVIEW64.md`. In short: a pointer click that lands Discover on a
