@@ -1,0 +1,569 @@
+diff --git a/.github/workflows/review63-candidate.yml b/.github/workflows/review63-candidate.yml
+index 092e607..228caf6 100644
+--- a/.github/workflows/review63-candidate.yml
++++ b/.github/workflows/review63-candidate.yml
+@@ -1,9 +1,7 @@
++# Superseded by review64-candidate.yml (versionCode 64); run by hand only.
+ # Review63: Jio timeouts, previews and the Discover pointer. Built + tested here; installed by tools/tv-first/install_candidate.py.
+ name: GharTV Review63 candidate
+ on:
+-  push:
+-    branches: ['codex/ghartv-remove-auto-preview']
+-    paths: ['.github/workflows/review63-candidate.yml','android-tv/**']
+   workflow_dispatch:
+ permissions:
+   contents: read
+diff --git a/.github/workflows/review64-candidate.yml b/.github/workflows/review64-candidate.yml
+new file mode 100644
+index 0000000..6595710
+--- /dev/null
++++ b/.github/workflows/review64-candidate.yml
+@@ -0,0 +1,104 @@
++# Review64: one-click play from a title click. Built + tested here; installed by tools/tv-first/install_candidate.py.
++name: GharTV Review64 candidate
++on:
++  push:
++    branches: ['codex/ghartv-remove-auto-preview']
++    paths: ['.github/workflows/review64-candidate.yml','android-tv/**']
++  workflow_dispatch:
++permissions:
++  contents: read
++concurrency:
++  group: ghartv-review64-candidate
++  cancel-in-progress: true
++jobs:
++  candidate:
++    runs-on: ubuntu-latest
++    timeout-minutes: 55
++    env:
++      GRADLE_OPTS: '-Dorg.gradle.daemon=false -Dorg.gradle.jvmargs=-Xmx2g'
++      ANDROID_USER_HOME: /tmp/ghartv-r64-android
++      ANDROID_EMULATOR_HOME: /tmp/ghartv-r64-android
++      ANDROID_AVD_HOME: /tmp/ghartv-r64-avd
++    steps:
++      - uses: actions/checkout@v5
++        with:
++          fetch-depth: 0
++      - uses: actions/setup-java@v5
++        with:
++          distribution: temurin
++          java-version: '21'
++      - uses: android-actions/setup-android@v3
++        with:
++          packages: platform-tools
++          log-accepted-android-sdk-licenses: false
++      - name: Source contract and exact build
++        run: |
++          set -euo pipefail
++          python tools/tv-first/check_contract.py
++          test "$(git diff --name-only 53032e67fd9c1e11ae8c466ba90289d41faa5bc2 HEAD | grep -Ec '^android-tv/app/src/main/java/in/ghartv/nova/(Iptv|FilmTor)')" = 0
++          mkdir -p /tmp/nova-contract && javac -d /tmp/nova-contract android-tv/app/src/main/java/in/ghartv/nova/PreviewGate.java tools/tv-first/PreviewGateSmoke.java android-tv/app/src/main/java/in/ghartv/nova/RemoteCursorState.java tools/tv-first/RemoteCursorSmoke.java
++          java -cp /tmp/nova-contract PreviewGateSmoke
++          java -cp /tmp/nova-contract RemoteCursorSmoke
++          mkdir -p /tmp/ghartv-review64/proof android-tv/app/src/main/assets android-tv/app/src/debug/assets
++          if ! command -v ffmpeg >/dev/null; then
++            timeout 90 sudo apt-get -o Acquire::Retries=1 update -qq
++            timeout 120 sudo apt-get install -y -qq ffmpeg
++          fi
++          ffmpeg -nostdin -hide_banner -loglevel error -f lavfi -i testsrc2=size=320x180:rate=24 -t 30 -an -c:v libx264 -preset fast -crf 32 -pix_fmt yuv420p -movflags +faststart android-tv/app/src/main/assets/ghartv-native-check.mp4
++          cp android-tv/app/src/main/assets/ghartv-native-check.mp4 android-tv/app/src/debug/assets/preview-fixture.mp4
++          sdkmanager 'platforms;android-36' 'build-tools;36.0.0'
++          (cd android-tv && chmod +x gradlew && ./gradlew --no-daemon --max-workers=2 assembleRelease assembleDebug assembleDebugAndroidTest)
++          cp android-tv/app/build/outputs/apk/release/app-release-unsigned.apk /tmp/ghartv-review64/GharTV-code64-review-unsigned.apk
++      - name: Isolated Android 36 emulator
++        run: |
++          set -euo pipefail
++          test -e /dev/kvm
++          sudo chmod a+rw /dev/kvm
++          sdkmanager 'emulator' 'system-images;android-36;google_apis;x86_64'
++          mkdir -p "$ANDROID_USER_HOME" "$ANDROID_AVD_HOME"
++          echo no | avdmanager create avd --name GHARTV_R64_CI --package 'system-images;android-36;google_apis;x86_64' --path "$ANDROID_AVD_HOME/GHARTV_R64_CI.avd"
++          echo 'disk.dataPartition.size=1G' >> "$ANDROID_AVD_HOME/GHARTV_R64_CI.avd/config.ini"
++          nohup "$ANDROID_HOME/emulator/emulator" -avd GHARTV_R64_CI -port 5580 -no-window -no-audio -no-snapshot -no-boot-anim -gpu swiftshader -feature -Vulkan -memory 2048 > /tmp/ghartv-review64/proof/emulator.log 2>&1 &
++          for n in $(seq 1 150); do  # cold CI emulators sometimes need >3 min
++            test "$(adb -s emulator-5580 shell getprop sys.boot_completed 2>/dev/null | tr -d '\r')" = 1 && break
++            sleep 2
++          done
++          if [ "$(adb -s emulator-5580 shell getprop sys.boot_completed 2>/dev/null | tr -d '\r')" != 1 ]; then
++            echo '::error::CI emulator did not boot (infrastructure, not app code). Emulator log tail:'
++            tail -120 /tmp/ghartv-review64/proof/emulator.log || true
++            adb devices -l || true
++            exit 1
++          fi
++          adb -s emulator-5580 shell wm size 1280x720
++          adb -s emulator-5580 shell wm density 160
++      - name: Run focused and complete deterministic suites
++        run: |
++          set -euo pipefail
++          RUNNER=in.ghartv.nova.test/androidx.test.runner.AndroidJUnitRunner
++          adb -s emulator-5580 install -r android-tv/app/build/outputs/apk/debug/app-debug.apk
++          adb -s emulator-5580 install -r android-tv/app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk
++          FOCUSED=in.ghartv.nova.Review64OneClickPlayTest,in.ghartv.nova.Review50FeedbackTest,in.ghartv.nova.Review51PointerSearchTest,in.ghartv.nova.Review47ViewingTest,in.ghartv.nova.Review52ProviderMigrationTest,in.ghartv.nova.PreviewControllerTest,in.ghartv.nova.Review53PreviewFailureTest,in.ghartv.nova.Review53ProviderRecoveryTest,in.ghartv.nova.FilmCatalogueObservationTest,in.ghartv.nova.FilmTorControllerTest,in.ghartv.nova.Review56SimplifiedDiscoverTest,in.ghartv.nova.Review58IptvAndDnsTest,in.ghartv.nova.Review59NetworkRecoveryTest,in.ghartv.nova.Review60JioBaselineAndIptvCacheTest,in.ghartv.nova.Review61JioDnsTest,in.ghartv.nova.Review64JioMediaDnsDiagnosticsTest
++          adb -s emulator-5580 shell am instrument -w -r -e class "$FOCUSED" "$RUNNER" | tee /tmp/ghartv-review64/proof/focused.txt
++          grep -q 'OK (161 tests)' /tmp/ghartv-review64/proof/focused.txt
++          FULL=in.ghartv.nova.Review64OneClickPlayTest,in.ghartv.nova.RemoteWebCursorTest,in.ghartv.nova.FilmNativeControlsTest,in.ghartv.nova.DiscoverExperienceTest,in.ghartv.nova.Review38RegressionTest,in.ghartv.nova.Review39ExperienceTest,in.ghartv.nova.Review40PlaybackTest,in.ghartv.nova.Review41ConnectionTelemetryTest,in.ghartv.nova.Review42RegressionTest,in.ghartv.nova.Review43PerformanceTest,in.ghartv.nova.Review44LoadingMouseTest,in.ghartv.nova.Review45PlayEvidenceTest,in.ghartv.nova.Review46NativePointerTest,in.ghartv.nova.Review47ViewingTest,in.ghartv.nova.Review48InputStabilityTest,in.ghartv.nova.Review49PlaybackBudgetTest,in.ghartv.nova.Review50SeriesControlsTest,in.ghartv.nova.Review50FeedbackTest,in.ghartv.nova.Review51PointerSearchTest,in.ghartv.nova.Review52ProviderMigrationTest,in.ghartv.nova.PreviewControllerTest,in.ghartv.nova.Review53PreviewFailureTest,in.ghartv.nova.Review53ProviderRecoveryTest,in.ghartv.nova.FilmCatalogueObservationTest,in.ghartv.nova.FilmTorControllerTest,in.ghartv.nova.Review56SimplifiedDiscoverTest,in.ghartv.nova.Review58IptvAndDnsTest,in.ghartv.nova.Review59NetworkRecoveryTest,in.ghartv.nova.Review60JioBaselineAndIptvCacheTest,in.ghartv.nova.Review61JioDnsTest,in.ghartv.nova.Review64JioMediaDnsDiagnosticsTest
++          adb -s emulator-5580 shell am instrument -w -r -e class "$FULL" "$RUNNER" | tee /tmp/ghartv-review64/proof/full.txt
++          grep -q 'OK (369 tests)' /tmp/ghartv-review64/proof/full.txt
++      - name: Package source-bound evidence
++        run: |
++          set -euo pipefail
++          git archive --format=zip HEAD -o /tmp/ghartv-review64/GHARTV_CODE64_SOURCE.zip
++          python - <<'PY'
++          import hashlib,json,pathlib,subprocess
++          root=pathlib.Path('/tmp/ghartv-review64'); apk=root/'GharTV-code64-review-unsigned.apk'; src=root/'GHARTV_CODE64_SOURCE.zip'
++          data={'schema':'ghartv.review64-candidate.v1','source':subprocess.check_output(['git','rev-parse','HEAD'],text=True).strip(),'version_code':64,'version_name':'0.6.0-rc15.5-one-click-play-review','package':'in.ghartv.nova','unsigned_apk_sha256':hashlib.sha256(apk.read_bytes()).hexdigest(),'source_zip_sha256':hashlib.sha256(src.read_bytes()).hexdigest(),'focused_tests_passed':161,'deterministic_tests_passed':369,'jio_tor':False,'iptv_changed':False,'flixmomo_changed':'one_click_play_from_title_click','live_jio_acceptance':'OWNER_REQUIRED','published':False}
++          (root/'CANDIDATE.json').write_text(json.dumps(data,indent=2)+'\n')
++          (root/'SHA256SUMS').write_text(''.join(hashlib.sha256(p.read_bytes()).hexdigest()+'  '+p.name+'\n' for p in sorted(root.iterdir()) if p.is_file() and p.name!='SHA256SUMS'))
++          print(json.dumps(data,indent=2))
++          PY
++      - uses: actions/upload-artifact@v4
++        if: always()
++        continue-on-error: true  # artifact quota must not hide a green test run; the installer can build locally
++        with:
++          name: ghartv-code64-owner-review
++          path: /tmp/ghartv-review64/
++          retention-days: 14
+diff --git a/REVIEW64.md b/REVIEW64.md
+new file mode 100644
+index 0000000..edbd3f8
+--- /dev/null
++++ b/REVIEW64.md
+@@ -0,0 +1,21 @@
++# GharTV Review 64 — one click plays the movie again
++
++Owner report (physical TV, code63): clicking a movie used to start playback at once; now it opens the provider's title page and needs extra clicks (Watch, then Play on the video).
++
++**Cause.** Since Review51/56 Discover shows the provider's own pages under the green pointer and no longer drives them: no native title page, no automatic Watch. code49 and earlier turned a title click into Watch -> player start; code63 leaves both clicks to the viewer.
++
++**Fix.** A pointer click that lands the provider page on a title page now runs a short, one-shot chain:
++1. the title page's single unambiguous Watch action is activated (same safe selector as the older native Watch button: visible, enabled, registered host, exactly one match);
++2. on the watch page the single visible player is started with a genuine touch;
++3. the chain ends when playback is observed, when the 20 s start window lapses, on any failure, on Back/Menu/Search, or when the activity pauses.
++
++Boundaries kept:
++- Only a pointer click starts the chain (5 s window). Opening a title any other way (Back, search results, history, reload) never auto-plays.
++- A page with several Watch actions (series with episodes) is not guessed at: the pointer stays in the viewer's hands and a short hint is shown after 25 s. If the viewer clicks Watch themselves, the player is still started for them.
++- Back from the watch page returns to the title page and does not play again.
++- The Sources tray and focus moves stay quiet while the chain runs. No consent screen exists in this flow, so there is nothing to remember per title or device.
++- No change to Jio live, IPTV, routing/Tor, DRM, TLS, diagnostics or the update feed.
++
++**Build.** versionCode 64, `0.6.0-rc15.5-one-click-play-review`. `.github/workflows/review64-candidate.yml` builds it and runs the focused and complete suites (Review64OneClickPlayTest: 6 tests; Review51/Review56 harnesses keep the manual pointer flow they assert).
++
++Not claimed: physical-TV or live-provider behaviour. The provider's real Watch/Play markup can differ from the owned fixture; a series page or an embedded player the app cannot read falls back to the pointer. Owner UAT on the TV is required before any production feed change.
+diff --git a/android-tv/app/build.gradle.kts b/android-tv/app/build.gradle.kts
+index 61eea38..e326e67 100644
+--- a/android-tv/app/build.gradle.kts
++++ b/android-tv/app/build.gradle.kts
+@@ -13,8 +13,8 @@ android {
+         applicationId = "in.ghartv.nova"
+         minSdk = 26
+         targetSdk = 35
+-        versionCode = 63
+-        versionName = "0.6.0-rc15.4-jio-timeouts-pointer-review"
++        versionCode = 64
++        versionName = "0.6.0-rc15.5-one-click-play-review"
+         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+     }
+     buildFeatures { buildConfig = true }
+diff --git a/android-tv/app/src/androidTest/java/in/ghartv/nova/Review64OneClickPlayTest.java b/android-tv/app/src/androidTest/java/in/ghartv/nova/Review64OneClickPlayTest.java
+new file mode 100644
+index 0000000..ba54ad2
+--- /dev/null
++++ b/android-tv/app/src/androidTest/java/in/ghartv/nova/Review64OneClickPlayTest.java
+@@ -0,0 +1,92 @@
++package in.ghartv.nova;
++import android.content.Intent;
++import android.os.SystemClock;
++import android.view.KeyEvent;
++import android.webkit.WebView;
++import android.widget.EditText;
++import android.widget.TextView;
++import androidx.test.platform.app.InstrumentationRegistry;
++import androidx.test.ext.junit.runners.AndroidJUnit4;
++import org.json.JSONObject;
++import org.junit.*;
++import org.junit.runner.RunWith;
++import static org.junit.Assert.*;
++
++/**
++ * Production Discover flow (provider pages under the pointer): ONE pointer click on a poster reaches
++ * a playing video. Pages with several Watch actions, Back, and titles not opened by a click stay manual.
++ */
++@RunWith(AndroidJUnit4.class)
++public class Review64OneClickPlayTest {
++    final Review44LoadingMouseTest h=new Review44LoadingMouseTest();
++    @After public void close(){h.close();}
++    Object f(String n){return h.field(h.activity,n);}
++    boolean flag(String n){return (Boolean)f(n);}
++    void invoke(String name,Class<?>[] types,Object... values){try{java.lang.reflect.Method m=FlixMomoActivity.class.getDeclaredMethod(name,types);m.setAccessible(true);m.invoke(h.activity,values);}catch(Exception e){throw new AssertionError(e);}}
++    JSONObject page()throws Exception{
++        return h.eval("JSON.stringify((()=>{const v=document.querySelector('video');return {p:location.pathname,ready:document.readyState,t:v?v.currentTime:0,paused:v?v.paused:true,clicks:window.mediaClicks||0,trusted:!!window.trustedMedia}})())");
++    }
++    void waitPath(String path)throws Exception{
++        long until=SystemClock.elapsedRealtime()+10000;JSONObject s=new JSONObject();
++        while(SystemClock.elapsedRealtime()<until){s=page();if(path.equals(s.optString("p"))&&"complete".equals(s.optString("ready"))){SystemClock.sleep(150);return;}SystemClock.sleep(50);}
++        fail("Expected "+path+" but page is "+s);
++    }
++    JSONObject point(String selector)throws Exception{return h.eval("JSON.stringify((()=>{const e=document.querySelector("+JSONObject.quote(selector)+");e.scrollIntoView({block:'center'});const r=e.getBoundingClientRect();return {x:r.left+r.width/2,y:r.top+r.height/2,w:innerWidth,h:innerHeight}})())");}
++    /** The viewer's click: move the pointer onto the element and press OK. */
++    void click(String selector)throws Exception{
++        JSONObject p=point(selector);SystemClock.sleep(100);
++        h.ui(()->{RemoteCursorState s=(RemoteCursorState)h.field(f("cursor"),"state");s.position((float)(p.optDouble("x")*h.web.getWidth()/p.optDouble("w")),(float)(p.optDouble("y")*h.web.getHeight()/p.optDouble("h")));});
++        h.press(KeyEvent.KEYCODE_DPAD_CENTER);
++    }
++    /** Search results page (the fixture serves its poster page for any search) with the pointer on. */
++    void results(boolean duplicateWatch)throws Exception{
++        h.activity=InstrumentationRegistry.getInstrumentation().startActivitySync(new Intent(InstrumentationRegistry.getInstrumentation().getTargetContext(),Review64OneClickHarness.class).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK).putExtra("duplicate_watch",duplicateWatch));
++        h.web=(WebView)f("browser");
++        long until=SystemClock.elapsedRealtime()+7000;while(SystemClock.elapsedRealtime()<until&&((Review64OneClickHarness)h.activity).requested.isEmpty())SystemClock.sleep(30);
++        h.ui(()->((EditText)f("query")).setText("Paper Lantern"));h.ui(()->invoke("search",new Class[]{}));
++        waitPath("/search");
++        h.ui(()->assertTrue("pointer is on the results page",flag("mouseActive")));
++    }
++    JSONObject waitPlaying()throws Exception{
++        long until=SystemClock.elapsedRealtime()+25000;JSONObject s=new JSONObject();
++        while(SystemClock.elapsedRealtime()<until){s=page();if("/watch/lantern".equals(s.optString("p"))&&s.optDouble("t")>.35&&!s.optBoolean("paused"))return s;SystemClock.sleep(100);}
++        fail("Video did not start after one poster click: "+s);return s;
++    }
++    @Test public void onePosterClickPlaysTheVideoWithoutFurtherInput()throws Exception{
++        results(false);click("a");
++        JSONObject s=waitPlaying();
++        assertEquals("exactly one provider-player click",1,s.optInt("clicks"));
++        assertTrue("a genuine touch, not a script call",s.optBoolean("trusted"));
++        h.ui(()->{assertFalse("no Sources tray over the video",((FilmNativeControls)f("nativeControls")).visible());assertTrue(flag("pointerPage"));});
++    }
++    @Test public void chainClearsOnceTheVideoIsPlaying()throws Exception{
++        results(false);click("a");waitPlaying();
++        long until=SystemClock.elapsedRealtime()+10000;boolean[] armed={true};
++        while(SystemClock.elapsedRealtime()<until){h.ui(()->armed[0]=flag("oneClickPlay"));if(!armed[0])break;SystemClock.sleep(100);}
++        assertFalse("one-click state must clear once playback is observed or the window lapses",armed[0]);
++    }
++    @Test public void backFromWatchPageDoesNotReplay()throws Exception{
++        results(false);click("a");waitPlaying();
++        h.press(KeyEvent.KEYCODE_BACK);waitPath("/movie/lantern");SystemClock.sleep(3500);
++        assertEquals("Back stays on the title page","/movie/lantern",page().optString("p"));
++        h.ui(()->{assertFalse(flag("oneClickPlay"));assertTrue("pointer stays available",flag("mouseActive"));});
++    }
++    @Test public void pageWithSeveralWatchActionsStaysManual()throws Exception{
++        results(true);click("a");waitPath("/movie/lantern");SystemClock.sleep(3500);
++        assertEquals("no guessed Watch action","/movie/lantern",page().optString("p"));
++        h.ui(()->((Runnable)f("oneClickExpire")).run());
++        h.ui(()->{assertFalse(flag("oneClickPlay"));assertTrue(flag("mouseActive"));assertTrue(((TextView)f("playNotice")).getText().toString().contains("Choose"));});
++    }
++    @Test public void viewerWatchClickOnAmbiguousPageStillStartsThePlayer()throws Exception{
++        results(true);click("a");waitPath("/movie/lantern");SystemClock.sleep(1500);
++        click("a");   // the viewer picks the first Watch action themselves
++        waitPlaying();
++    }
++    @Test public void titleOpenedWithoutAPointerClickIsNotAutoPlayed()throws Exception{
++        results(false);
++        h.ui(()->invoke("openProviderTitle",new Class[]{String.class},"https://flixmomo.app/movie/lantern"));
++        waitPath("/movie/lantern");SystemClock.sleep(3500);
++        assertEquals("/movie/lantern",page().optString("p"));
++        h.ui(()->assertFalse(flag("oneClickPlay")));
++    }
++}
+diff --git a/android-tv/app/src/debug/java/in/ghartv/nova/Review42HarnessActivity.java b/android-tv/app/src/debug/java/in/ghartv/nova/Review42HarnessActivity.java
+index fbc8c88..d2f5a09 100644
+--- a/android-tv/app/src/debug/java/in/ghartv/nova/Review42HarnessActivity.java
++++ b/android-tv/app/src/debug/java/in/ghartv/nova/Review42HarnessActivity.java
+@@ -28,7 +28,7 @@ public class Review42HarnessActivity extends FlixMomoActivity {
+         }
+         String style="<!doctype html><meta name='viewport' content='width=device-width,initial-scale=1'><title>Owned title fixture</title><style>body{margin:24px;background:#102631;color:white;font:18px sans-serif}h2{font-size:28px}a,button{display:inline-block;padding:10px;margin:5px}video{width:620px;height:350px;display:block;background:black}img{width:140px;height:210px}</style>";
+         String home=style+"<a href='/movie/lantern'><img src='https://image.tmdb.org/lantern.png' alt='Paper Lantern'><h2>Paper Lantern</h2></a>";
+-        String detail=style+"<section><h2>Paper Lantern</h2><div>Movie 1 hr 41 min</div><a href='/watch/lantern'>WATCH NOW</a><div>A locally authored story about a family rebuilding a library after a storm, written only for testing this interface.</div></section>";
++        String detail=style+"<section><h2>Paper Lantern</h2><div>Movie 1 hr 41 min</div><a href='/watch/lantern'>WATCH NOW</a>"+(getIntent().getBooleanExtra("duplicate_watch",false)?"<a href='/watch/lantern-2'>WATCH NOW</a>":"")+"<div>A locally authored story about a family rebuilding a library after a storm, written only for testing this interface.</div></section>";
+         StringBuilder choices=new StringBuilder("<script>window.reselections=0;window.mediaClicks=0;</script><div>");for(int i=1;i<=12;i++)choices.append("<button onclick=\"window.reselections++;const v=document.querySelector('video');if(v){v.pause();v.currentTime=0}\">PLAYER #").append(i).append(" <span>BEST</span></button>");choices.append("</div>");
+         String watch=style+choices+(getIntent().getBooleanExtra("no_media",false)?"":"<video preload='auto' loop playsinline src='data:video/mp4;base64,"+Review40HarnessActivity.ownedClip()+"' onclick='window.mediaClicks++;window.trustedMedia=event.isTrusted;this.play()'></video>");
+         String origin=FilmProviderPolicy.pageHome(url);
+diff --git a/android-tv/app/src/debug/java/in/ghartv/nova/Review51PointerHarness.java b/android-tv/app/src/debug/java/in/ghartv/nova/Review51PointerHarness.java
+index 0557735..a95b6fc 100644
+--- a/android-tv/app/src/debug/java/in/ghartv/nova/Review51PointerHarness.java
++++ b/android-tv/app/src/debug/java/in/ghartv/nova/Review51PointerHarness.java
+@@ -2,6 +2,8 @@ package in.ghartv.nova;
+ /** Uses the real production pointer-first flow on the inherited owned documents. */
+ public final class Review51PointerHarness extends Review42HarnessActivity {
+     @Override protected boolean pointerFirstBrowsing(){return true;}
++    // These tests drive the manual pointer flow step by step; Review64OneClickPlayTest covers one-click.
++    @Override protected boolean oneClickPlayEnabled(){return false;}
+     public String requested="";
+     @Override protected void loadProviderPage(String url){requested=url;super.loadProviderPage(url);}
+ }
+diff --git a/android-tv/app/src/debug/java/in/ghartv/nova/Review56SimpleHarnessActivity.java b/android-tv/app/src/debug/java/in/ghartv/nova/Review56SimpleHarnessActivity.java
+index e0f3bca..463a3fd 100644
+--- a/android-tv/app/src/debug/java/in/ghartv/nova/Review56SimpleHarnessActivity.java
++++ b/android-tv/app/src/debug/java/in/ghartv/nova/Review56SimpleHarnessActivity.java
+@@ -3,6 +3,7 @@ package in.ghartv.nova;
+ /** Owned provider pages with the production Review56 search-first browser flow and no live network/Tor. */
+ public final class Review56SimpleHarnessActivity extends Review42HarnessActivity {
+     @Override protected boolean pointerFirstBrowsing(){return true;}
++    @Override protected boolean oneClickPlayEnabled(){return false;}
+     @Override protected boolean simplifiedDiscoverExperience(){return true;}
+     public String requested="";
+     @Override protected void loadProviderPage(String url){requested=url;super.loadProviderPage(url);}
+diff --git a/android-tv/app/src/debug/java/in/ghartv/nova/Review64OneClickHarness.java b/android-tv/app/src/debug/java/in/ghartv/nova/Review64OneClickHarness.java
+new file mode 100644
+index 0000000..ca0a331
+--- /dev/null
++++ b/android-tv/app/src/debug/java/in/ghartv/nova/Review64OneClickHarness.java
+@@ -0,0 +1,8 @@
++package in.ghartv.nova;
++/** Production defaults (provider pages under the pointer, one-click play) over the inherited owned documents. */
++public final class Review64OneClickHarness extends Review42HarnessActivity {
++    @Override protected boolean pointerFirstBrowsing(){return true;}
++    @Override protected boolean simplifiedDiscoverExperience(){return true;}
++    public String requested="";
++    @Override protected void loadProviderPage(String url){requested=url;super.loadProviderPage(url);}
++}
+diff --git a/android-tv/app/src/main/java/in/ghartv/nova/FilmNativeControls.java b/android-tv/app/src/main/java/in/ghartv/nova/FilmNativeControls.java
+index bb99a63..710acd6 100644
+--- a/android-tv/app/src/main/java/in/ghartv/nova/FilmNativeControls.java
++++ b/android-tv/app/src/main/java/in/ghartv/nova/FilmNativeControls.java
+@@ -39,6 +39,9 @@ final class FilmNativeControls {
+     private int mediaCandidates;
+     private boolean dismissedByViewer;
+     private String expectedWatchLabel="";
++    private boolean quiet;
++    /** One-click play drives the page itself: no automatic Sources tray or focus move while it runs. */
++    void quiet(boolean on){quiet=on;if(on){playerTrayAnnounced=true;handler.removeCallbacks(hide);}}
+     private WebView touchPage;private long touchStarted;private float touchX,touchY;
+     private WebView browser;
+     private JSONArray players=new JSONArray();
+@@ -117,8 +120,8 @@ final class FilmNativeControls {
+                 String actual=data.getString("url");if(!actual.equals(source.getUrl())||!FlixMomoActivity.allowedTop(Uri.parse(actual)))return;snapshotUrl=actual;mediaCandidates=data.optInt("mediaCandidates");host.pageObserved(data);
+                 JSONArray found=data.optJSONArray("players");if(found!=null&&found.length()<=48){String identity=actual+":"+found.toString();players=found;detectedPlayers=data.optInt("playerDetectedCount",found.length());playerTruncated=data.optBoolean("playerTruncated");if(!identity.equals(playerIdentity)){playerIdentity=identity;if(choiceView.getVisibility()==View.VISIBLE)renderPlayers();}}
+                 if(host.pageIsVisible()&&data.optBoolean("search"))enablePosters(actual);
+-                else if(host.pageIsVisible()&&players.length()==0&&!detailFocusApplied&&source.hasFocus()){detailFocusApplied=true;pageAction("focus");}
+-                if(!data.optBoolean("search")&&players.length()>0&&!playerTrayAnnounced&&!selectedByViewer&&!pageBusy&&!dismissedByViewer){playerTrayAnnounced=true;state.setText(players.length()+" player choices detected"+(playerTruncated?" · partial list":"")+" · Menu opens controls");showTray(!data.optBoolean("mediaPlaying"));}
++                else if(!quiet&&host.pageIsVisible()&&players.length()==0&&!detailFocusApplied&&source.hasFocus()){detailFocusApplied=true;pageAction("focus");}
++                if(!quiet&&!data.optBoolean("search")&&players.length()>0&&!playerTrayAnnounced&&!selectedByViewer&&!pageBusy&&!dismissedByViewer){playerTrayAnnounced=true;state.setText(players.length()+" player choices detected"+(playerTruncated?" · partial list":"")+" · Menu opens controls");showTray(!data.optBoolean("mediaPlaying"));}
+                 if(selectedByViewer&&SystemClock.elapsedRealtime()-selectedAt>=5000&&autoNext&&data.optBoolean("mediaObservable")&&data.optInt("mediaError")>0&&!pending)next(false);
+                 if(probeCount<48){handler.removeCallbacks(probe);long age=SystemClock.elapsedRealtime()-probeBegan;handler.postDelayed(probe,age<3000?200:age<10000?650:1800);}
+             }catch(Exception ignored){host.navigationHint("Use the provider page; its player controls could not be read.");}
+diff --git a/android-tv/app/src/main/java/in/ghartv/nova/FlixMomoActivity.java b/android-tv/app/src/main/java/in/ghartv/nova/FlixMomoActivity.java
+index 7aacf10..0020904 100644
+--- a/android-tv/app/src/main/java/in/ghartv/nova/FlixMomoActivity.java
++++ b/android-tv/app/src/main/java/in/ghartv/nova/FlixMomoActivity.java
+@@ -50,6 +50,50 @@ public class FlixMomoActivity extends Activity {
+     // Production entry opens the original page. The older parsed-controls path is
+     // retained only for historical component regression fixtures, not availability.
+     protected boolean pointerFirstBrowsing(){return true;}
++    // One-click play (code64). Discover shows the provider's own pages under the pointer, so
++    // a movie click is a pointer click on a poster. When that click lands the page on a title
++    // (or watch) page, GharTV activates the page's single unambiguous Watch action and starts
++    // the visible player, once. Back, Menu, any failure, or proven playback ends the chain; a
++    // page with several Watch actions (series) is left to the pointer.
++    protected boolean oneClickPlayEnabled(){return true;}
++    private static final long ONE_CLICK_WINDOW_MS=5000,ONE_CLICK_EXPIRE_MS=25000;
++    private boolean oneClickPlay,oneClickWatchSent;
++    private long lastPointerClick;
++    private final Runnable oneClickExpire=()->{
++        if(oneClickPlay&&!oneClickWatchSent){endOneClick();playMessage("Choose the episode or Play on this page, then press OK.");}
++    };
++    private static boolean watchPage(Uri uri){String p=uri==null?null:uri.getPath();return allowedTop(uri)&&p!=null&&p.toLowerCase(java.util.Locale.ROOT).contains("/watch");}
++    /** Ends the chain and returns the page to ordinary pointer-only browsing. */
++    private void endOneClick(){
++        handler.removeCallbacks(oneClickExpire);
++        if(!oneClickPlay)return;
++        oneClickPlay=false;oneClickWatchSent=false;
++        if(nativeControls!=null){nativeControls.quiet(false);if(pointerPage)nativeControls.pause();}
++    }
++    /** A pointer click that just landed the page on a title (or watch) page arms the chain once. */
++    private void oneClickArrived(String url){
++        if(oneClickPlay||url==null||!oneClickPlayEnabled()||!pointerPage||custom!=null||nativeControls==null)return;
++        if(android.os.SystemClock.elapsedRealtime()-lastPointerClick>ONE_CLICK_WINDOW_MS)return;
++        Uri page=Uri.parse(url);boolean title=FilmProviderPolicy.detail(page);
++        if(!title&&!watchPage(page))return;
++        lastPointerClick=0;
++        oneClickPlay=true;oneClickWatchSent=!title;nativeControls.quiet(true);
++        if(title)handler.postDelayed(oneClickExpire,ONE_CLICK_EXPIRE_MS);else armPlayback();
++    }
++    /** Called for every observed page while the chain is armed. */
++    private void oneClickObserved(org.json.JSONObject data){
++        if(!oneClickPlay||oneClickWatchSent||!pointerPage||custom!=null)return;
++        Uri page=Uri.parse(data.optString("url"));
++        if(watchPage(page)){
++            // The viewer (or the provider) already moved on to the watch page: only start the player.
++            oneClickWatchSent=true;handler.removeCallbacks(oneClickExpire);armPlayback();return;
++        }
++        org.json.JSONObject detail=data.optJSONObject("detail");
++        if(FilmProviderPolicy.detail(page)&&detail!=null&&detail.optBoolean("watch")){
++            oneClickWatchSent=true;handler.removeCallbacks(oneClickExpire);
++            filmEvent("film_watch_request");armPlayback();nativeControls.pageWatch("");
++        }
++    }
+     private boolean pointerPage;
+     private String pointerTitleOrigin="";
+     private boolean pageEditor;
+@@ -97,6 +141,7 @@ public class FlixMomoActivity extends Activity {
+     private long keyEventSerial;
+     private final FilmReviewJournal reviewJournal=new FilmReviewJournal();
+     private void noteInput(String event){
++        if("POINTER_CLICK".equals(event))lastPointerClick=android.os.SystemClock.elapsedRealtime();
+         String layer=custom!=null?(fullMenu!=null&&fullMenu.getVisibility()==View.VISIBLE?"FULLSCREEN_MENU":"FULLSCREEN"):
+             mouseActive?"POINTER":detailRequested?"DETAIL":homeRequested?"DISCOVER":
+             chrome!=null&&chrome.getVisibility()==View.VISIBLE&&chrome.hasFocus()?"TOOLBAR":
+@@ -145,6 +190,7 @@ public class FlixMomoActivity extends Activity {
+                 .setNegativeButton("Cancel",null).show();}).setNegativeButton("Close",null).show();
+     }
+     private void resumeCatalogueMode(){
++        endOneClick();
+         hideProviderStatus();
+         pointerPage=false;pageEditor=false;pointerTitleOrigin="";
+         if(mouseActive)leaveMouse(false);else cursor.enable(false);
+@@ -232,7 +278,7 @@ public class FlixMomoActivity extends Activity {
+         fullHost=new FrameLayout(this);fullHost.setBackgroundColor(android.graphics.Color.BLACK);fullHost.setVisibility(View.GONE);screen.addView(fullHost,new FrameLayout.LayoutParams(-1,-1));setContentView(screen);
+         cursor=new RemoteWebCursor(this);cursor.setObserver(this::noteInput);stage.addView(cursor,new FrameLayout.LayoutParams(-1,-1));cursor.enable(false);
+         nativeControls=new FilmNativeControls(this,stage,chrome,new FilmNativeControls.Host(){
+-            public void navigate(String url){if(pointerFirstBrowsing())openProviderTitle(url);else if(FilmProviderPolicy.detail(Uri.parse(url)))openDetail(url);else FlixMomoActivity.this.navigate(url,false);}
++            public void navigate(String url){if(oneClickPlay&&watchPage(Uri.parse(url))){oneClickWatchSent=true;handler.removeCallbacks(oneClickExpire);armPlayback();FlixMomoActivity.this.navigate(url,false);}else if(pointerFirstBrowsing())openProviderTitle(url);else if(FilmProviderPolicy.detail(Uri.parse(url)))openDetail(url);else FlixMomoActivity.this.navigate(url,false);}
+             public void usePage(){FlixMomoActivity.this.usePage();}
+             public void nativeMode(){cursor.enable(false);modeButton.setText("Cursor: off");}
+             public void navigationHint(String text){help.setText(text);}
+@@ -241,7 +287,7 @@ public class FlixMomoActivity extends Activity {
+             public void controlsVisibility(boolean visible){if(startMonitor!=null)startMonitor.controlsOpen(visible);}
+             public void mouse(){enterMouse();}
+             public boolean pageIsVisible(){return !homeRequested&&!detailRequested&&custom==null&&!(chrome.getVisibility()==View.VISIBLE&&chrome.hasFocus());}
+-            public void pageObserved(org.json.JSONObject data){observeDetail(data);visitCache.put(data.optJSONObject("detail"));if(homeRequested&&homePanel!=null){homePanel.render(data);if(torController!=null)torController.catalogueObserved(homePanel.cardCount());}else if(detailRequested&&detailPanel!=null)detailPanel.render(data.optJSONObject("detail"));else if(!data.optBoolean("search"))liveResults.setVisibility(View.GONE);followPlayback(data);}
++            public void pageObserved(org.json.JSONObject data){oneClickObserved(data);observeDetail(data);visitCache.put(data.optJSONObject("detail"));if(homeRequested&&homePanel!=null){homePanel.render(data);if(torController!=null)torController.catalogueObserved(homePanel.cardCount());}else if(detailRequested&&detailPanel!=null)detailPanel.render(data.optJSONObject("detail"));else if(!data.optBoolean("search"))liveResults.setVisibility(View.GONE);followPlayback(data);}
+             public void pageAction(String action){if("watch".equals(action))requestWatch();else if("media".equals(action)){armPlayback();mediaAttempted=true;nativeControls.pageAction("media");}else nativeControls.pageAction(action);}
+             public void playerSelected(){if(startMonitor!=null)startMonitor.selected();armPlayback();}
+             public void actionOutcome(String action,String result){
+@@ -253,7 +299,7 @@ public class FlixMomoActivity extends Activity {
+                     handler.post(()->{if(epoch==inputEpoch&&custom==null&&!isFinishing()&&!homeRequested&&!detailRequested&&!mouseActive&&chrome.getVisibility()!=View.VISIBLE)enterMouse();});
+                 }
+                 if("watch".equals(action)||"media".equals(action)){
+-                    if("AMBIGUOUS_WATCH".equals(result)||"WATCH_ACTION_CHANGED".equals(result)||"VISUAL_TIMEOUT".equals(result)||"NOT_FOUND".equals(result)||"AMBIGUOUS_MEDIA".equals(result)||"TARGET_OBSCURED".equals(result)||"TARGET_CHANGED".equals(result)){playUntil=0;playMessage("Playback has not started: "+result.replace('_',' ').toLowerCase(java.util.Locale.ROOT)+". Use Original page or another player.");if(startMonitor!=null)startMonitor.pause();}
++                    if("AMBIGUOUS_WATCH".equals(result)||"WATCH_ACTION_CHANGED".equals(result)||"VISUAL_TIMEOUT".equals(result)||"NOT_FOUND".equals(result)||"AMBIGUOUS_MEDIA".equals(result)||"TARGET_OBSCURED".equals(result)||"TARGET_CHANGED".equals(result)){playUntil=0;endOneClick();playMessage("Playback has not started: "+result.replace('_',' ').toLowerCase(java.util.Locale.ROOT)+". Use Original page or another player.");if(startMonitor!=null)startMonitor.pause();}
+                     else if("CLICK_SENT_NOT_PLAYBACK_PROOF".equals(result))playMessage("Play gesture sent. Waiting for observable video progress.");
+                 }
+             }
+@@ -289,12 +335,12 @@ public class FlixMomoActivity extends Activity {
+             public boolean next(){return nativeControls.tryNextPlayer();}
+             public void sources(){if(custom!=null)exitFullScreen();usePage();nativeControls.openSources();}
+             public void cancelPage(){
+-                playUntil=0;handler.removeCallbacks(playDeadline);inputEpoch++;nativeControls.pause();
++                playUntil=0;endOneClick();handler.removeCallbacks(playDeadline);inputEpoch++;nativeControls.pause();
+                 if(custom!=null)exitFullScreen();if(mouseActive)leaveMouse(false);
+                 if(browser!=null){browser.stopLoading();browser.loadUrl("about:blank");}
+                 detailRequested=false;detailPanel.setVisibility(View.GONE);homeRequested=true;homePanel.setVisibility(View.VISIBLE);homePanel.bringToFront();chrome.setVisibility(View.VISIBLE);homePanel.focusRefresh();
+             }
+-            public void changed(String state){if("FIRST_FRAME_AND_PROGRESS".equals(state))playNotice.setVisibility(View.GONE);controlTrace.emit(FlixMomoActivity.this,"media",state.equals("FIRST_FRAME_AND_PROGRESS")?"CLOCK_ADVANCED":"UNCONFIRMED");}
++            public void changed(String state){if("FIRST_FRAME_AND_PROGRESS".equals(state)){playNotice.setVisibility(View.GONE);endOneClick();}controlTrace.emit(FlixMomoActivity.this,"media",state.equals("FIRST_FRAME_AND_PROGRESS")?"CLOCK_ADVANCED":"UNCONFIRMED");}
+         });
+         browseRoot.addView(startMonitor.panel,browseRoot.indexOfChild(stage),new LinearLayout.LayoutParams(-1,-2));
+         homePanel.setToolbarAnchor(toolbarAnchor);
+@@ -348,7 +394,7 @@ public class FlixMomoActivity extends Activity {
+             }
+             @Override public void onPageCommitVisible(WebView view,String url){if(!mainFrameError&&allowedTop(Uri.parse(url))&&!mouseActive&&!pointerPage)nativeControls.documentReady();}
+             @Override public void onPageStarted(WebView view,String url,Bitmap icon){
+-                cursor.cancel();nativeControls.started();keepSubmittedSearchBrowserOnly();if("about:blank".equals(url))return;if(torController!=null&&!java.util.Objects.equals(url,lastRequested))torController.beginNavigation(url);connection.started(url);
++                cursor.cancel();nativeControls.started();keepSubmittedSearchBrowserOnly();if("about:blank".equals(url))return;oneClickArrived(url);if(torController!=null&&!java.util.Objects.equals(url,lastRequested))torController.beginNavigation(url);connection.started(url);
+                 if(detailRequested&&FilmProviderPolicy.detail(Uri.parse(url)))detailPanel.followNavigation(url);
+                 else if(detailRequested&&allowedTop(Uri.parse(url))&&!FilmProviderPolicy.detail(Uri.parse(url)))usePage();mainFrameError=false;pageReady=false;loading=true;if(allowedTop(Uri.parse(url)))lastRequested=url;
+                 status.setText("Opening FlixMomo…");if(pointerPage){if(!simplifiedDiscoverExperience()||chrome.getVisibility()!=View.VISIBLE)providerStatus("Opening the registered provider page… Menu and Back remain available.",false);nativeControls.pause();playNotice.setVisibility(View.GONE);networkNotice.setVisibility(View.GONE);}handler.removeCallbacks(slowLoad);handler.postDelayed(slowLoad,20000);
+@@ -356,14 +402,15 @@ public class FlixMomoActivity extends Activity {
+             @Override public void onPageFinished(WebView view,String url){
+                 loading=false;handler.removeCallbacks(slowLoad);if(mainFrameError){pageReady=false;return;}
+                 if("/dummy".equals(Uri.parse(url).getPath())){fail("FlixMomo declined this session. No provider protection was changed.");return;}
+-                keepSubmittedSearchBrowserOnly();pageReady=allowedTop(Uri.parse(url));if(pageReady){hideProviderStatus();if(java.util.Objects.equals(url,view.getUrl()))rememberProviderHome(url);status.setText(homeRequested?"Loading FlixMomo suggestions…":detailRequested?"Loading title information…":"Original page loaded · Menu shows GharTV controls");if(!mouseActive&&!pointerPage)nativeControls.documentReady();if(pointerPage&&!pageEditor&&(!simplifiedDiscoverExperience()||chrome.getVisibility()!=View.VISIBLE))resumePagePointer(false);}
++                keepSubmittedSearchBrowserOnly();pageReady=allowedTop(Uri.parse(url));if(pageReady){hideProviderStatus();if(java.util.Objects.equals(url,view.getUrl()))rememberProviderHome(url);status.setText(homeRequested?"Loading FlixMomo suggestions…":detailRequested?"Loading title information…":"Original page loaded · Menu shows GharTV controls");if(!mouseActive&&!pointerPage)nativeControls.documentReady();if(pointerPage&&!pageEditor&&(!simplifiedDiscoverExperience()||chrome.getVisibility()!=View.VISIBLE))resumePagePointer(false);if(pointerPage&&oneClickPlay)nativeControls.resume();}
+             }
+             @Override public void doUpdateVisitedHistory(WebView view,String url,boolean reload){
+                 if(!loading&&allowedTop(Uri.parse(url))&&!java.util.Objects.equals(lastRequested,url)){
+-                    lastRequested=url;if(torController!=null)torController.beginNavigation(url);nativeControls.started();
++                    lastRequested=url;if(torController!=null)torController.beginNavigation(url);nativeControls.started();oneClickArrived(url);
+                     if(detailRequested&&FilmProviderPolicy.detail(Uri.parse(url)))detailPanel.followNavigation(url);
+                     else if(detailRequested)usePage();
+                     if(!pointerPage)nativeControls.documentReady();else if(!pageEditor&&(!simplifiedDiscoverExperience()||chrome.getVisibility()!=View.VISIBLE))resumePagePointer(false);
++                    if(pointerPage&&oneClickPlay)nativeControls.resume();
+                 }
+             }
+             @Override public void onReceivedHttpError(WebView view,WebResourceRequest request,WebResourceResponse response){
+@@ -440,6 +487,7 @@ public class FlixMomoActivity extends Activity {
+         homePanel.focusRefresh();
+     }
+     private void showBrowserSearch(boolean reload){
++        endOneClick();
+         browserSearchSubmitted=false;
+         if(custom!=null)exitFullScreen();if(startMonitor!=null)startMonitor.leave();handler.removeCallbacks(detailWait);handler.removeCallbacks(playDeadline);playUntil=0;
+         pointerPage=true;pageEditor=false;mouseActive=false;homeRequested=false;detailRequested=false;nativeSearch="";
+@@ -466,6 +514,7 @@ public class FlixMomoActivity extends Activity {
+ 
+     private final Runnable playDeadline=()->{
+         if(playUntil==0)return;
++        endOneClick();
+         controlTrace.emit(this,"media",attemptObservable?"UNCONFIRMED":"IFRAME_UNOBSERVABLE");
+         playUntil=0;playMessage(attemptObservable?"Playback did not reach an observed start. Use Mouse or another player.":"This player does not expose playback status to GharTV. Use Mouse if Play did not start it.");
+     };
+@@ -475,10 +524,10 @@ public class FlixMomoActivity extends Activity {
+     private void followPlayback(org.json.JSONObject data){
+         if(playUntil==0||homeRequested||detailRequested)return;
+         long now=android.os.SystemClock.elapsedRealtime();
+-        if((startMonitor==null||startMonitor.healthy())&&data.optBoolean("mediaPlaying")&&data.optDouble("mediaTime")>lastMediaTime&&lastMediaTime>=0){playMessage("Video is playing in FlixMomo’s embedded player.");filmEvent("film_playback_ready");controlTrace.emit(this,"media","CLOCK_ADVANCED");playUntil=0;return;}
++        if((startMonitor==null||startMonitor.healthy())&&data.optBoolean("mediaPlaying")&&data.optDouble("mediaTime")>lastMediaTime&&lastMediaTime>=0){playMessage("Video is playing in FlixMomo’s embedded player.");filmEvent("film_playback_ready");controlTrace.emit(this,"media","CLOCK_ADVANCED");playUntil=0;endOneClick();return;}
+         if(data.optBoolean("mediaObservable"))attemptObservable=true;
+         if(data.optBoolean("mediaObservable"))lastMediaTime=data.optDouble("mediaTime");
+-        if(now>playUntil){if(startMonitor==null)playDeadline.run();else playUntil=0;return;}
++        if(now>playUntil){if(startMonitor==null)playDeadline.run();else{playUntil=0;endOneClick();}return;}
+         org.json.JSONArray offered=data.optJSONArray("players");
+         boolean playbackPage=!FilmProviderPolicy.detail(Uri.parse(data.optString("url")))||(offered!=null&&offered.length()>0)||data.optBoolean("mediaObservable");
+         if(!loading&&!mediaAttempted&&now>=playAfter&&playbackPage&&data.optInt("mediaCandidates")==1){
+@@ -591,8 +640,8 @@ public class FlixMomoActivity extends Activity {
+         if(!pointerPage||browser==null||custom!=null||homeRequested||detailRequested)return;
+         if(simplifiedDiscoverExperience()&&chrome.getVisibility()==View.VISIBLE)return;
+         if(providerStatusPanel.isShown()&&providerRecoveryActions.isShown()){retryButton.requestFocus();return;}
+-        inputEpoch++;pageEditor=false;mouseActive=true;nativeControls.pause();nativeControls.hideAll();
+-        if(startMonitor!=null)startMonitor.leave();playUntil=0;playNotice.setVisibility(View.GONE);
++        inputEpoch++;pageEditor=false;mouseActive=true;if(!oneClickPlay)nativeControls.pause();nativeControls.hideAll();
++        if(!oneClickPlay){if(startMonitor!=null)startMonitor.leave();playUntil=0;playNotice.setVisibility(View.GONE);}
+         cursor.target(browser);cursor.scrollMode(false);cursor.enable(true);browser.requestFocus();
+         if(center)cursor.center();cursor.enter();modeButton.setText("Cursor: on");
+     }
+@@ -604,6 +653,7 @@ public class FlixMomoActivity extends Activity {
+         resumePagePointer(true);
+     }
+     private void pointerNavigation(){
++        endOneClick();
+         if(!pointerPage){showOptions();return;}
+         if(custom!=null){showFullscreenMenu();return;}
+         inputEpoch++;mouseActive=false;pageEditor=false;cursor.enable(false);nativeControls.pause();nativeControls.hideAll();
+@@ -622,6 +672,7 @@ public class FlixMomoActivity extends Activity {
+         optionsDialog.setOnDismissListener(d->{if(pointerPage&&custom==null&&!homeRequested&&!detailRequested)resumePagePointer(false);});optionsDialog.show();
+     }
+     private void pointerBack(){
++        endOneClick();
+         if(browser==null){returnToCards();return;}
+         if(pageEditor){hideKeyboard();resumePagePointer(false);return;}
+         String current=browser.getUrl();
+@@ -642,7 +693,7 @@ public class FlixMomoActivity extends Activity {
+     private void hideKeyboard(){InputMethodManager keyboard=(InputMethodManager)getSystemService(INPUT_METHOD_SERVICE);if(keyboard!=null)keyboard.hideSoftInputFromWindow(query.getWindowToken(),0);query.clearFocus();}
+     private void usePage(){if(pointerPage){homeRequested=false;detailRequested=false;homePanel.setVisibility(View.GONE);detailPanel.setVisibility(View.GONE);liveResults.setVisibility(View.GONE);resumePagePointer(false);return;}inputEpoch++;noteInput("USE_PAGE");credit.setVisibility(View.GONE);networkNotice.setVisibility(View.GONE);playNotice.setVisibility(View.GONE);detailRequested=false;if(detailPanel!=null)detailPanel.setVisibility(View.GONE);homeRequested=false;if(homePanel!=null)homePanel.setVisibility(View.GONE);if(nativeControls!=null){nativeControls.hideAll();if(!mouseActive)nativeControls.resume();}hideKeyboard();chrome.setVisibility(View.GONE);if(browser!=null){browser.requestFocus();cursor.enter();nativeControls.enterPosters();}}
+     private void toolbar(){
+-        browserSearchSubmitted=false;
++        endOneClick();browserSearchSubmitted=false;
+         if(custom!=null){exitFullScreen();return;}
+         inputEpoch++;noteInput("TOOLBAR_OPEN");
+         if(mouseActive)leaveMouse(false);nativeControls.pause();nativeControls.hideAll();cursor.enable(false);
+@@ -854,7 +905,7 @@ public class FlixMomoActivity extends Activity {
+         else if(mouseActive&&(custom==null||fullMenu==null||fullMenu.getVisibility()!=View.VISIBLE))cursor.enter();
+     }
+     @Override protected void onSaveInstanceState(Bundle state){state.putBoolean("home",homeRequested);state.putString("query",query.getText().toString());state.putString("url",lastRequested);super.onSaveInstanceState(state);}
+-    @Override protected void onPause(){if(startMonitor!=null)startMonitor.pause();handler.removeCallbacks(detailWait);EngagementTracker.stop(this);handler.removeCallbacks(playDeadline);playUntil=0;if(nativeControls!=null)nativeControls.pause();if(cursor!=null)cursor.cancel();handler.removeCallbacks(slowLoad);if(browser!=null)browser.onPause();super.onPause();}
++    @Override protected void onPause(){endOneClick();if(startMonitor!=null)startMonitor.pause();handler.removeCallbacks(detailWait);EngagementTracker.stop(this);handler.removeCallbacks(playDeadline);playUntil=0;if(nativeControls!=null)nativeControls.pause();if(cursor!=null)cursor.cancel();handler.removeCallbacks(slowLoad);if(browser!=null)browser.onPause();super.onPause();}
+     @Override protected void onResume(){super.onResume();EngagementTracker.start(this,"discover");if(nativeControls!=null&&!mouseActive&&custom==null)nativeControls.resume();if(browser!=null)browser.onResume();}
+     @Override public void onRequestPermissionsResult(int r,String[] p,int[] g){super.onRequestPermissionsResult(r,p,g);InAppVoiceSearch.permission(this,r,g);}
+     @Override protected void onStop(){InAppVoiceSearch.stopped(this);super.onStop();}
+diff --git a/tools/tv-first/check_contract.py b/tools/tv-first/check_contract.py
+index 0ec0b3d..cceeac1 100644
+--- a/tools/tv-first/check_contract.py
++++ b/tools/tv-first/check_contract.py
+@@ -18,7 +18,7 @@ assert 'playerView.setOnClickListener(view -> showGuide(true, nextButton))' in p
+ assert 'MediaStore.ACTION_PICK_IMAGES' in family and 'ACTION_GET_CONTENT' in family and 'takePersistableUriPermission' in family
+ assert 'takePlaybackHandoff' in api and 'PLAYBACK_HANDOFF_MS = 20_000L' in api
+ gradle=(R/'android-tv/app/build.gradle.kts').read_text()
+-assert 'versionCode = 63' in gradle and '0.6.0-rc15.4-jio-timeouts-pointer-review' in gradle
++assert 'versionCode = 64' in gradle and '0.6.0-rc15.5-one-click-play-review' in gradle
+ films=(J/'FlixMomoActivity.java').read_text();cursor=(J/'RemoteWebCursor.java').read_text();controls=(J/'FilmNativeControls.java').read_text()
+ assert 'cursor.handle(event)' in films and 'onRenderProcessGone' in films and 'certificateFailure(handler::cancel,error)' in films and 'cancel.run()' in films and '.proceed()' not in films
+ assert 'onPageFinished' in films and 'if(mainFrameError)' in films
