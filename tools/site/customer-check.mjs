@@ -18,7 +18,7 @@ try{
   assert.match(text,/This download is the family edition/);assert.match(text,/eligible Jio account/);
   assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),'Horizontal overflow at '+width);
   assert.ok(await page.locator('img').evaluate(img=>img.complete&&img.naturalWidth>0),'Product image failed');
-  assert.equal(await page.locator('#download-apk').getAttribute('href'),'https://github.com/AmritSinghGit/ghartv/releases/download/v0.6.0-rc13.2-input-stability-review/GharTV-code48-household-update.apk');
+  assert.equal(await page.locator('#download-apk').getAttribute('href'),'https://github.com/AmritSinghGit/ghartv/releases/download/v0.6.0-rc15.4-jio-timeouts-pointer-review/GharTV-code63-household-update.apk');
   assert.deepEqual(errors,[]);await page.screenshot({path:out+'/public-'+width+'.png',fullPage:true});
   records.push({width,overflow:false,product_image_loaded:true,no_owner_jargon:true,download:'EXISTING_SIGNED_PRODUCTION_APK',external_requests:'BLOCKED_TEST',script_or_csp_failures:0});await context.close();
  }
