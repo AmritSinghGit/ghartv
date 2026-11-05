@@ -1,9 +1,7 @@
+# Superseded by review64-candidate.yml (versionCode 64); run by hand only.
 # Review63: Jio timeouts, previews and the Discover pointer. Built + tested here; installed by tools/tv-first/install_candidate.py.
 name: GharTV Review63 candidate
 on:
-  push:
-    branches: ['codex/ghartv-remove-auto-preview']
-    paths: ['.github/workflows/review63-candidate.yml','android-tv/**']
   workflow_dispatch:
 permissions:
   contents: read

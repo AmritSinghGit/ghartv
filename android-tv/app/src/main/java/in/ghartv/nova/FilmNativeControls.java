@@ -39,6 +39,9 @@ final class FilmNativeControls {
     private int mediaCandidates;
     private boolean dismissedByViewer;
     private String expectedWatchLabel="";
+    private boolean quiet;
+    /** One-click play drives the page itself: no automatic Sources tray or focus move while it runs. */
+    void quiet(boolean on){quiet=on;if(on){playerTrayAnnounced=true;handler.removeCallbacks(hide);}}
     private WebView touchPage;private long touchStarted;private float touchX,touchY;
     private WebView browser;
     private JSONArray players=new JSONArray();
@@ -117,8 +120,8 @@ final class FilmNativeControls {
                 String actual=data.getString("url");if(!actual.equals(source.getUrl())||!FlixMomoActivity.allowedTop(Uri.parse(actual)))return;snapshotUrl=actual;mediaCandidates=data.optInt("mediaCandidates");host.pageObserved(data);
                 JSONArray found=data.optJSONArray("players");if(found!=null&&found.length()<=48){String identity=actual+":"+found.toString();players=found;detectedPlayers=data.optInt("playerDetectedCount",found.length());playerTruncated=data.optBoolean("playerTruncated");if(!identity.equals(playerIdentity)){playerIdentity=identity;if(choiceView.getVisibility()==View.VISIBLE)renderPlayers();}}
                 if(host.pageIsVisible()&&data.optBoolean("search"))enablePosters(actual);
-                else if(host.pageIsVisible()&&players.length()==0&&!detailFocusApplied&&source.hasFocus()){detailFocusApplied=true;pageAction("focus");}
-                if(!data.optBoolean("search")&&players.length()>0&&!playerTrayAnnounced&&!selectedByViewer&&!pageBusy&&!dismissedByViewer){playerTrayAnnounced=true;state.setText(players.length()+" player choices detected"+(playerTruncated?" · partial list":"")+" · Menu opens controls");showTray(!data.optBoolean("mediaPlaying"));}
+                else if(!quiet&&host.pageIsVisible()&&players.length()==0&&!detailFocusApplied&&source.hasFocus()){detailFocusApplied=true;pageAction("focus");}
+                if(!quiet&&!data.optBoolean("search")&&players.length()>0&&!playerTrayAnnounced&&!selectedByViewer&&!pageBusy&&!dismissedByViewer){playerTrayAnnounced=true;state.setText(players.length()+" player choices detected"+(playerTruncated?" · partial list":"")+" · Menu opens controls");showTray(!data.optBoolean("mediaPlaying"));}
                 if(selectedByViewer&&SystemClock.elapsedRealtime()-selectedAt>=5000&&autoNext&&data.optBoolean("mediaObservable")&&data.optInt("mediaError")>0&&!pending)next(false);
                 if(probeCount<48){handler.removeCallbacks(probe);long age=SystemClock.elapsedRealtime()-probeBegan;handler.postDelayed(probe,age<3000?200:age<10000?650:1800);}
             }catch(Exception ignored){host.navigationHint("Use the provider page; its player controls could not be read.");}

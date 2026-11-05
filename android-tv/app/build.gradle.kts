@@ -13,8 +13,8 @@ android {
         applicationId = "in.ghartv.nova"
         minSdk = 26
         targetSdk = 35
-        versionCode = 63
-        versionName = "0.6.0-rc15.4-jio-timeouts-pointer-review"
+        versionCode = 64
+        versionName = "0.6.0-rc15.5-one-click-play-review"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
     buildFeatures { buildConfig = true }
