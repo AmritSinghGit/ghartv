@@ -10,3 +10,7 @@ Same 34 fail on unpatched code63 (run 40130310991) and on code64, so they are ol
 | Count off by one | "expected:<9> but was:<10>" | FilmCatalogueObservationTest (1) | update expected catalogue count |
 
 Next step: one CI run with the first row relaxed on a scratch branch of the lane (not PR #1) to see how many go green. Proposed as a patch in `patches/` like code64, so PR #1 stays untouched until the owner says yes.
+
+## CORRECTION (6 Nov, from CI run 42082361743 with the 0.1 s patch: 161 tests, 55 failed)
+The "time bar too tight" cause above was WRONG. Failures show the video time already above 0.46 s and not paused, so the bar was not the reason: the helper's other condition `settled[0]` (the fixture's playback attempt settled) is false, and the playback monitor reports state PAUSED / verified_start_ms null. The patch is parked (`patches/ci-relax-playback-bar/` kept only as a record; do not use). The run also had 20 more red tests in Review51PointerSearchTest, Review52ProviderMigrationTest and Review53ProviderRecoveryTest than the 25 Oct run, plus "expected movie/lantern but was empty" (40 log lines), so those may be flaky or newly red; not yet explained.
+Next (read-only): find what sets `settled[0]` and why the monitor sits PAUSED on this emulator.
