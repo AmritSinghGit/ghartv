@@ -6,7 +6,7 @@ name: GharTV code64 patch candidate
 on:
   push:
     branches: ['lane/ghartv-nova']
-    paths: ['.github/workflows/code64-patch-candidate.yml','patches/code64-one-click-play/**']
+    paths: ['.github/workflows/code64-patch-candidate.yml','patches/code64-one-click-play/**','patches/ci-relax-playback-bar/**']
   workflow_dispatch:
 permissions:
   contents: read
@@ -44,6 +44,8 @@ jobs:
             echo "APPLY_PATCH=true" >> "$GITHUB_ENV"
             git apply --check ../lane/patches/code64-one-click-play/code64-one-click-play.patch
             git apply ../lane/patches/code64-one-click-play/code64-one-click-play.patch
+            git apply --check ../lane/patches/ci-relax-playback-bar/ci-relax-playback-bar.patch
+            git apply ../lane/patches/ci-relax-playback-bar/ci-relax-playback-bar.patch
             git add -A
             git -c user.name=ci -c user.email=ci@example.invalid commit -qm "code64 patch on code63 source (CI-local, not pushed)"
             git diff --stat HEAD~1 HEAD | tail -1
