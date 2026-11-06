@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { generateKeyPairSync, sign } from 'node:crypto';
-import { blocked, makeLimiter, makeStreams, accessEmail } from './gate.mjs';
+import { blocked, makeLimiter, makeStreams, accessEmail, originOk } from './gate.mjs';
 
 const { privateKey, publicKey } = generateKeyPairSync('rsa', { modulusLength: 2048 });
 const jwk = { ...publicKey.export({ format: 'jwk' }), kid: 'k1' };
@@ -28,10 +28,10 @@ test('missing, unnamed, expired, wrong aud/iss, forged or none-alg tokens fail',
 test('film, Tor and owner paths are blocked; Jio paths are not', () => {
   for (const p of ['/api/films/search', '/api/films', '/flixmomo.html', '/owner.html', '/owner-api/fabric/status', '/owner-api/providers/inspect',
     '/provider-access.html', '/release-control/x', '/owner-api/release/x', '/owner-api/performance/latest', '/support/capture', '/support/download/1',
-    '/review/sync', '/review/feedback', '/config-status', '/api/anything-new', '/api/media/../owner-api/x', '/api/filmsx'])
+    '/review/sync', '/review/feedback', '/config-status', '/api/anything-new', '/api/media/abc', '/api/stream/t1/../../owner-api/x', '/api/stream/t1/x/y', '/s/abc/api/stream/t1', '/api/filmsx'])
     assert.ok(blocked(p), p);
   for (const p of ['/', '/index.html', '/app.js', '/styles.css', '/vendor/hls.min.js', '/viewer-context.js', '/api/health', '/api/auth/status',
-    '/api/auth/otp/send', '/api/auth/otp/verify', '/api/auth/logout', '/api/channels', '/api/epg', '/api/playback', '/api/media/abc/seg.ts'])
+    '/api/auth/otp/send', '/api/auth/otp/verify', '/api/auth/logout', '/api/channels', '/api/epg', '/api/playback', '/api/stream/t1', '/api/stream/t1/manifest.mpd', '/api/license/t1'])
     assert.ok(!blocked(p), p);
 });
 test('rate limits: otp/send 5 per 10 min, then recovers', () => {
@@ -50,10 +50,21 @@ test('rate limits: playback 30 per minute, rest 300 per minute', () => {
 });
 test('at most 3 streams; an idle stream frees its place after 20 s', () => {
   let t = 0; const s = makeStreams(() => t);
-  for (const k of ['s1', 's2', 's3']) assert.ok(s(`/api/media/${k}/seg1.ts`));
-  assert.ok(s('/api/media/s1/seg2.ts'), 'existing stream continues');
-  assert.ok(!s('/api/media/s4/seg1.ts'), 'fourth refused');
-  assert.ok(s('/api/channels'), 'non-media unaffected');
-  t = 15_000; s('/api/media/s1/seg3.ts'); s('/api/media/s2/seg3.ts');
-  t = 21_000; assert.ok(s('/api/media/s4/seg1.ts'), 's3 idle > 20 s');
+  for (const k of ['s1', 's2', 's3']) assert.ok(s(`/api/stream/${k}`));
+  assert.ok(s('/api/stream/s1/manifest.mpd'), 'existing stream continues');
+  assert.ok(!s('/api/stream/s4'), 'fourth refused');
+  assert.ok(s('/api/license/s4'), 'licence requests are not counted');
+  assert.ok(s('/api/channels'), 'other paths unaffected');
+  t = 15_000; s('/api/stream/s1'); s('/api/stream/s2');
+  t = 21_000; assert.ok(s('/api/stream/s4'), 's3 idle > 20 s');
+});
+
+test('a POST from another origin is refused; same origin, no Origin and GET pass', () => {
+  const o = 'https://ghartv.vcnow.in';
+  assert.ok(!originOk('POST', 'https://evil.example', o));
+  assert.ok(!originOk('POST', 'null', o));
+  assert.ok(!originOk('DELETE', 'http://127.0.0.1:8790', o));
+  assert.ok(originOk('POST', o, o));
+  assert.ok(originOk('POST', undefined, o));
+  assert.ok(originOk('GET', 'https://evil.example', o));
 });
