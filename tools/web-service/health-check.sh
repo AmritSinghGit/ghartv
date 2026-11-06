@@ -13,7 +13,11 @@ grep -q "\"commit\":\"$want\"" <<<"$h" || [ ${#bad[@]} -gt 0 ] || bad+=("player 
 if id ghartv >/dev/null 2>&1; then
   sudo -n nft list table inet ghartv_egress >/dev/null 2>&1 || bad+=("firewall table ghartv_egress MISSING: stop ghartv-web and ghartv-gate until it is back")
 fi
-if [ -e /etc/ghartv/gate.env ] || [ -f "$HOME/operon-desk/ghartv-gate.env" ]; then
+# The gate is meant to run once its systemd unit exists (or, before that, the lane's settings file exists).
+if systemctl cat ghartv-gate.service >/dev/null 2>&1 || [ -f "$HOME/operon-desk/ghartv-gate.env" ]; then
+  if systemctl cat ghartv-gate.service >/dev/null 2>&1; then
+    for u in ghartv-nft ghartv-web ghartv-gate; do systemctl is-active -q "$u" || bad+=("$u not active"); done
+  fi
   g=$(curl -s -m5 -o /dev/null -w '%{http_code}' http://127.0.0.1:18792/ || true)
   [ "$g" = 403 ] || bad+=("gate answers $g, expected 403")
   p=$(curl -s -m10 -o /dev/null -w '%{http_code} %{redirect_url}' https://ghartv.vcnow.in/ || true)

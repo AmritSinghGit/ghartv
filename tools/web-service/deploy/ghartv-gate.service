@@ -42,7 +42,7 @@ AmbientCapabilities=
 RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
 SystemCallArchitectures=native
 UMask=0077
-InaccessiblePaths=-/etc/vcnow -/etc/cloudflared -/home -/root -/srv
+InaccessiblePaths=-/etc/vcnow -/etc/cloudflared -/home -/root -/srv -/run/tailscale
 StandardOutput=journal
 StandardError=journal
 

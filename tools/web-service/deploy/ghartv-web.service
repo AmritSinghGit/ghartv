@@ -43,7 +43,7 @@ RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
 SystemCallArchitectures=native
 UMask=0077
 # /etc/ghartv (gate settings, firewall rule) is the gate's only: hidden from the player (CSO 316 point 4).
-InaccessiblePaths=-/etc/vcnow -/etc/cloudflared -/etc/ghartv -/home -/root -/srv
+InaccessiblePaths=-/etc/vcnow -/etc/cloudflared -/etc/ghartv -/home -/root -/srv -/run/tailscale
 StandardOutput=journal
 StandardError=journal
 
