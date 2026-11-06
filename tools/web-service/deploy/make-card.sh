@@ -6,7 +6,8 @@ W=/home/amrit/operon-worktrees/ghartv-nova
 TAR=/home/amrit/ghartv-web/releases/ghartv-web-player-9e38de98e5cd.tar.gz
 TARSUM=f21edf83bb926b2be9b1af949f11e9b8101a9771f50f9933a00391540a76d2e1
 files=(tools/web-gate/gate.mjs tools/web-gate/write-gate-env.sh tools/web-service/deploy/ghartv-web.service
-       tools/web-service/deploy/ghartv-gate.service tools/web-service/deploy/ghartv-nft.service tools/web-service/deploy/ghartv.nft)
+       tools/web-service/deploy/ghartv-gate.service tools/web-service/deploy/ghartv-nft.service tools/web-service/deploy/ghartv.nft
+       tools/web-service/health-check.sh)
 h() { git -C "$W" show "$L:$1" | sha256sum | cut -c1-64; }
 echo "# GharTV account ghartv: owner card for lane commit $L"
 echo "# Run On dev (Termius: ssh operon-dev-01) with the desk, one line at a time. Pinned inputs (sha256):"
@@ -24,7 +25,7 @@ test ! -e /etc/ghartv/gate.env && $(chk tools/web-gate/write-gate-env.sh) && bas
 sudo install -d -m 755 /etc/systemd/journald.conf.d && printf '[Journal]\nMaxRetentionSec=30day\n' | sudo install -m 644 /dev/stdin /etc/systemd/journald.conf.d/30-retention.conf && sudo systemctl restart systemd-journald
 ~/operon-tools/bin/operon svc stop ghartv-web; for i in \$(seq 20); do ss -ltn | grep -q '127.0.0.1:8790 ' || break; sleep 1; done; ! ss -ltn | grep -q '127.0.0.1:8790 ' && sudo systemctl daemon-reload && sudo systemctl enable --now ghartv-nft.service ghartv-web.service ghartv-gate.service && sudo -n nft list table inet ghartv_egress >/dev/null && for i in \$(seq 30); do curl -s -o /dev/null http://127.0.0.1:8790/api/health && break; sleep 1; done && curl -s http://127.0.0.1:8790/api/health | grep -q '"commit":"9e38de98e5cd"' && test "\$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:18792/)" = 403 && test "\$(ps -o user= -p \$(systemctl show -p MainPID --value ghartv-web))" = ghartv && test "\$(ps -o user= -p \$(systemctl show -p MainPID --value ghartv-gate))" = ghartv && test "\$(ss -ltn | grep -c '127.0.0.1:8790 ')" = 1 && test "\$(ss -ltn | grep -c '127.0.0.1:18792 ')" = 1 && ss -ltn | grep -q "\$(tailscale ip -4):8790 " && S=\$(sudo ss -ltnuHe) && test -n "\$S" && ! grep "uid:\$(id -u ghartv)" <<<"\$S" | grep -vqE ' 127\.0\.0\.1:(8790|18792) '
 ! sudo -u ghartv cat /home/amrit/.bashrc 2>/dev/null && ! sudo -u ghartv timeout 5 bash -c 'exec 3<>/dev/tcp/127.0.0.1/15432' 2>/dev/null && ! sudo -u ghartv timeout 5 bash -c "exec 3<>/dev/tcp/\$(tailscale ip -4)/22" 2>/dev/null && ! sudo -u ghartv timeout 5 bash -c 'exec 3<>/dev/tcp/10.0.0.1/443' 2>/dev/null && ! sudo -u ghartv timeout 5 bash -c 'exec 3<>/dev/tcp/127.0.0.1/22' 2>/dev/null && ! sudo -u ghartv timeout 5 bash -c 'exec 3<>/dev/tcp/8.8.8.8/53' 2>/dev/null && ! sudo -u ghartv timeout 5 bash -c 'exec 3<>/dev/tcp/1.1.1.1/80' 2>/dev/null && sudo -u ghartv timeout 10 bash -c 'exec 3<>/dev/tcp/jiotvapi.cdn.jio.com/443'
-$W/tools/web-service/health-check.sh
+$(chk tools/web-service/health-check.sh) && bash <($G:tools/web-service/health-check.sh)
 CARD
 echo "# The tailscale socket is hidden from the services by their units (InaccessiblePaths); sudo -u tests run outside that sandbox, so they do not test it."
 echo "# Line 7 stops the lane's own tmux player (as amrit) and starts the units; the tailnet proxy stays (last check proves it still listens)."
