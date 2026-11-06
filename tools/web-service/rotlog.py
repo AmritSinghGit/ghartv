@@ -3,6 +3,7 @@
 own (already redacted) log survives a reboot and cannot fill the disk."""
 import logging.handlers, os, sys
 
+os.umask(0o077)  # new and rotated log files are created 600 from the first line
 path = sys.argv[1]
 os.makedirs(os.path.dirname(path), mode=0o700, exist_ok=True)
 h = logging.handlers.RotatingFileHandler(path, maxBytes=int(os.environ.get('LOG_MAX_BYTES', 10_000_000)),
