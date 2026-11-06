@@ -9,4 +9,4 @@ dir="$HOME/ghartv-web/$sha/web-player"
 cd "$dir"
 export GHARTV_DISABLE_KEYCHAIN=1 GHARTV_WEB_SHA="$sha" GHARTV_WEB_HOST=127.0.0.1 GHARTV_WEB_PORT=8790
 # No exec: `operon svc adopt` records this script as the command.
-nice -n 10 node server.mjs 2>&1 | python3 "$(dirname "$(readlink -f "$0")")/rotlog.py" "$HOME/operon-logs/ghartv-web/player.log"
+nice -n 15 node server.mjs 2>&1 | python3 "$(dirname "$(readlink -f "$0")")/rotlog.py" "$HOME/operon-logs/ghartv-web/player.log"
