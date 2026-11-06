@@ -8,6 +8,11 @@ bad=()
 h=$(curl -s -m5 http://127.0.0.1:8790/api/health || true)
 grep -q '"service":"ghartv-web-player"' <<<"$h" || bad+=("player down")
 grep -q "\"commit\":\"$want\"" <<<"$h" || [ ${#bad[@]} -gt 0 ] || bad+=("player commit is not $want")
+# Once the account ghartv exists (systemd install), its outbound firewall table must be loaded (CSO 317):
+# the ghartv-nft unit stays 'active' even if the table was removed. If it is missing: stop both services.
+if id ghartv >/dev/null 2>&1; then
+  sudo -n nft list table inet ghartv_egress >/dev/null 2>&1 || bad+=("firewall table ghartv_egress MISSING: stop ghartv-web and ghartv-gate until it is back")
+fi
 if [ -e /etc/ghartv/gate.env ] || [ -f "$HOME/operon-desk/ghartv-gate.env" ]; then
   g=$(curl -s -m5 -o /dev/null -w '%{http_code}' http://127.0.0.1:18792/ || true)
   [ "$g" = 403 ] || bad+=("gate answers $g, expected 403")
