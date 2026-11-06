@@ -1,0 +1,51 @@
+# GharTV web player (loopback 127.0.0.1:8790) as the unprivileged account ghartv (CSO 316). Owned by infra once installed.
+[Unit]
+Description=GharTV web player (loopback only)
+After=network-online.target ghartv-nft.service
+Requires=ghartv-nft.service
+Wants=network-online.target
+
+[Service]
+User=ghartv
+Group=ghartv
+WorkingDirectory=/opt/ghartv-web/current/web-player
+ExecStart=/usr/bin/node server.mjs
+Environment=GHARTV_DISABLE_KEYCHAIN=1 GHARTV_WEB_HOST=127.0.0.1 GHARTV_WEB_PORT=8790 HOME=/var/lib/ghartv-web
+EnvironmentFile=/opt/ghartv-web/current/RELEASE.env
+StateDirectory=ghartv-web
+StateDirectoryMode=0700
+Restart=always
+RestartSec=3
+Nice=15
+MemoryMax=384M
+TasksMax=64
+# Hardening
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+PrivateDevices=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectKernelLogs=yes
+ProtectControlGroups=yes
+ProtectClock=yes
+ProtectHostname=yes
+ProtectProc=invisible
+ProcSubset=pid
+RestrictSUIDSGID=yes
+RestrictNamespaces=yes
+RestrictRealtime=yes
+LockPersonality=yes
+CapabilityBoundingSet=
+AmbientCapabilities=
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+SystemCallArchitectures=native
+UMask=0077
+# /etc/ghartv (gate settings, firewall rule) is the gate's only: hidden from the player (CSO 316 point 4).
+InaccessiblePaths=-/etc/vcnow -/etc/cloudflared -/etc/ghartv -/home -/root -/srv
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target
