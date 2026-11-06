@@ -57,6 +57,15 @@ class Tracker(unittest.TestCase):
                 self.assertEqual(t.main(['--policy', str(pol), '--out', d + '/o']), 2)
             self.assertFalse(Path(d, 'o').exists())
 
+    def test_reads_the_real_policy_on_pr1_branch(self):
+        import subprocess
+        try:
+            text = subprocess.check_output(['git', '-C', str(t.ROOT), 'show', t.POLICY_REF], text=True, stderr=subprocess.DEVNULL)
+        except (subprocess.CalledProcessError, FileNotFoundError):
+            self.skipTest('PR #1 branch not fetched')
+        self.assertTrue({'flixmomo.bet', 'flixmomo.st'} <= t.known_hosts(text))
+        self.assertTrue(t.home_url(text).startswith('https://flixmomo.'))
+
 
 if __name__ == '__main__':
     unittest.main()
