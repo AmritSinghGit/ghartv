@@ -1,0 +1,26 @@
+#!/usr/sbin/nft -f
+# Outbound rule for the account ghartv only (CSO 316 point 2). Other accounts are not affected.
+# Internal addresses are not stored in git (public repo): @DATA01_TAILNET_IP@ is filled in on dev by the card.
+# Allowed: loopback 8790 (player) and 18792 (gate), the local DNS resolver 127.0.0.53:53, and TCP 443 to public
+# addresses (Jio, Cloudflare Access keys). Time sync is done by systemd-timesyncd under its own account, so no
+# NTP rule is needed for ghartv. Refused: every other loopback port (e.g. 15432), the tailnet
+# (100.64.0.0/10, fd7a:115c:a1e0::/48), private ranges, link-local, and any other port.
+table inet ghartv_egress
+delete table inet ghartv_egress
+table inet ghartv_egress {
+  chain out {
+    type filter hook output priority 0; policy accept;
+    meta skuid != "ghartv" accept
+    ct state established,related accept
+    oif "lo" tcp dport { 8790, 18792 } accept
+    oif "lo" ip daddr 127.0.0.53 udp dport 53 accept
+    oif "lo" ip daddr 127.0.0.53 tcp dport 53 accept
+    oif "lo" tcp dport 15432 counter drop    # the data01 tunnel on loopback (explicit; also covered below)
+    oif "lo" counter drop
+    ip daddr @DATA01_TAILNET_IP@ counter drop   # the data server on the tailnet (filled in on dev at install; also in 100.64.0.0/10)
+    ip daddr { 10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16, 100.64.0.0/10, 169.254.0.0/16, 127.0.0.0/8, 0.0.0.0/8 } counter drop
+    ip6 daddr { fc00::/7, fe80::/10, ::1/128 } counter drop
+    tcp dport 443 accept
+    counter drop
+  }
+}
