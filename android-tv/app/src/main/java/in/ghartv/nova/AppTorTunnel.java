@@ -80,6 +80,16 @@ final class AppTorTunnel {
         return 0;
     }
 
+    /** Start Tor in the background when the app opens, so FlixMomo finds a ready circuit. */
+    void warm() { ensureBound(); }
+
+    /** True when FlixMomo will use Tor: the owner default (never decided) or Tor left on in Menu.
+     * Reads FilmTorController's preference file (same name and keys) without changing it. */
+    static boolean filmTorPreferred(Context context) {
+        android.content.SharedPreferences p = context.getApplicationContext().getSharedPreferences("ghartv.film-tor-fallback", Context.MODE_PRIVATE);
+        return !p.getBoolean("decided", false) || p.getBoolean("enabled", false);
+    }
+
     private void ensureBound() {
         synchronized (lock) {
             if (bound || binding) return;

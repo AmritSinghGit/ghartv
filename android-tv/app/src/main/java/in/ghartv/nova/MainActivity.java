@@ -102,6 +102,7 @@ public final class MainActivity extends Activity implements ChannelNavigator.Lis
     private boolean guideMeasured;
     @Override protected void onCreate(Bundle state) {
         super.onCreate(state);
+        if (AppTorTunnel.filmTorPreferred(this)) AppTorTunnel.get(this).warm();
         requestWindowFeature(Window.FEATURE_NO_TITLE);
         getWindow().setFlags(WindowManager.LayoutParams.FLAG_FULLSCREEN, WindowManager.LayoutParams.FLAG_FULLSCREEN);
         getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
