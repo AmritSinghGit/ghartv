@@ -3,7 +3,9 @@
 # Checks: player health on loopback (and its commit = ~/ghartv-web/CURRENT); the gate refuses an unsigned
 # request (403) when it is meant to run (settings file present); the public address asks for Access sign-in.
 set -uo pipefail
-want=$(cat "$HOME/ghartv-web/CURRENT" 2>/dev/null || echo "?")
+# The live release: /opt/ghartv-web/current/RELEASE.env once the systemd units run it, else the lane's tmux release.
+want=$(sed -n 's/^GHARTV_WEB_SHA=//p' /opt/ghartv-web/current/RELEASE.env 2>/dev/null)
+[ -n "$want" ] || want=$(cat "$HOME/ghartv-web/CURRENT" 2>/dev/null || echo "?")
 bad=()
 h=$(curl -s -m5 http://127.0.0.1:8790/api/health || true)
 grep -q '"service":"ghartv-web-player"' <<<"$h" || bad+=("player down")
