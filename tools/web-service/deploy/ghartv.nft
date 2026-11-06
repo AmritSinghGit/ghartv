@@ -1,7 +1,8 @@
 #!/usr/sbin/nft -f
 # Outbound rule for the account ghartv only (CSO 316 point 2). Other accounts are not affected.
 # Allowed: loopback 8790 (player) and 18792 (gate), the local DNS resolver 127.0.0.53:53, and TCP 443 to public
-# addresses (Jio, Cloudflare Access keys). Refused: every other loopback port (e.g. 15432), the tailnet
+# addresses (Jio, Cloudflare Access keys). Time sync is done by systemd-timesyncd under its own account, so no
+# NTP rule is needed for ghartv. Refused: every other loopback port (e.g. 15432), the tailnet
 # (100.64.0.0/10, fd7a:115c:a1e0::/48), private ranges, link-local, and any other port.
 table inet ghartv_egress
 delete table inet ghartv_egress

@@ -12,7 +12,9 @@ WorkingDirectory=/opt/ghartv-web/gate
 ExecStart=/usr/bin/node gate.mjs
 # ACCESS_TEAM, ACCESS_AUD, ALLOWED_EMAILS, PUBLIC_ORIGIN; root:ghartv 0640; only this unit reads it.
 EnvironmentFile=/etc/ghartv/gate.env
-Environment=GATE_PORT=18792 UPSTREAM_PORT=8790
+Environment=GATE_PORT=18792 UPSTREAM_PORT=8790 HOME=/var/lib/ghartv/gate
+StateDirectory=ghartv/gate
+StateDirectoryMode=0700
 Restart=always
 RestartSec=3
 Nice=15
