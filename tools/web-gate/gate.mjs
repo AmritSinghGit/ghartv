@@ -17,11 +17,12 @@ import { createPublicKey, verify } from 'node:crypto';
 // Allowlist: only the live-TV page and its APIs reach the player. Everything else (films/FlixMomo and its Tor route,
 // /owner*, /owner-api/*, /provider-access, /release*, /performance*, /support/*, /review/*, /config-status, and any
 // route added later) is refused with 404. Checked against the routes server.mjs actually serves on 9e38de9 (video at
-// /api/stream/<ticket>[/manifest.mpd][?u=...], DRM licence at /api/license/<ticket>; "/api/media" is only a log label).
+// /api/stream/<ticket>[/<DASH manifest or segment path>][?u=<HLS>], same pattern as proxyStream; DRM licence at
+// /api/license/<ticket>; "/api/media" is only a log label). Any ".." segment is refused.
 export const ALLOWED = [/^\/$/, /^\/index\.html$/, /^\/(app|playback-engine|shaka-player\.compiled|viewer-context)\.js$/,
   /^\/(player|styles)\.css$/, /^\/vendor\/hls\.min\.js$/, /^\/favicon\.ico$/,
   /^\/api\/health$/, /^\/api\/auth\/(status|logout|otp\/send|otp\/verify)$/, /^\/api\/(channels|epg|playback)$/,
-  /^\/api\/stream\/[^/]+(\/manifest\.mpd)?$/, /^\/api\/license\/[^/]+$/];
+  /^\/api\/stream\/[A-Za-z0-9_-]+(\/.*)?$/, /^\/api\/license\/[A-Za-z0-9_-]+$/];
 export const MAX_BODY = 16 * 1024;
 export const LIMITS = [
   { name: 'otp-send', test: p => p === '/api/auth/otp/send', max: 5, windowMs: 600_000 },

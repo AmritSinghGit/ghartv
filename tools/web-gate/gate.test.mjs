@@ -28,10 +28,10 @@ test('missing, unnamed, expired, wrong aud/iss, forged or none-alg tokens fail',
 test('film, Tor and owner paths are blocked; Jio paths are not', () => {
   for (const p of ['/api/films/search', '/api/films', '/flixmomo.html', '/owner.html', '/owner-api/fabric/status', '/owner-api/providers/inspect',
     '/provider-access.html', '/release-control/x', '/owner-api/release/x', '/owner-api/performance/latest', '/support/capture', '/support/download/1',
-    '/review/sync', '/review/feedback', '/config-status', '/api/anything-new', '/api/media/abc', '/api/stream/t1/../../owner-api/x', '/api/stream/t1/x/y', '/s/abc/api/stream/t1', '/api/filmsx'])
+    '/review/sync', '/review/feedback', '/config-status', '/api/anything-new', '/api/media/abc', '/api/stream/t1/../../owner-api/x', '/api/stream/t1/a/../../../owner.html', '/api/stream/t.1', '/s/abc/api/stream/t1', '/api/filmsx'])
     assert.ok(blocked(p), p);
   for (const p of ['/', '/index.html', '/app.js', '/styles.css', '/vendor/hls.min.js', '/viewer-context.js', '/api/health', '/api/auth/status',
-    '/api/auth/otp/send', '/api/auth/otp/verify', '/api/auth/logout', '/api/channels', '/api/epg', '/api/playback', '/api/stream/t1', '/api/stream/t1/manifest.mpd', '/api/license/t1'])
+    '/api/auth/otp/send', '/api/auth/otp/verify', '/api/auth/logout', '/api/channels', '/api/epg', '/api/playback', '/api/stream/t1', '/api/stream/t1/manifest.mpd', '/api/stream/t1/video/720p/seg-00042.m4s', '/api/stream/t1/init.mp4', '/api/license/t1'])
     assert.ok(!blocked(p), p);
 });
 test('rate limits: otp/send 5 per 10 min, then recovers', () => {
@@ -52,6 +52,8 @@ test('at most 3 streams; an idle stream frees its place after 20 s', () => {
   let t = 0; const s = makeStreams(() => t);
   for (const k of ['s1', 's2', 's3']) assert.ok(s(`/api/stream/${k}`));
   assert.ok(s('/api/stream/s1/manifest.mpd'), 'existing stream continues');
+  assert.ok(s('/api/stream/s2/video/seg-1.m4s'), 'DASH segment of an existing stream continues');
+  assert.ok(!s('/api/stream/s4/video/seg-1.m4s'), 'a fourth stream is refused on its segments too');
   assert.ok(!s('/api/stream/s4'), 'fourth refused');
   assert.ok(s('/api/license/s4'), 'licence requests are not counted');
   assert.ok(s('/api/channels'), 'other paths unaffected');
