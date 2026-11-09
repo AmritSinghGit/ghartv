@@ -12,7 +12,7 @@ node_bin="$(command -v node || true)"
 case "$("$node_bin" --version)" in v22.*|v23.*|v24.*) ;; *) echo "need Node 22 or newer, have $("$node_bin" --version)"; exit 2;; esac
 if lsof -nP -iTCP:8790 -sTCP:LISTEN >/dev/null 2>&1 && ! launchctl list in.ghartv.web >/dev/null 2>&1; then echo "port 8790 is already used by something else"; exit 2; fi
 base="$HOME/ghartv-web"; mkdir -p "$base/$rel" "$base/logs"
-[ -f "$base/$rel/web-player/server.mjs" ] || tar xzf "$tar_path" -C "$base/$rel"
+rm -rf "$base/$rel"; mkdir -p "$base/$rel"; tar xzf "$tar_path" -C "$base/$rel"
 plist="$HOME/Library/LaunchAgents/in.ghartv.web.plist"; mkdir -p "$HOME/Library/LaunchAgents"
 cat > "$plist" <<P
 <?xml version="1.0" encoding="UTF-8"?>
@@ -34,5 +34,7 @@ launchctl bootstrap "gui/$(id -u)" "$plist"
 for i in 1 2 3 4 5 6 7 8 9 10; do
   h="$(curl -s -m3 http://127.0.0.1:8790/api/health || true)"; case "$h" in *'"ok":true'*) break;; esac; sleep 1
 done
-echo "$h" | grep -q '"ok":true' && echo "CHECK PASS: GharTV is running at http://127.0.0.1:8790 (this Mac only), release $rel" || { echo "CHECK FAIL: not answering; see $base/logs/player.log"; exit 1; }
-echo "listening on: $(lsof -nP -iTCP:8790 -sTCP:LISTEN | awk 'NR>1{print $9}' | sort -u | tr '\n' ' ')  (must be 127.0.0.1:8790 only)"
+echo "$h" | grep -q '"ok":true' || { echo "CHECK FAIL: not answering; see $base/logs/player.log"; exit 1; }
+L="$(lsof -nP -iTCP:8790 -sTCP:LISTEN | awk 'NR>1{print $9}' | sort -u)"
+[ "$L" = "127.0.0.1:8790" ] || { echo "STOP: listening on '$L', not only 127.0.0.1:8790; stopped it"; launchctl bootout "gui/$(id -u)/in.ghartv.web" 2>/dev/null || true; exit 1; }
+echo "CHECK PASS: GharTV is running at http://127.0.0.1:8790 (this Mac only), release $rel; listening on: $L"

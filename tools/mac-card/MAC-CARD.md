@@ -3,15 +3,15 @@
 Owner words: "if it is possible that the things can run on Mac or that personal device ... so that it doesn't show up as a IP of a data server" (9 Nov).
 Only this Mac can open it (http://127.0.0.1:8790). The family keeps the TV app. Jio login is NOT stored on the Mac unless step 5 is done with the number holder's consent.
 Pinned: release 9e38de98e5cd (tip of PR #1's branch), tarball sha256 f21edf83bb926b2be9b1af949f11e9b8101a9771f50f9933a00391540a76d2e1.
-Script sha256 (check before step 3): a9877f4eacef564df68eb40efd5f77156e60405b55883d80afc538c08dba41ee
+Script sha256 (checked in step 3, full value): 71a9211792811b4c90fd0f37e384449d557db86ae31550f28ba077c9b598b1a9
 
 1. On the Mac (Terminal): `node --version`  Needs v22 or newer. If it says "command not found" or an older version: `brew install node` then `node --version` again.
 2. On the Mac (Terminal): `mkdir -p ~/ghartv-web/dl && cd ~/ghartv-web/dl && scp <DEV_HOST>:ghartv-web/releases/ghartv-web-player-9e38de98e5cd.tar.gz . && scp <DEV_HOST>:ghartv-web/mac/install-mac.sh .`
-3. On the Mac (Terminal): `shasum -a 256 ~/ghartv-web/dl/install-mac.sh`  Must start with a9877f4eacef. If not, stop.
+3. On the Mac (Terminal): `[ "$(shasum -a 256 ~/ghartv-web/dl/install-mac.sh | cut -d' ' -f1)" = 71a9211792811b4c90fd0f37e384449d557db86ae31550f28ba077c9b598b1a9 ] && echo SCRIPT OK || echo STOP`  Must say SCRIPT OK. If it says STOP, stop.
 4. On the Mac (Terminal): `bash ~/ghartv-web/dl/install-mac.sh ~/ghartv-web/dl/ghartv-web-player-9e38de98e5cd.tar.gz f21edf83bb926b2be9b1af949f11e9b8101a9771f50f9933a00391540a76d2e1 9e38de98e5cd`
-   It must end with "CHECK PASS" and "listening on: 127.0.0.1:8790" (only that). It refuses a wrong file, a missing/old Node, or a taken port.
+   It must end with "CHECK PASS ... listening on: 127.0.0.1:8790". If anything else is listening, the script itself says STOP and stops the player. The install always unpacks fresh (a re-run replaces the old files). It refuses a wrong file, a missing/old Node, or a taken port.
    Then open http://127.0.0.1:8790 in the Mac's browser, sign in with the Jio OTP, check the guide loads (it should: this is a home connection).
-5. ONLY after the Jio number holder says yes (optional, keeps the Jio login in the Mac Keychain so OTP is not needed each start):
+5. ONLY after the Jio number holder says yes (optional). NEW CREDENTIAL (machine-held): the Jio login session for GharTV, kept in this Mac's Keychain (item in.ghartv.nova.web-player.jio-session). Save it in: nowhere, the Keychain holds it. Reply `ok` before the next line is run (the CTO waits for that `ok`). It means OTP is not needed each start:
    On the Mac (Terminal): `/usr/libexec/PlistBuddy -c "Delete :EnvironmentVariables:GHARTV_DISABLE_KEYCHAIN" ~/Library/LaunchAgents/in.ghartv.web.plist`
    On the Mac (Terminal): `launchctl bootout gui/$(id -u)/in.ghartv.web && launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/in.ghartv.web.plist`
    Undo: `security delete-generic-password -a local-owner -s in.ghartv.nova.web-player.jio-session` and run the install line in step 4 again.
