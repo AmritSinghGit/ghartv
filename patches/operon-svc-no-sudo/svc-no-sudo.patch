@@ -1,0 +1,24 @@
+--- a/bin/operon	2026-11-09 12:51:49.139327637 +0530
++++ b/bin/operon	2026-11-09 12:51:49.184326808 +0530
+@@ -11585,16 +11585,16 @@
+ 
+ 
+ def svc_unit_action(name: str, s: dict, action: str, by: str = "owner") -> str:
+-    """start / stop / restart a unit service with `sudo -n /usr/bin/systemctl <action> <unit>`, one exact command per unit (the sudoers file
+-    lists each one; nothing else is allowed). Stop goes in reverse order and is 'stopped' only when every unit is inactive and its ports are free."""
++    """start / stop / restart a unit service with `/usr/bin/systemctl <action> <unit>` (no sudo: a polkit rule lets amrit manage exactly
++    the listed system units; user units need no rule). Stop goes in reverse order and is 'stopped' only when every unit is inactive and its ports are free."""
+     us = svc_units(name, s)
+     done = []
+     for u in (reversed(us) if action == "stop" else us):
+-        p = _unit_run(["sudo", "-n", SYSTEMCTL, action, u])
++        p = _unit_run([SYSTEMCTL, action, u])
+         if p.returncode:
+             err = (p.stderr or p.stdout or "").strip()[-160:]
+-            if "password" in err.lower() or "not allowed" in err.lower() or "sudo" in err.lower():
+-                err = f"sudo refused ({err}): the owner's sudoers card for operon units is not installed, or {u} is not in it"
++            if "authentication" in err.lower() or "not allowed" in err.lower() or "access denied" in err.lower():
++                err = f"refused ({err}): the owner's polkit rule for operon units is not installed, or {u} is not in it"
+             raise RuntimeError(f"{name}: {action} {u} failed: {err}" + (f" (already done: {', '.join(done)})" if done else ""))
+         done.append(u)
+     want = "inactive" if action == "stop" else "active"
