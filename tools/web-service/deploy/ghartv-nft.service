@@ -1,0 +1,15 @@
+# Loads the outbound rule for the account ghartv before the player and the gate start (CSO 316 point 2).
+[Unit]
+Description=GharTV outbound firewall rule (account ghartv)
+Before=ghartv-web.service ghartv-gate.service
+After=nftables.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/sbin/nft -f /etc/ghartv/ghartv.nft
+ExecStop=/usr/sbin/nft delete table inet ghartv_egress
+
+[Install]
+WantedBy=multi-user.target
+RequiredBy=ghartv-web.service ghartv-gate.service

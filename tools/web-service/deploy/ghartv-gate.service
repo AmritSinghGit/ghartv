@@ -1,0 +1,50 @@
+# GharTV web gate (127.0.0.1:18792 -> player 127.0.0.1:8790) as the account ghartv (CSO 302/303/316). Owned by infra.
+[Unit]
+Description=GharTV web gate (Cloudflare Access check in front of the player)
+After=network-online.target ghartv-web.service ghartv-nft.service
+Requires=ghartv-nft.service
+Wants=network-online.target
+
+[Service]
+User=ghartv
+Group=ghartv
+WorkingDirectory=/opt/ghartv-web/gate
+ExecStart=/usr/bin/node gate.mjs
+# ACCESS_TEAM, ACCESS_AUD, ALLOWED_EMAILS, PUBLIC_ORIGIN; root:ghartv 0640; only this unit reads it.
+EnvironmentFile=/etc/ghartv/gate.env
+Environment=GATE_PORT=18792 UPSTREAM_PORT=8790 HOME=/var/lib/ghartv/gate
+StateDirectory=ghartv/gate
+StateDirectoryMode=0700
+Restart=always
+RestartSec=3
+Nice=15
+MemoryMax=128M
+TasksMax=32
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+PrivateDevices=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectKernelLogs=yes
+ProtectControlGroups=yes
+ProtectClock=yes
+ProtectHostname=yes
+ProtectProc=invisible
+ProcSubset=pid
+RestrictSUIDSGID=yes
+RestrictNamespaces=yes
+RestrictRealtime=yes
+LockPersonality=yes
+CapabilityBoundingSet=
+AmbientCapabilities=
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+SystemCallArchitectures=native
+UMask=0077
+InaccessiblePaths=-/etc/vcnow -/etc/cloudflared -/home -/root -/srv -/run/tailscale
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

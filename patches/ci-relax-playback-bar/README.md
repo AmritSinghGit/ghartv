@@ -1,0 +1,4 @@
+# ci-relax-playback-bar (candidate, NOT run)
+Test-only patch for PR #1's source (android-tv/.../Review44LoadingMouseTest.java): the owned-player fixture's "video time > 0.35 s" bar becomes "> 0.1 s" in all 3 places (2 wait/assert lines in the shared helper + 1 in mousePressStartsActualOwnedVideoInTheSameWebView). The CI log shows the player PLAYING at 0.33-0.42 s, so 0.1 s still proves playback is advancing. Changes no app code.
+Checked: `git apply --check` is clean on origin/codex/ghartv-remove-auto-preview (56426db). Unverified: whether it turns the ~29 time-bar failures green; that needs one CI run on a lane scratch branch (night shift, load < 8). Triage: docs-triage-34-red-tests.md
+PARKED 6 Nov: made the run worse (55 red vs 34) and did not address the cause; see docs-triage-34-red-tests.md CORRECTION.
