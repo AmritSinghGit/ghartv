@@ -8,7 +8,7 @@ and deletes events older than 30 days.
 The Android app never sends Jio mobile numbers, OTPs, account credentials, tokens,
 cookies, stream or licence URLs, IP addresses, Wi-Fi names, successful channel viewing
 history, Android IDs or TV serial numbers. The Worker performs a second independent
-redaction pass and never reads or stores `CF-Connecting-IP`.
+redaction pass and reads `CF-Connecting-IP` only to make a keyed hash for per-source limits (counts only, 48 hours; the address is never stored).
 
 Routes:
 

@@ -33,8 +33,8 @@ advertising ID or TV serial number.
 
 The app strips sensitive fields before reports enter its private local queue. The
 GharTV collector validates and scrubs each event again. Accepted reports are retained
-for no more than 30 days. The collector does not intentionally read or store the
-connection IP address. Its infrastructure provider may process standard connection
+for no more than 30 days. The collector reads the connecting address only to make a keyed hash (a scrambled code that cannot be turned back into the address) for abuse limits, and stores only counts against that hash for 48 hours; the address itself is never stored or logged.
+Its infrastructure provider may process standard connection
 metadata as part of operating and protecting the service.
 
 ## User controls and deletion

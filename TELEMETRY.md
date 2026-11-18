@@ -32,7 +32,7 @@ supports send now, local preview, queue deletion and diagnostic-ID reset.
 
 The app scrubs data before it enters its local JSONL queue. The Cloudflare Worker applies
 an independent second scrub, validates the event schema, caps payload/rate sizes,
-deduplicates event IDs and does not read or store `CF-Connecting-IP`.
+deduplicates event IDs and reads `CF-Connecting-IP` only to make a keyed hash for per-source abuse limits (counts only, kept 48 hours; the address itself is never stored).
 
 ## Retention
 
