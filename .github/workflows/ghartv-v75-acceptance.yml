@@ -64,4 +64,4 @@ jobs:
       - name: Confirm package version code
         run: |
           "$ANDROID_HOME/build-tools/36.0.0/aapt" dump badging android-tv/app/build/outputs/apk/debug/app-debug.apk |
-            grep "name='in.ghartv.nova' versionCode='75' versionName='0.7.1-qr-lan-corrected'"
+            grep "name='in.ghartv.nova' versionCode='75' versionName='0.7.1-qr-lan-corrected-debug'"
