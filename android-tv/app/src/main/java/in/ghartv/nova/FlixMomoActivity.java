@@ -316,7 +316,42 @@ public class FlixMomoActivity extends Activity {
             throw new IllegalArgumentException("Media response unavailable");
         return new org.json.JSONObject((String)encoded);
     }
+    // WebChromeClient fullscreen can be backed by a real Android VideoView
+    // rather than a readable top-document <video>. Restrict native access to
+    // that owned fullscreen view; arbitrary provider frames stay opaque.
+    private static android.widget.VideoView phoneNativeVideo(View root){
+        if(root instanceof android.widget.VideoView)return (android.widget.VideoView)root;
+        if(!(root instanceof android.view.ViewGroup))return null;
+        android.view.ViewGroup group=(android.view.ViewGroup)root;
+        android.widget.VideoView result=null;
+        for(int i=0;i<Math.min(64,group.getChildCount());i++){
+            android.widget.VideoView candidate=phoneNativeVideo(group.getChildAt(i));
+            if(candidate!=null){
+                if(result!=null&&result!=candidate)return null;
+                result=candidate;
+            }
+        }
+        return result;
+    }
+    private boolean sampleNativeFullscreen(){
+        if(custom==null)return false;
+        android.widget.VideoView video=phoneNativeVideo(custom);
+        if(video==null)return false;
+        int rawDuration=video.getDuration();
+        long duration=Math.max(0,rawDuration);
+        long position=Math.max(0,video.getCurrentPosition());
+        boolean seekable=duration>0&&
+            (video.canSeekForward()||video.canSeekBackward());
+        String state=video.isPlaying()?"playing":rawDuration<0?"starting":"paused";
+        phoneMediaObservable=true;
+        HouseholdPhoneSession.playback("{\"state\":\""+state+
+            "\",\"fullscreen\":true,\"positionMs\":"+position+
+            ",\"durationMs\":"+duration+",\"seekable\":"+seekable+
+            ",\"seekStartMs\":0,\"seekEndMs\":"+(seekable?duration:0)+"}");
+        return true;
+    }
     private void samplePhonePlayback(){
+        if(sampleNativeFullscreen())return;
         final WebView page=browser;
         if(page==null||homeRequested||detailRequested){
             phoneMediaObservable=false;
@@ -370,6 +405,23 @@ public class FlixMomoActivity extends Activity {
     }
     private void phonePlaybackCommand(String operation,long positionMs){
         if(isFinishing()||isDestroyed()||positionMs<0||positionMs>86_400_000L)return;
+        if(custom!=null){
+            android.widget.VideoView video=phoneNativeVideo(custom);
+            if(video!=null){
+                if("seek".equals(operation)){
+                    if(video.getDuration()<=0||
+                       !(video.canSeekBackward()||video.canSeekForward())){
+                        HouseholdPhoneSession.feedback("SEEK_UNAVAILABLE");return;
+                    }
+                    video.seekTo((int)Math.min(video.getDuration(),positionMs));
+                }else if("pause".equals(operation))video.pause();
+                else video.start();
+                HouseholdPhoneSession.feedback("seek".equals(operation)?"SEEK_REQUESTED":
+                    "play".equals(operation)?"PLAY_REQUESTED":"PAUSE_REQUESTED");
+                handler.postDelayed(this::samplePhonePlayback,250L);
+                return;
+            }
+        }
         final WebView page=browser;
         if(page==null||homeRequested||detailRequested){
             HouseholdPhoneSession.feedback("seek".equals(operation)?
