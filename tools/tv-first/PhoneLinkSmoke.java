@@ -20,6 +20,8 @@ public final class PhoneLinkSmoke {
         public void search(String term){got.add("Q "+term);}
         public void submitPageText(String term){got.add("E "+term);}
         public void edit(String command){got.add("EDIT "+command);}
+        public void liveText(String value){got.add("LIVE "+value);}
+        public void chooseSource(int number){got.add("SOURCE "+number);}
         public void connected(boolean c){got.add(c?"on":"off");}};
     static String hp,sess;
     static String http(int port,String target,String extra) throws Exception{
@@ -32,7 +34,12 @@ public final class PhoneLinkSmoke {
         ByteArrayOutputStream f=new ByteArrayOutputStream();f.write(0x81);
         if(d.length<126)f.write(0x80|d.length);else{f.write(0x80|126);f.write(d.length>>8);f.write(d.length&255);}
         f.write(m);for(int i=0;i<d.length;i++)f.write(d[i]^m[i&3]);o.write(f.toByteArray());o.flush();}
-    static String readFrame(InputStream in)throws IOException{int b0=in.read(),b1=in.read();int n=b1&127;byte[] d=new byte[n];int r=0;while(r<n)r+=in.read(d,r,n-r);return new String(d,StandardCharsets.UTF_8);}
+    static String readFrame(InputStream in)throws IOException{
+        int b0=in.read(),b1=in.read();int n=b1&127;
+        if(n==126)n=(in.read()<<8)|in.read();
+        byte[] d=new byte[n];int r=0;while(r<n)r+=in.read(d,r,n-r);
+        return new String(d,StandardCharsets.UTF_8);
+    }
     static String http2(int port,String target,String headers) throws Exception{
         try(Socket s=new Socket("127.0.0.1",port)){
             s.getOutputStream().write(("GET "+target+" HTTP/1.1\r\n"+headers+"\r\n").getBytes());
@@ -56,6 +63,12 @@ public final class PhoneLinkSmoke {
             ok(h.toString().startsWith("HTTP/1.1 101")&&h.toString().contains("s3pPLMBiTxaQ9kYGzzhZRbK+xOo="));   // RFC 6455 sample accept value
             String hello=readFrame(in);ok(hello.startsWith("S ")&&hello.length()==34);sess=hello.substring(2);
             ok(readFrame(in).equals("V BROWSE"));
+            ok(readFrame(in).equals("O {\"choices\":[]}"));
+            ok(readFrame(in).equals("H {\"state\":\"unknown\",\"fullscreen\":false}"));
+            String demo="{\"choices\":[{\"number\":1,\"label\":\"Player 1\"}]}";
+            s.sources(demo);ok(readFrame(in).equals("O "+demo));
+            String playing="{\"state\":\"playing\",\"fullscreen\":true}";
+            s.playback(playing);ok(readFrame(in).equals("H "+playing));
             s.mode("FULLSCREEN");ok(readFrame(in).equals("V FULLSCREEN"));
             s.mode("SEARCH");ok(readFrame(in).equals("V SEARCH"));
             s.feedback("SEARCH_SENT");ok(readFrame(in).equals("R SEARCH_SENT"));
@@ -67,6 +80,8 @@ public final class PhoneLinkSmoke {
             frame(o,"S 0 350");frame(o,"S 9000 -9000");frame(o,"A PLAY");
             frame(o,"A NEXT");frame(o,"A FULLSCREEN");frame(o,"A SEARCH");
             frame(o,"A GO");frame(o,"A MALWARE");frame(o,"A OPEN_URL");
+            frame(o,"L Avengers");frame(o,"L ");
+            frame(o,"J 1");frame(o,"J 12");frame(o,"J 13");frame(o,"J x");
             frame(o,"Q Planet Earth");
             frame(o,"E my documentary");
             frame(o,"B");frame(o,"X");
@@ -79,6 +94,9 @@ public final class PhoneLinkSmoke {
             long t1=System.nanoTime();frame(o,"P");ok(readFrame(in).equals("P"));long lag=(System.nanoTime()-t1)/1000;
             ok(got.contains("M 5 -7")&&got.contains("C")&&got.contains("K 23")&&got.contains("T hello हि"));
             ok(got.contains("Q Planet Earth")&&got.contains("E my documentary"));
+            ok(got.contains("LIVE Avengers")&&got.contains("LIVE "));
+            ok(got.contains("SOURCE 1")&&got.contains("SOURCE 12")&&
+               !got.contains("SOURCE 13"));
             ok(got.contains("EDIT BACKSPACE")&&got.contains("EDIT CLEAR"));
             ok(got.stream().filter(x->x.equals("EDIT BACKSPACE")).count()==1 &&
                got.stream().filter(x->x.equals("EDIT CLEAR")).count()==1);

@@ -261,6 +261,8 @@ public class FlixMomoActivity extends Activity {
         @Override public void search(String term){runOnUiThread(()->phoneSubmitFilmQuery(term));}
         @Override public void submitPageText(String term){runOnUiThread(()->phoneText(term,true));}
         @Override public void edit(String command){runOnUiThread(()->phoneEdit(command));}
+        @Override public void liveText(String value){runOnUiThread(()->phoneLiveText(value));}
+        @Override public void chooseSource(int number){runOnUiThread(()->phoneChooseSource(number));}
         @Override public void connected(boolean yes){runOnUiThread(()->{
             if(isFinishing()||isDestroyed())return;
             if(phoneConnected!=yes){
@@ -296,6 +298,13 @@ public class FlixMomoActivity extends Activity {
         }
     }
     private void notifyPhoneMode(){
+        boolean verified=(custom!=null||verifiedImmersive||
+             startMonitor!=null&&startMonitor.healthy());
+        boolean fullscreenSupported=verified;
+        String playbackState=verified?"playing":
+             startMonitor!=null&&startMonitor.running()?"starting":"unknown";
+        HouseholdPhoneSession.playback("{\"state\":\""+playbackState+
+            "\",\"fullscreen\":"+fullscreenSupported+"}");
         if(custom!=null||verifiedImmersive)HouseholdPhoneSession.mode("FULLSCREEN");
         else if(startMonitor!=null&&startMonitor.healthy())HouseholdPhoneSession.mode("VIDEO");
         else if(startMonitor!=null&&startMonitor.running())HouseholdPhoneSession.mode("STARTING");
@@ -319,12 +328,15 @@ public class FlixMomoActivity extends Activity {
             case "BACK":onBackPressed();return;
             case "FULLSCREEN":
                 if(custom!=null||verifiedImmersive)return;
-                if(pointerPage&&nativeControls!=null)nativeControls.pageAction("fullscreen");
+                if(startMonitor!=null&&startMonitor.healthy()&&!torWebMode){
+                    autoVerifiedFullscreen();return;
+                }
+                if(pointerPage&&nativeControls!=null)
+                    nativeControls.pageAction("fullscreen");
                 return;
             case "SOURCES":
-                if(custom!=null)exitFullScreen();
-                if(verifiedImmersive)leaveVerifiedFullscreen();
-                if(nativeControls!=null){usePage();nativeControls.openSources();}
+                // Open the choice list on the phone; never obscure the TV video.
+                if(nativeControls!=null)nativeControls.requestPhoneSources();
                 return;
             case "NEXT":
                 if(verifiedImmersive)leaveVerifiedFullscreen();
@@ -577,6 +589,7 @@ public class FlixMomoActivity extends Activity {
             public void pageObserved(org.json.JSONObject data){oneClickObserved(data);observeDetail(data);visitCache.put(data.optJSONObject("detail"));if(homeRequested&&homePanel!=null){homePanel.render(data);if(torController!=null)torController.catalogueObserved(homePanel.cardCount());}else if(detailRequested&&detailPanel!=null)detailPanel.render(data.optJSONObject("detail"));else if(!data.optBoolean("search"))liveResults.setVisibility(View.GONE);followPlayback(data);}
             public void pageAction(String action){if("watch".equals(action))requestWatch();else if("media".equals(action)){armPlayback();mediaAttempted=true;nativeControls.pageAction("media");}else nativeControls.pageAction(action);}
             public void playerSelected(){if(startMonitor!=null)startMonitor.selected();armPlayback();}
+            public void sourcesChanged(String json){HouseholdPhoneSession.sources(json);}
             public void actionOutcome(String action,String result){
                 controlTrace.emit(FlixMomoActivity.this,action,result);
                 noteInput(result);
@@ -1292,6 +1305,62 @@ public class FlixMomoActivity extends Activity {
         }
         if(!mouseActive)enterPagePointer();
         return cursor.enabled();
+    }
+    /** Live phone text replaces only the currently selected safe field. */
+    private void phoneLiveText(String raw){
+        if(isFinishing()||isDestroyed()||raw==null||raw.length()>256)return;
+        if(custom!=null||verifiedImmersive)return;
+        if(chrome!=null&&chrome.isShown()&&query!=null&&query.hasFocus()){
+            if(!raw.contentEquals(query.getText())){
+                query.setText(raw);
+                query.setSelection(query.length());
+            }
+            hideTvSoftKeyboard();
+            return;
+        }
+        if(torWebMode&&browserBar!=null&&browserBar.showing()&&
+           browserBar.address().hasFocus()){
+            android.widget.EditText addr=browserBar.address();
+            if(!raw.contentEquals(addr.getText())){
+                addr.setText(raw);addr.setSelection(addr.length());
+            }
+            hideTvSoftKeyboard();return;
+        }
+        if(browser==null||!pointerPage||!pageEditor||homeRequested||
+           detailRequested)return;
+        // Browser JS runs only in the current top document. Never bridge
+        // into third-party iframes, verification or sensitive fields.
+        final String js="(function(){try{const el=document.activeElement;"+
+          "if(!el||el===document.body||el.tagName==='IFRAME')return 'NO_FIELD';"+
+          "const t=(el.type||'').toLowerCase();"+
+          "const n=((el.name||'')+' '+(el.id||'')+' '+(el.autocomplete||'')).toLowerCase();"+
+          "if(t==='password'||t==='tel'||t==='number'||"+
+          "/(otp|pass|pin|card|cvv|secret|one-time|verification|payment)/i.test(n))"+
+          "return 'BLOCKED';"+
+          "const value="+org.json.JSONObject.quote(raw)+";"+
+          "if((el.tagName==='INPUT'&&/^(text|search|url|email)$/.test(t||'text'))||"+
+          "el.tagName==='TEXTAREA'){"+
+          "if(el.disabled||el.readOnly)return 'NO_FIELD';"+
+          "el.value=value;el.setSelectionRange(value.length,value.length);"+
+          "el.dispatchEvent(new Event('input',{bubbles:true}));return 'SYNCED';}"+
+          "if(el.isContentEditable){el.textContent=value;"+
+          "el.dispatchEvent(new Event('input',{bubbles:true}));return 'SYNCED';}"+
+          "return 'NO_FIELD';}catch(e){return 'NO_FIELD';}})()";
+        browser.evaluateJavascript(js,result->{
+            if(isFinishing()||isDestroyed())return;
+            if(result!=null&&result.contains("BLOCKED"))
+                HouseholdPhoneSession.feedback("FIELD_BLOCKED");
+        });
+    }
+    /** Select only a currently observed, numbered source. */
+    private void phoneChooseSource(int number){
+        if(number<1||number>12||nativeControls==null||custom!=null)return;
+        if(verifiedImmersive)leaveVerifiedFullscreen();
+        if(!pointerPage||homeRequested||detailRequested)return;
+        // Do not open the native sources popup. The phone owns its own list.
+        usePage();
+        if(!nativeControls.selectPhoneNumber(number))
+            nativeControls.requestPhoneSources();
     }
     /** Backspace or clear only the active non-sensitive text field.
      * Never inject global keys or inspect cross-origin iframe contents. */

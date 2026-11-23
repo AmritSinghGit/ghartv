@@ -54,6 +54,8 @@ final class HouseholdPhoneSession {
             @Override public void search(String term){PhoneLinkServer.Sink s=foreground;if(s!=null)s.search(term);}
             @Override public void submitPageText(String term){PhoneLinkServer.Sink s=foreground;if(s!=null)s.submitPageText(term);}
             @Override public void edit(String command){PhoneLinkServer.Sink s=foreground;if(s!=null)s.edit(command);}
+            @Override public void liveText(String value){PhoneLinkServer.Sink s=foreground;if(s!=null)s.liveText(value);}
+            @Override public void chooseSource(int number){PhoneLinkServer.Sink s=foreground;if(s!=null)s.chooseSource(number);}
             @Override public void connected(boolean yes){
                 connected=yes;
                 PhoneLinkServer.Sink s=foreground;if(s!=null)s.connected(yes);
@@ -63,6 +65,8 @@ final class HouseholdPhoneSession {
     static boolean connected(){return server!=null&&server.isRunning()&&server.isConnected();}
     static void mode(String mode){PhoneLinkServer s=server;if(s!=null&&s.isRunning())s.mode(mode);}
     static void feedback(String code){PhoneLinkServer s=server;if(s!=null&&s.isRunning())s.feedback(code);}
+    static void sources(String json){PhoneLinkServer s=server;if(s!=null&&s.isRunning())s.sources(json);}
+    static void playback(String json){PhoneLinkServer s=server;if(s!=null&&s.isRunning())s.playback(json);}
     static void attach(PhoneLinkServer.Sink sink){
         foreground=sink;
         if(sink!=null)sink.connected(connected());

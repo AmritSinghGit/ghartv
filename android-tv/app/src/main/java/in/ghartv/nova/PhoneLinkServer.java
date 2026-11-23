@@ -38,6 +38,10 @@ public final class PhoneLinkServer {
         default void submitPageText(String term) {}
         /** Explicit editing of the currently selected safe TV field. */
         default void edit(String command) {}
+        /** Bounded, complete current phone draft; empty string clears field. */
+        default void liveText(String value) {}
+        /** Source number from the actually observed provider controls. */
+        default void chooseSource(int number) {}
     }
 
     static final int MAX_FRAME = 4096;
@@ -68,6 +72,30 @@ public final class PhoneLinkServer {
             Thread t=new Thread(r,"ghartv-phone-network-writer");t.setDaemon(true);return t;
         });
     private volatile String lastMode="BROWSE";
+    private volatile String lastSources="{\"choices\":[]}";
+    private volatile String lastPlayback="{\"state\":\"unknown\",\"fullscreen\":false}";
+    public void playback(String json){
+        if(json==null||json.length()>250||!json.startsWith("{\"state\":"))return;
+        if(json.equals(lastPlayback))return;
+        lastPlayback=json;
+        sendAsync("H "+json);
+    }
+    /** Only source labels/numbers/badges, no URLs, iframe state or credentials. */
+    public void sources(String json){
+        if(json==null||json.length()>3500||!json.startsWith("{\"choices\":"))return;
+        if(json.equals(lastSources))return;
+        lastSources=json;
+        sendAsync("O "+json);
+    }
+    private void sendAsync(String msg){
+        final OutputStream out=activeOutput;
+        if(out==null||outbound.isShutdown())return;
+        try{outbound.execute(()->{
+            if(activeOutput!=out||stopped)return;
+            try{writeFrame(out,1,msg.getBytes(StandardCharsets.UTF_8));}
+            catch(IOException ignored){}
+        });}catch(java.util.concurrent.RejectedExecutionException ignored){}
+    }
     /** No text/URL/secrets in protocol feedback; codes are strictly bounded. */
     public void feedback(String code){
         if(!("SEARCH_SENT".equals(code)||"INVALID_QUERY".equals(code)||
@@ -229,6 +257,8 @@ public final class PhoneLinkServer {
                 sink.connected(true);
                 writeFrame(out, 1, ("S " + sess).getBytes(StandardCharsets.UTF_8));
                 mode(lastMode);
+                sendAsync("O "+lastSources);
+                sendAsync("H "+lastPlayback);
                 try { frames(in, out); } finally {
                     activeOutput=null;
                     synchronized (this) { connected = false; dropped = System.currentTimeMillis(); }
@@ -296,6 +326,11 @@ public final class PhoneLinkServer {
                 // "type" and "Go" messages whose focus can diverge.
                 case 'Q': if(m.startsWith("Q ")&&m.length()<=258)sink.search(m.substring(2));return true;
                 case 'E': if(m.startsWith("E ")&&m.length()<=258)sink.submitPageText(m.substring(2));return true;
+                case 'L': if(m.startsWith("L ")&&m.length()<=258)sink.liveText(m.substring(2));return true;
+                case 'J': {
+                    if(!m.matches("J (?:[1-9]|1[0-2])"))return true;
+                    sink.chooseSource(Integer.parseInt(m.substring(2)));return true;
+                }
                 // B and X are exact, bounded edits: no arbitrary JavaScript,
                 // delete key spam or remote injection into secure fields.
                 case 'B': if("B".equals(m))sink.edit("BACKSPACE");return true;

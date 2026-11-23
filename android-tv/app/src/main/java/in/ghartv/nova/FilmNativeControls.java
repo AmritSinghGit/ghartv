@@ -26,6 +26,8 @@ final class FilmNativeControls {
         default void mouse(){} default void fullscreen(){} default void controlsVisibility(boolean visible){}
         default boolean pageIsVisible(){return true;}
         default void playerSelected(){} default void actionOutcome(String action,String state){} default void pageObserved(JSONObject data){} default void pageAction(String action){} default void verificationRequired(){}
+        /** Sanitized observed source labels for the local, paired phone UI. */
+        default void sourcesChanged(String json) {}
     }
     private final Activity activity;
     private final View chrome;
@@ -55,6 +57,7 @@ final class FilmNativeControls {
     private int detectedPlayers;private boolean playerTruncated;
     private long lastPosterKey,selectedAt;
     private int generation,probeCount;private long probeBegan=SystemClock.elapsedRealtime();
+    private String lastPhoneSources="";
     private boolean documentReadySeen;
     // Enabled for *observable* top-document media errors only. Opaque iframe
     // playback is never assumed dead or switched without the viewer's choice.
@@ -78,7 +81,55 @@ final class FilmNativeControls {
     private int dp(int n){return TvUi.dp(activity,n);}
     private Button add(LinearLayout row,String title,Runnable click){Button b=TvUi.button(activity,title,false);b.setTextSize(13);b.setOnClickListener(v->{handler.removeCallbacks(hide);click.run();});row.addView(b);return b;}
     void attach(WebView web){documentReadySeen=false;probeBegan=SystemClock.elapsedRealtime();pageActions.clear();posterActions.clear();pageBusy=false;browser=web;generation++;reading=false;posterBusy=false;postersReady=false;}
-    void started(){documentReadySeen=false;cancelPageTouch();dismissedByViewer=false;expectedWatchLabel="";host.controlsVisibility(false);pageActions.clear();posterActions.clear();postersReady=false;posterBusy=false;playerTrayAnnounced=false;mediaCandidates=0;pageBusy=false;detailFocusApplied=false;generation++;handler.removeCallbacksAndMessages(null);reading=false;pending=false;blocked=false;probeCount=0;probeBegan=SystemClock.elapsedRealtime();players=new JSONArray();snapshotUrl="";playerIdentity="";selectedByViewer=false;selected="";preferredAutoAttempted=false;attempted.clear();choiceView.setVisibility(View.GONE);tray.setVisibility(View.GONE);}
+    private void sendPhoneSources(){
+        JSONArray out=new JSONArray();
+        if(browser!=null&&snapshotUrl.equals(browser.getUrl())&&host.pageIsVisible()){
+            for(int i=0;i<players.length();i++){
+                JSONObject p=players.optJSONObject(i);if(p==null)continue;
+                String label=p.optString("label");
+                java.util.regex.Matcher m=java.util.regex.Pattern.compile("(?i)^(?:player|server|source)\\s*#?\\s*(\\d{1,2})$").matcher(label);
+                if(!m.matches())continue;
+                int number=Integer.parseInt(m.group(1));
+                if(number<1||number>12)continue;
+                JSONObject q=new JSONObject();
+                try{
+                    q.put("number",number);
+                    q.put("label",label);
+                    JSONArray badges=p.optJSONArray("badges");
+                    StringBuilder shortBadges=new StringBuilder();
+                    if(badges!=null)for(int j=0;j<Math.min(3,badges.length());j++){
+                        String b=badges.optString(j).replaceAll("[^A-Za-z0-9 ]","").trim();
+                        if(b.length()>12)b=b.substring(0,12);
+                        if(!b.isEmpty()){if(shortBadges.length()>0)shortBadges.append(", ");shortBadges.append(b);}
+                    }
+                    q.put("badges",shortBadges.toString());
+                    q.put("selected",label.equals(selected)||p.optBoolean("selected"));
+                    q.put("tried",attempted.contains(label));
+                }catch(org.json.JSONException ignored){}
+                out.put(q);
+            }
+        }
+        // Never send provider URLs, iframe payloads, titles or credentials.
+        String json="{\"choices\":"+out.toString()+",\"observed\":"+players.length()+",\"partial\":"+playerTruncated+"}";
+        if(!json.equals(lastPhoneSources)){lastPhoneSources=json;host.sourcesChanged(json);}
+    }
+    void requestPhoneSources(){
+        if(!active)return;
+        sendPhoneSources();
+        probeCount=0;probeBegan=SystemClock.elapsedRealtime();finished();
+    }
+    boolean selectPhoneNumber(int number){
+        if(!active||number<1||number>12||browser==null||blocked||pending||
+           snapshotUrl.isEmpty()||!snapshotUrl.equals(browser.getUrl())||!host.pageIsVisible())return false;
+        for(int i=0;i<players.length();i++){
+            JSONObject p=players.optJSONObject(i);if(p==null)continue;
+            if(p.optString("label").matches("(?i)^(player|server|source)\\s*#?\\s*"+number+"$")){
+                select(i);return true;
+            }
+        }
+        return false;
+    }
+    void started(){documentReadySeen=false;cancelPageTouch();dismissedByViewer=false;expectedWatchLabel="";host.controlsVisibility(false);pageActions.clear();posterActions.clear();postersReady=false;posterBusy=false;playerTrayAnnounced=false;mediaCandidates=0;pageBusy=false;detailFocusApplied=false;generation++;handler.removeCallbacksAndMessages(null);reading=false;pending=false;blocked=false;probeCount=0;probeBegan=SystemClock.elapsedRealtime();players=new JSONArray();snapshotUrl="";playerIdentity="";selectedByViewer=false;selected="";preferredAutoAttempted=false;attempted.clear();choiceView.setVisibility(View.GONE);tray.setVisibility(View.GONE);sendPhoneSources();}
     // A slow document load must not spend the observation window before the
     // WebView can expose it. Commit/finish notifications renew it only once per
     // navigation; Menu and ordinary polling still use finished() without renewal.
@@ -134,7 +185,8 @@ final class FilmNativeControls {
                         }
                     }
                 }
-                if(host.pageIsVisible()&&data.optBoolean("search"))enablePosters(actual);
+                sendPhoneSources();
+        if(host.pageIsVisible()&&data.optBoolean("search"))enablePosters(actual);
                 else if(!quiet&&host.pageIsVisible()&&players.length()==0&&!detailFocusApplied&&source.hasFocus()){detailFocusApplied=true;pageAction("focus");}
                 if(!quiet&&!data.optBoolean("search")&&players.length()>0&&!playerTrayAnnounced&&!selectedByViewer&&!pageBusy&&!dismissedByViewer){playerTrayAnnounced=true;state.setText(players.length()+" player choices detected"+(playerTruncated?" · partial list":"")+" · Menu opens controls");showTray(!data.optBoolean("mediaPlaying"));}
                 if(selectedByViewer&&SystemClock.elapsedRealtime()-selectedAt>=5000&&autoNext&&data.optBoolean("mediaObservable")&&data.optInt("mediaError")>0&&!pending)next(false);
@@ -237,7 +289,17 @@ final class FilmNativeControls {
         source.evaluateJavascript(FilmPageSnapshot.select(snapshotUrl,index,label),raw->{
             if(!active||browser!=source||generation!=token)return;pending=false;
             try{JSONObject result=decode(raw);if(!"SELECTION_REQUESTED".equals(result.optString("state"))){state.setText("Provider choices changed. Reopen Players to refresh.");probeCount=0;finished();showTray(false);return;}
-                host.nativeMode();selected=label;lastProofTitleUrl=snapshotUrl;lastProofPlayer=label;selectedAt=SystemClock.elapsedRealtime();attempted.add(label);selectedByViewer=true;choiceView.setVisibility(View.GONE);chrome.setVisibility(View.GONE);state.setText(label+" selected · Menu opens Sources · playback not verified");hideAll();handler.removeCallbacks(slow);host.playerSelected();probeCount=0;finished();
+                host.nativeMode();selected=label;lastProofTitleUrl=snapshotUrl;lastProofPlayer=label;selectedAt=SystemClock.elapsedRealtime();attempted.add(label);selectedByViewer=true;choiceView.setVisibility(View.GONE);chrome.setVisibility(View.GONE);state.setText(label+" selected · Menu opens Sources · playback not verified");hideAll();handler.removeCallbacks(slow);
+                // Keep focus on the single visible player, not the sources menu.
+                source.requestFocus();
+                final int chosenGeneration=generation;
+                handler.postDelayed(()->{
+                    if(active&&browser==source&&generation==chosenGeneration&&
+                       snapshotUrl.equals(source.getUrl())&&host.pageIsVisible())
+                        source.evaluateJavascript(FilmPlaybackProbe.reveal(),null);
+                },850L);
+                host.playerSelected();probeCount=0;probeBegan=SystemClock.elapsedRealtime();
+                sendPhoneSources();finished();
             }catch(Exception e){state.setText("Selection not confirmed. Use page or refresh Players.");showTray(false);}
         });
     }

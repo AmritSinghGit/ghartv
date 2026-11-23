@@ -5,8 +5,8 @@ final class FilmStartBudget {
     enum State {IDLE, STARTING, NEXT, PLAYING, PAUSED, MANUAL, EXHAUSTED, CANCELLED}
     // A legitimately slow source can take 1-2 minutes to begin. Unknown embedded
     // frame health never justifies automatically trying another source.
-    static final long START_TIMEOUT_MS=150000, TOTAL_TIMEOUT_MS=480000, PROGRESS_INTERVAL_MS=1000;
-    static final int MAX_ATTEMPTS=3;
+    static final long START_TIMEOUT_MS=150000, TOTAL_TIMEOUT_MS=1800000, PROGRESS_INTERVAL_MS=1000;
+    static final int MAX_ATTEMPTS=12;
     State state=State.IDLE;
     long began, sourceBegan, firstFrameMs=-1, proofMs=-1, progressAt=-1;
     double progressPosition=-1;
@@ -41,7 +41,7 @@ final class FilmStartBudget {
             return state;
         }
         if(error>0||now-sourceBegan>=START_TIMEOUT_MS){
-            if(attempt>=MAX_ATTEMPTS){state=State.EXHAUSTED;reason="Three source attempts exhausted";return state;}
+            if(attempt>=MAX_ATTEMPTS){state=State.EXHAUSTED;reason="Twelve source attempts exhausted";return state;}
             attempt++;state=State.NEXT;reason=error>0?"Media error; releasing before next source":"Start timed out; releasing before next source";
         }
         return state;
