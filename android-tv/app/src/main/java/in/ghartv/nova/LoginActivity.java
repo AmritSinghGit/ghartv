@@ -1,12 +1,15 @@
 package in.ghartv.nova;
 
 import android.app.Activity;
+import android.content.Context;
 import android.content.Intent;
+import android.content.res.Configuration;
 import android.graphics.Color;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
 import android.text.InputType;
+import android.util.DisplayMetrics;
 import android.view.Gravity;
 import android.view.KeyEvent;
 import android.view.View;
@@ -40,6 +43,15 @@ public final class LoginActivity extends Activity {
     private ProgressBar progress;
     private boolean otpSent;
 
+    /** Owner 18 Nov 15:44: the proportions of the bigger picture (960 dp wide: big title, big pad keys, air) at every TV size. A 1080p TV usually reports a small density (1440 dp wide), which made everything look small; this screen is laid out as if the TV were always 960 dp wide. */
+    @Override protected void attachBaseContext(Context base) {
+        DisplayMetrics metrics = base.getResources().getDisplayMetrics();
+        int longSide = Math.max(metrics.widthPixels, metrics.heightPixels);
+        Configuration config = new Configuration(base.getResources().getConfiguration());
+        config.densityDpi = Math.max(160, Math.min(640, Math.round(longSide / 6f)));
+        super.attachBaseContext(base.createConfigurationContext(config));
+    }
+
     @Override protected void onCreate(Bundle state) {
         super.onCreate(state);
         requestWindowFeature(Window.FEATURE_NO_TITLE);
@@ -49,11 +61,11 @@ public final class LoginActivity extends Activity {
         api = new JioApiClient(this);
         setContentView(buildUi());
         Telemetry.screen(this, "login");
-        mainHandler.postDelayed(() -> Telemetry.maybeRequestConsent(this), 900L);
+        // The diagnostics question is asked after login (MainActivity), not over this screen (owner/CTO 18 Nov).
 
         JioSession existing = JioSession.load(this);
         if (!existing.mobile.isEmpty()) mobile.setText(existing.mobile);
-        mobile.requestFocus();
+        padStart.requestFocus();
         executor.execute(api::prewarm);
     }
 
@@ -67,6 +79,10 @@ public final class LoginActivity extends Activity {
         super.onDestroy();
     }
 
+    private Button padStart;
+    private TextView heading;
+
+    /** One screen (owner 18 Nov 14:52: keep the info on the left, direct login, fewest screens and presses). Left: brand, title, a short line, a small channel card. Right: the number or OTP, one action and the app's own pad. Nothing has a fixed height that can push content off the screen: the left column wraps its content, the pad takes the remaining height by weight. */
     private View buildUi() {
         FrameLayout root = new FrameLayout(this);
         root.setBackgroundColor(TvUi.BG);
@@ -74,13 +90,12 @@ public final class LoginActivity extends Activity {
 
         LinearLayout shell = new LinearLayout(this);
         shell.setOrientation(LinearLayout.HORIZONTAL);
-        shell.setPadding(TvUi.dp(this, 44), TvUi.dp(this, 34), TvUi.dp(this, 44), TvUi.dp(this, 34));
+        shell.setPadding(TvUi.dp(this, 44), TvUi.dp(this, 30), TvUi.dp(this, 44), TvUi.dp(this, 30));
         root.addView(shell, new FrameLayout.LayoutParams(-1, -1));
-
-        shell.addView(buildStory(), new LinearLayout.LayoutParams(0, -1, .52f));
-        LinearLayout.LayoutParams panelParams = new LinearLayout.LayoutParams(0, -1, .48f);
-        panelParams.leftMargin = TvUi.dp(this, 34);
-        shell.addView(buildLoginPanel(), panelParams);
+        shell.addView(buildStory(), new LinearLayout.LayoutParams(0, -1, .46f));
+        LinearLayout.LayoutParams panelParams = new LinearLayout.LayoutParams(0, -1, .54f);
+        panelParams.leftMargin = TvUi.dp(this, 30);
+        shell.addView(buildEntry(), panelParams);
         return root;
     }
 
@@ -88,177 +103,131 @@ public final class LoginActivity extends Activity {
         LinearLayout story = new LinearLayout(this);
         story.setOrientation(LinearLayout.VERTICAL);
         story.setGravity(Gravity.CENTER_VERTICAL);
-        story.setPadding(TvUi.dp(this, 4), 0, TvUi.dp(this, 14), 0);
+        story.setPadding(TvUi.dp(this, 4), 0, TvUi.dp(this, 10), 0);
 
         LinearLayout brandRow = new LinearLayout(this);
         brandRow.setGravity(Gravity.CENTER_VERTICAL);
-        TextView brand = TvUi.label(this, "GHAR TV", 23, TvUi.TEXT, true);
+        TextView brand = TvUi.label(this, "GHAR TV", 26, TvUi.TEXT, true);
         brand.setLetterSpacing(.14f);
-        brandRow.addView(brand, new LinearLayout.LayoutParams(-2, TvUi.dp(this, 40)));
-        Button jio = TvUi.button(this, "Movies & services", false);
-        jio.setOnClickListener(v -> startActivity(new Intent(this, MovieHubActivity.class)));
-        LinearLayout.LayoutParams jioParams = new LinearLayout.LayoutParams(-2, TvUi.dp(this, 40));
+        brandRow.addView(brand, new LinearLayout.LayoutParams(-2, -2));
+        TextView jio = TvUi.badge(this, "JIO LIVE", TvUi.MINT);
+        LinearLayout.LayoutParams jioParams = new LinearLayout.LayoutParams(-2, TvUi.dp(this, 28));
         jioParams.leftMargin = TvUi.dp(this, 16);
         brandRow.addView(jio, jioParams);
-        story.addView(brandRow, new LinearLayout.LayoutParams(-1, TvUi.dp(this, 44)));
+        story.addView(brandRow, new LinearLayout.LayoutParams(-1, -2));
 
-        TextView title = TvUi.label(this, "Live television, built for your remote.", 38, TvUi.TEXT, true);
+        TextView title = TvUi.label(this, "Live television, built for your remote.", 34, TvUi.TEXT, true);
         title.setMaxLines(3);
         LinearLayout.LayoutParams titleParams = new LinearLayout.LayoutParams(-1, -2);
-        titleParams.topMargin = TvUi.dp(this, 18);
+        titleParams.topMargin = TvUi.dp(this, 16);
         story.addView(title, titleParams);
 
         TextView body = TvUi.label(this,
-                "Connect the Jio mobile number linked to your account. GharTV then becomes your live channel guide and player — one screen, one remote, no YouTube shortcuts.",
+                "Connect the Jio number linked to your account. Your channel guide and player open on one screen, controlled by one remote.",
                 15, TvUi.MUTED, false);
-        body.setMaxLines(5);
+        body.setMaxLines(4);
         body.setLineSpacing(TvUi.dp(this, 3), 1f);
         LinearLayout.LayoutParams bodyParams = new LinearLayout.LayoutParams(-1, -2);
-        bodyParams.topMargin = TvUi.dp(this, 16);
+        bodyParams.topMargin = TvUi.dp(this, 14);
         story.addView(body, bodyParams);
 
         LinearLayout preview = new LinearLayout(this);
         preview.setOrientation(LinearLayout.VERTICAL);
-        preview.setPadding(TvUi.dp(this, 20), TvUi.dp(this, 16), TvUi.dp(this, 20), TvUi.dp(this, 16));
+        preview.setPadding(TvUi.dp(this, 18), TvUi.dp(this, 14), TvUi.dp(this, 18), TvUi.dp(this, 14));
         preview.setBackground(TvUi.gradient(Color.argb(222, 6, 23, 35), Color.argb(224, 8, 47, 58),
                 26, Color.argb(100, 115, 245, 194), 1, this));
-        LinearLayout.LayoutParams previewParams = new LinearLayout.LayoutParams(-1, TvUi.dp(this, 188));
-        previewParams.topMargin = TvUi.dp(this, 24);
+        LinearLayout.LayoutParams previewParams = new LinearLayout.LayoutParams(-1, -2);
+        previewParams.topMargin = TvUi.dp(this, 20);
         story.addView(preview, previewParams);
-
         LinearLayout liveRow = new LinearLayout(this);
         liveRow.setGravity(Gravity.CENTER_VERTICAL);
-        liveRow.addView(TvUi.badge(this, "● LIVE", TvUi.MINT), new LinearLayout.LayoutParams(-2, TvUi.dp(this, 28)));
+        liveRow.addView(TvUi.badge(this, "\u25cf LIVE", TvUi.MINT), new LinearLayout.LayoutParams(-2, TvUi.dp(this, 26)));
         liveRow.addView(new View(this), new LinearLayout.LayoutParams(0, 1, 1f));
-        TextView channelNumber = TvUi.label(this, "CH 101", 16, TvUi.CYAN, true);
-        liveRow.addView(channelNumber, new LinearLayout.LayoutParams(-2, TvUi.dp(this, 28)));
-        preview.addView(liveRow, new LinearLayout.LayoutParams(-1, TvUi.dp(this, 30)));
-
-        TextView now = TvUi.label(this, "Your family’s live channels", 24, TvUi.TEXT, true);
-        LinearLayout.LayoutParams nowParams = new LinearLayout.LayoutParams(-1, TvUi.dp(this, 42));
-        nowParams.topMargin = TvUi.dp(this, 12);
+        liveRow.addView(TvUi.label(this, "CH 101", 15, TvUi.CYAN, true), new LinearLayout.LayoutParams(-2, -2));
+        preview.addView(liveRow, new LinearLayout.LayoutParams(-1, -2));
+        TextView now = TvUi.label(this, "Your family\u2019s live channels", 22, TvUi.TEXT, true);
+        LinearLayout.LayoutParams nowParams = new LinearLayout.LayoutParams(-1, -2);
+        nowParams.topMargin = TvUi.dp(this, 8);
         preview.addView(now, nowParams);
-        TextView next = TvUi.label(this, "Channel numbers  •  CH ±  •  GUIDE  •  Favourites", 13, TvUi.MUTED, false);
-        preview.addView(next, new LinearLayout.LayoutParams(-1, TvUi.dp(this, 28)));
+        preview.addView(TvUi.label(this, "Channel numbers  \u2022  CH \u00b1  \u2022  GUIDE  \u2022  Favourites", 13, TvUi.MUTED, false), new LinearLayout.LayoutParams(-1, -2));
 
-        LinearLayout rail = new LinearLayout(this);
-        rail.setGravity(Gravity.CENTER_VERTICAL);
-        String[] items = {"NEWS", "HINDI", "PUNJABI", "MOVIES"};
-        for (String item : items) {
-            TextView tile = TvUi.label(this, item, 11, TvUi.TEXT, true);
-            tile.setGravity(Gravity.CENTER);
-            tile.setBackground(TvUi.rounded(Color.argb(105, 255, 255, 255), 14, Color.argb(45, 255, 255, 255), 1, this));
-            LinearLayout.LayoutParams tileParams = new LinearLayout.LayoutParams(0, TvUi.dp(this, 42), 1f);
-            tileParams.rightMargin = TvUi.dp(this, 8);
-            rail.addView(tile, tileParams);
-        }
-        LinearLayout.LayoutParams railParams = new LinearLayout.LayoutParams(-1, TvUi.dp(this, 44));
-        railParams.topMargin = TvUi.dp(this, 10);
-        preview.addView(rail, railParams);
-
-        TextView hints = TvUi.label(this,
-                "Use the TV remote for daily viewing. The Google TV phone remote makes the one-time number and OTP entry easier.",
-                12, Color.rgb(132, 161, 179), false);
-        hints.setMaxLines(2);
-        LinearLayout.LayoutParams hintsParams = new LinearLayout.LayoutParams(-1, -2);
-        hintsParams.topMargin = TvUi.dp(this, 18);
-        story.addView(hints, hintsParams);
+        LinearLayout footer = new LinearLayout(this);
+        footer.setGravity(Gravity.CENTER_VERTICAL);
+        // The build name is not shown here (it wrapped under the buttons at 4K): it is in the update check result and in Diagnostics.
+        footer.addView(new View(this), new LinearLayout.LayoutParams(0, 1, 1f));
+        Button films = TvUi.button(this, "Search without Jio login", false);
+        films.setOnClickListener(view -> startActivity(new Intent(this, FlixMomoActivity.class)));
+        footer.addView(films, new LinearLayout.LayoutParams(-2, TvUi.dp(this, 36)));
+        Button updates = TvUi.button(this, "Check update", false);
+        updates.setOnClickListener(view -> UpdateManager.check(this, true));
+        LinearLayout.LayoutParams updatesParams = new LinearLayout.LayoutParams(-2, TvUi.dp(this, 36));
+        updatesParams.leftMargin = TvUi.dp(this, 10);
+        footer.addView(updates, updatesParams);
+        LinearLayout.LayoutParams footerParams = new LinearLayout.LayoutParams(-1, -2);
+        footerParams.topMargin = TvUi.dp(this, 18);
+        story.addView(footer, footerParams);
         return story;
     }
 
-    private View buildLoginPanel() {
+    /** Right column: what is being asked, the one action, and the app's own pad below it. The pad takes the remaining height by weight, so it shrinks instead of covering anything. */
+    private View buildEntry() {
         LinearLayout card = new LinearLayout(this);
         card.setOrientation(LinearLayout.VERTICAL);
-        card.setPadding(TvUi.dp(this, 30), TvUi.dp(this, 24), TvUi.dp(this, 30), TvUi.dp(this, 22));
+        card.setPadding(TvUi.dp(this, 22), TvUi.dp(this, 16), TvUi.dp(this, 22), TvUi.dp(this, 14));
         card.setBackground(TvUi.gradient(Color.argb(244, 6, 18, 29), Color.argb(242, 8, 31, 43),
                 30, Color.argb(110, 83, 228, 255), 1.3f, this));
 
-        LinearLayout top = new LinearLayout(this);
-        top.setGravity(Gravity.CENTER_VERTICAL);
         step = TvUi.badge(this, "1  CONNECT", TvUi.MINT);
-        top.addView(step, new LinearLayout.LayoutParams(-2, TvUi.dp(this, 30)));
-        top.addView(new View(this), new LinearLayout.LayoutParams(0, 1, 1f));
-        TextView secure = TvUi.label(this, "PRIVATE ON THIS TV", 11, TvUi.CYAN, true);
-        secure.setLetterSpacing(.07f);
-        top.addView(secure, new LinearLayout.LayoutParams(-2, TvUi.dp(this, 30)));
-        card.addView(top, new LinearLayout.LayoutParams(-1, TvUi.dp(this, 32)));
+        card.addView(step, new LinearLayout.LayoutParams(-2, TvUi.dp(this, 30)));
 
-        TextView heading = TvUi.label(this, "Connect JioTV", 30, TvUi.TEXT, true);
-        LinearLayout.LayoutParams headingParams = new LinearLayout.LayoutParams(-1, TvUi.dp(this, 48));
-        headingParams.topMargin = TvUi.dp(this, 12);
+        heading = TvUi.label(this, "Your Jio number", 26, TvUi.TEXT, true);
+        LinearLayout.LayoutParams headingParams = new LinearLayout.LayoutParams(-1, -2);
+        headingParams.topMargin = TvUi.dp(this, 8);
         card.addView(heading, headingParams);
-
-        TextView explainer = TvUi.label(this,
-                "Enter the 10-digit mobile number that receives your Jio OTP.",
-                15, TvUi.MUTED, false);
-        card.addView(explainer, new LinearLayout.LayoutParams(-1, TvUi.dp(this, 34)));
 
         mobile = field("10-digit Jio mobile number", InputType.TYPE_CLASS_PHONE);
         mobile.setId(View.generateViewId());
-        mobile.setImeOptions(EditorInfo.IME_ACTION_GO);
-        mobile.setOnEditorActionListener((v, actionId, event) -> {
-            if (actionId == EditorInfo.IME_ACTION_GO || actionId == EditorInfo.IME_ACTION_DONE) {
-                sendOtp();
-                return true;
-            }
-            return false;
-        });
-        LinearLayout.LayoutParams mobileParams = new LinearLayout.LayoutParams(-1, TvUi.dp(this, 60));
-        mobileParams.topMargin = TvUi.dp(this, 12);
+        LinearLayout.LayoutParams mobileParams = new LinearLayout.LayoutParams(-1, TvUi.dp(this, 54));
+        mobileParams.topMargin = TvUi.dp(this, 10);
         card.addView(mobile, mobileParams);
 
-        send = TvUi.button(this, "Send OTP", true);
-        send.setId(View.generateViewId());
-        send.setOnClickListener(view -> sendOtp());
-        LinearLayout.LayoutParams sendParams = new LinearLayout.LayoutParams(-1, TvUi.dp(this, 56));
-        sendParams.topMargin = TvUi.dp(this, 12);
-        card.addView(send, sendParams);
-
-        otpDestination = TvUi.label(this, "", 13, TvUi.MINT, true);
+        otpDestination = TvUi.label(this, "", 15, TvUi.MINT, true);
         otpDestination.setVisibility(View.GONE);
-        LinearLayout.LayoutParams destinationParams = new LinearLayout.LayoutParams(-1, TvUi.dp(this, 26));
-        destinationParams.topMargin = TvUi.dp(this, 10);
+        LinearLayout.LayoutParams destinationParams = new LinearLayout.LayoutParams(-1, -2);
+        destinationParams.topMargin = TvUi.dp(this, 8);
         card.addView(otpDestination, destinationParams);
 
-        otp = field("Enter OTP", InputType.TYPE_CLASS_NUMBER | InputType.TYPE_NUMBER_VARIATION_PASSWORD);
+        otp = field("OTP from Jio", InputType.TYPE_CLASS_NUMBER | InputType.TYPE_NUMBER_VARIATION_PASSWORD);
         otp.setId(View.generateViewId());
-        otp.setImeOptions(EditorInfo.IME_ACTION_DONE);
         otp.setVisibility(View.GONE);
-        otp.setOnEditorActionListener((v, actionId, event) -> {
-            if (actionId == EditorInfo.IME_ACTION_DONE || actionId == EditorInfo.IME_ACTION_GO) {
-                verifyOtp();
-                return true;
-            }
-            return false;
-        });
-        LinearLayout.LayoutParams otpParams = new LinearLayout.LayoutParams(-1, TvUi.dp(this, 60));
+        LinearLayout.LayoutParams otpParams = new LinearLayout.LayoutParams(-1, TvUi.dp(this, 54));
         otpParams.topMargin = TvUi.dp(this, 8);
         card.addView(otp, otpParams);
 
+        send = TvUi.button(this, "Send OTP", true);
+        send.setId(View.generateViewId());
+        send.setTextSize(19);
+        send.setOnClickListener(view -> sendOtp());
+        LinearLayout.LayoutParams sendParams = new LinearLayout.LayoutParams(-1, TvUi.dp(this, 52));
+        sendParams.topMargin = TvUi.dp(this, 10);
+        card.addView(send, sendParams);
+
         verify = TvUi.button(this, "Verify and open live TV", true);
         verify.setId(View.generateViewId());
+        verify.setTextSize(19);
         verify.setVisibility(View.GONE);
         verify.setOnClickListener(view -> verifyOtp());
-        LinearLayout.LayoutParams verifyParams = new LinearLayout.LayoutParams(-1, TvUi.dp(this, 58));
-        verifyParams.topMargin = TvUi.dp(this, 12);
+        LinearLayout.LayoutParams verifyParams = new LinearLayout.LayoutParams(-1, TvUi.dp(this, 52));
+        verifyParams.topMargin = TvUi.dp(this, 10);
         card.addView(verify, verifyParams);
 
         changeNumber = TvUi.button(this, "Change number", false);
         changeNumber.setId(View.generateViewId());
         changeNumber.setVisibility(View.GONE);
         changeNumber.setOnClickListener(view -> resetToMobile());
-        LinearLayout.LayoutParams changeParams = new LinearLayout.LayoutParams(-1, TvUi.dp(this, 44));
-        changeParams.topMargin = TvUi.dp(this, 8);
+        LinearLayout.LayoutParams changeParams = new LinearLayout.LayoutParams(-1, TvUi.dp(this, 40));
+        changeParams.topMargin = TvUi.dp(this, 6);
         card.addView(changeNumber, changeParams);
-
-        mobile.setNextFocusDownId(send.getId());
-        send.setNextFocusUpId(mobile.getId());
-        send.setNextFocusDownId(otp.getId());
-        otp.setNextFocusUpId(send.getId());
-        otp.setNextFocusDownId(verify.getId());
-        verify.setNextFocusUpId(otp.getId());
-        verify.setNextFocusDownId(changeNumber.getId());
-        changeNumber.setNextFocusUpId(verify.getId());
 
         LinearLayout statusRow = new LinearLayout(this);
         statusRow.setGravity(Gravity.CENTER_VERTICAL);
@@ -266,25 +235,78 @@ public final class LoginActivity extends Activity {
         progress.setIndeterminate(true);
         progress.setVisibility(View.GONE);
         progress.setIndeterminateTintList(TvUi.tint(TvUi.MINT));
-        statusRow.addView(progress, new LinearLayout.LayoutParams(TvUi.dp(this, 34), TvUi.dp(this, 34)));
-        status = TvUi.label(this, "OTP is verified by Jio and is never stored by GharTV.", 13, TvUi.MUTED, false);
-        status.setMaxLines(3);
-        LinearLayout.LayoutParams statusText = new LinearLayout.LayoutParams(0, -1, 1f);
-        statusText.leftMargin = TvUi.dp(this, 12);
+        statusRow.addView(progress, new LinearLayout.LayoutParams(TvUi.dp(this, 26), TvUi.dp(this, 26)));
+        status = TvUi.label(this, "The OTP is checked by Jio and never stored by GharTV.", 13, TvUi.MUTED, false);
+        status.setMaxLines(2);
+        LinearLayout.LayoutParams statusText = new LinearLayout.LayoutParams(0, -2, 1f);
+        statusText.leftMargin = TvUi.dp(this, 10);
         statusRow.addView(status, statusText);
-        LinearLayout.LayoutParams statusParams = new LinearLayout.LayoutParams(-1, 0, 1f);
-        statusParams.topMargin = TvUi.dp(this, 14);
+        LinearLayout.LayoutParams statusParams = new LinearLayout.LayoutParams(-1, -2);
+        statusParams.topMargin = TvUi.dp(this, 8);
         card.addView(statusRow, statusParams);
 
-        LinearLayout footer = new LinearLayout(this);
-        footer.setGravity(Gravity.CENTER_VERTICAL);
-        TextView version = TvUi.label(this, "TV TEST CANDIDATE  •  " + BuildConfig.VERSION_NAME, 11, Color.rgb(117, 149, 167), true);
-        footer.addView(version, new LinearLayout.LayoutParams(0, TvUi.dp(this, 36), 1f));
-        Button updates = TvUi.button(this, "Check update", false);
-        updates.setOnClickListener(view -> UpdateManager.check(this, true));
-        footer.addView(updates, new LinearLayout.LayoutParams(TvUi.dp(this, 128), TvUi.dp(this, 38)));
-        card.addView(footer, new LinearLayout.LayoutParams(-1, TvUi.dp(this, 40)));
+        LinearLayout.LayoutParams padParams = new LinearLayout.LayoutParams(-1, 0, 1f);
+        padParams.topMargin = TvUi.dp(this, 10);
+        card.addView(buildPad(), padParams);
+
+        send.setNextFocusDownId(padStart.getId());
+        verify.setNextFocusDownId(changeNumber.getId());
+        changeNumber.setNextFocusDownId(padStart.getId());
         return card;
+    }
+
+    /** 3 x 4 pad drawn by the app (the system pad is never shown): 1-9, delete, 0, go. Rows and keys share the height by weight. */
+    private View buildPad() {
+        LinearLayout pad = new LinearLayout(this);
+        pad.setOrientation(LinearLayout.VERTICAL);
+        pad.setBackground(TvUi.gradient(Color.argb(244, 6, 18, 29), Color.argb(242, 8, 31, 43), 26, Color.argb(110, 83, 228, 255), 1.3f, this));
+        pad.setPadding(TvUi.dp(this, 12), TvUi.dp(this, 12), TvUi.dp(this, 12), TvUi.dp(this, 12));
+        String[][] keys = {{"1", "2", "3"}, {"4", "5", "6"}, {"7", "8", "9"}, {"\u232b", "0", "\u2192"}};
+        Button[][] grid=new Button[4][3];
+        pad.setClipChildren(false);pad.setClipToPadding(false);
+        pad.setMinimumHeight(TvUi.dp(this,236));
+        for(int row=0;row<4;row++){
+            LinearLayout line=new LinearLayout(this);
+            line.setOrientation(LinearLayout.HORIZONTAL);
+            line.setWeightSum(3f);line.setClipChildren(false);line.setClipToPadding(false);
+            for(int col=0;col<3;col++){
+                final String label=keys[row][col];
+                Button key=TvUi.button(this,label,label.equals("\u2192"));
+                key.setTextSize(25);key.setGravity(Gravity.CENTER);
+                key.setPadding(0,0,0,0);key.setMinWidth(0);key.setMinHeight(0);
+                key.setId(View.generateViewId());
+                key.setOnClickListener(v->padKey(label));
+                LinearLayout.LayoutParams kp=new LinearLayout.LayoutParams(0,-1,1f);
+                kp.setMargins(TvUi.dp(this,4),TvUi.dp(this,4),TvUi.dp(this,4),TvUi.dp(this,4));
+                line.addView(key,kp);grid[row][col]=key;
+                if(label.equals("5"))padStart=key;
+            }
+            pad.addView(line,new LinearLayout.LayoutParams(-1,0,1f));
+        }
+        for(int row=0;row<4;row++)for(int col=0;col<3;col++){
+            Button k=grid[row][col];
+            k.setNextFocusLeftId(grid[row][Math.max(0,col-1)].getId());
+            k.setNextFocusRightId(grid[row][Math.min(2,col+1)].getId());
+            k.setNextFocusUpId(grid[Math.max(0,row-1)][col].getId());
+            k.setNextFocusDownId(grid[Math.min(3,row+1)][col].getId());
+        }
+        return pad;
+    }
+
+    private EditText activeField() { return otpSent ? otp : mobile; }
+
+    private void padKey(String label) {
+        EditText field = activeField();
+        String text = field.getText().toString();
+        if (label.equals("\u232b")) {
+            if (!text.isEmpty()) field.setText(text.substring(0, text.length() - 1));
+        } else if (label.equals("\u2192")) {
+            if (otpSent) verifyOtp(); else sendOtp();
+        } else if (text.length() < (otpSent ? 6 : 10)) {
+            field.setText(text + label);
+            // Jio's code has 6 digits: the 6th one verifies by itself (one press fewer). A wrong code just fails and can be retyped.
+            if (otpSent && text.length() + 1 == 6) verifyOtp();
+        }
     }
 
     private EditText field(String hint, int inputType) {
@@ -296,6 +318,10 @@ public final class LoginActivity extends Activity {
         edit.setSingleLine(true);
         edit.setInputType(inputType);
         edit.setSelectAllOnFocus(false);
+        edit.setShowSoftInputOnFocus(false);
+        edit.setFocusable(false);
+        edit.setFocusableInTouchMode(false);
+        edit.setCursorVisible(false);
         edit.setPadding(TvUi.dp(this, 20), 0, TvUi.dp(this, 20), 0);
         TvUi.focusCard(edit, Color.rgb(8, 29, 43), Color.rgb(14, 69, 82), 18);
         return edit;
@@ -326,6 +352,7 @@ public final class LoginActivity extends Activity {
     private void revealOtp() {
         otpSent = true;
         step.setText("2  VERIFY");
+        heading.setText("Enter the OTP");
         send.setText("Resend OTP");
         mobile.setVisibility(View.GONE);
         send.setVisibility(View.GONE);
@@ -334,12 +361,13 @@ public final class LoginActivity extends Activity {
         otp.setVisibility(View.VISIBLE);
         verify.setVisibility(View.VISIBLE);
         changeNumber.setVisibility(View.VISIBLE);
-        otp.requestFocus();
+        padStart.requestFocus();
     }
 
     private void resetToMobile() {
         otpSent = false;
         step.setText("1  CONNECT");
+        heading.setText("Your Jio number");
         mobile.setVisibility(View.VISIBLE);
         send.setVisibility(View.VISIBLE);
         send.setText("Send OTP");
@@ -348,17 +376,17 @@ public final class LoginActivity extends Activity {
         otp.setVisibility(View.GONE);
         verify.setVisibility(View.GONE);
         changeNumber.setVisibility(View.GONE);
-        status.setText("OTP is verified by Jio and is never stored by GharTV.");
+        status.setText("The OTP is checked by Jio and never stored by GharTV.");
         status.setTextColor(TvUi.MUTED);
-        mobile.requestFocus();
+        padStart.requestFocus();
     }
 
     private void sendOtp() {
+        if (!send.isEnabled()) return;   // a request is already running
         String number = normalizedMobile();
         if (number.length() != 10 || number.charAt(0) < '6') {
             status.setText("Enter a valid 10-digit Indian mobile number.");
             status.setTextColor(TvUi.ERROR);
-            mobile.requestFocus();
             return;
         }
         busy(true, "Requesting OTP from Jio…");
@@ -381,18 +409,18 @@ public final class LoginActivity extends Activity {
                 mainHandler.post(() -> {
                     busy(false, readable(error) + (Telemetry.isEnabled(this) ? "  •  " + reference : ""));
                     status.setTextColor(TvUi.ERROR);
-                    send.requestFocus();
+                    padStart.requestFocus();
                 });
             }
         });
     }
 
     private void verifyOtp() {
+        if (!verify.isEnabled()) return;   // the 6th digit already started the check; the go key or OK must not start a second one
         String number = normalizedMobile();
         String code = otp.getText().toString().replaceAll("[^0-9]", "");
         if (!otpSent || code.length() < 4) {
             Toast.makeText(this, "Enter the OTP received from Jio", Toast.LENGTH_SHORT).show();
-            otp.requestFocus();
             return;
         }
         busy(true, "Verifying JioTV…");
@@ -418,7 +446,7 @@ public final class LoginActivity extends Activity {
                 mainHandler.post(() -> {
                     busy(false, readable(error) + (Telemetry.isEnabled(this) ? "  •  " + reference : ""));
                     status.setTextColor(TvUi.ERROR);
-                    otp.requestFocus();
+                    padStart.requestFocus();
                 });
             }
         });
@@ -437,10 +465,10 @@ public final class LoginActivity extends Activity {
     @Override public boolean dispatchKeyEvent(KeyEvent event) {
         if (event.getAction() == KeyEvent.ACTION_DOWN) {
             int key = event.getKeyCode();
-            if ((key == KeyEvent.KEYCODE_ENTER || key == KeyEvent.KEYCODE_DPAD_CENTER) && otp.hasFocus() && otpSent) {
-                verifyOtp();
-                return true;
-            }
+            // The TV remote's own number keys type into the field; delete removes the last digit.
+            if (key >= KeyEvent.KEYCODE_0 && key <= KeyEvent.KEYCODE_9) { padKey(String.valueOf(key - KeyEvent.KEYCODE_0)); return true; }
+            if (key >= KeyEvent.KEYCODE_NUMPAD_0 && key <= KeyEvent.KEYCODE_NUMPAD_9) { padKey(String.valueOf(key - KeyEvent.KEYCODE_NUMPAD_0)); return true; }
+            if (key == KeyEvent.KEYCODE_DEL) { padKey("\u232b"); return true; }
         }
         return super.dispatchKeyEvent(event);
     }

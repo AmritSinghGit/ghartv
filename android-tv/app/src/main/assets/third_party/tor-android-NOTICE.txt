@@ -1,0 +1,20 @@
+GharTV Review 55 includes tor-android 0.4.8.22 and jtorctl 0.4.5.7 from the Guardian Project solely for an explicit, app-local, FlixMomo-only fallback.
+Source: https://github.com/guardianproject/tor-android
+
+Guardian Project / Orbot 3-clause BSD notice
+Copyright (c) 2009-2010, Nathan Freitas, The Guardian Project
+
+Redistribution and use in source and binary forms, with or without modification, are permitted provided that the following conditions are met:
+1. Redistributions of source code must retain the above copyright notice, this list of conditions and the following disclaimer.
+2. Redistributions in binary form must reproduce the above copyright notice, this list of conditions and the following disclaimer in the documentation and/or other materials provided with the distribution.
+3. Neither the names of the copyright owners nor the names of contributors may be used to endorse or promote products derived from this software without specific prior written permission.
+
+THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS “AS IS” AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE, ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE.
+
+Tor license notice
+Copyright (c) 2001-2004, Roger Dingledine
+Copyright (c) 2004-2006, Roger Dingledine, Nick Mathewson
+Copyright (c) 2007-2009, The Tor Project, Inc.
+Tor is distributed under the 3-clause BSD license with the same redistribution conditions and warranty/liability disclaimer above. This product may include OpenSSL software. See the upstream LICENSE file for complete component notices.
+
+Use of Tor in GharTV does not imply endorsement by the Guardian Project or The Tor Project. It is not a guarantee of anonymity and does not bypass provider access, subscription, DRM, or certificate checks.

@@ -1,0 +1,81 @@
+name: GharTV Release80 evidence
+on:
+  push:
+    branches:
+      - release/v80-live-sources-20261123
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  validate-exact-v80-app:
+    name: Build and deterministic tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - name: Setup Java 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - name: Run deterministic TV and network tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          bash tools/tv-first/run-fix-smokes.sh
+          w=$(mktemp -d)
+          trap 'rm -rf "$w"' EXIT
+          j=android-tv/app/src/main/java/in/ghartv/nova
+          javac -encoding UTF-8 -d "$w" "$j/PhoneLinkServer.java" tools/tv-first/PhoneLinkSmoke.java
+          java -cp "$w" PhoneLinkSmoke
+          javac -encoding UTF-8 -d "$w" "$j/PhoneTextEdit.java" tools/tv-first/PhoneTextEditSmoke.java
+          java -cp "$w" in.ghartv.nova.PhoneTextEditSmoke
+          javac -encoding UTF-8 -d "$w" "$j/TorWebUrlPolicy.java" tools/tv-first/TorWebUrlPolicySmoke.java "$j/FilmStartBudget.java" tools/tv-first/FilmStartBudgetSmoke.java
+          java -cp "$w" in.ghartv.nova.TorWebUrlPolicySmoke
+          java -cp "$w" in.ghartv.nova.FilmStartBudgetSmoke
+      # ubuntu-latest has SDK command-line tools. The setup-android@v3
+      # action is currently requesting the removed legacy "tools" package.
+      - name: Install Android SDK 36 from runner command-line tools
+        shell: bash
+        run: |
+          set -euo pipefail
+          export ANDROID_HOME="${ANDROID_HOME:-/usr/local/lib/android/sdk}"
+          export ANDROID_SDK_ROOT="$ANDROID_HOME"
+          sdk="$(find "$ANDROID_HOME/cmdline-tools" -path '*/bin/sdkmanager' -type f | sort -Vr | head -1)"
+          test -n "$sdk" && test -x "$sdk"
+          yes | "$sdk" --licenses >/dev/null || true
+          "$sdk" "platforms;android-36" "build-tools;36.0.0" "platform-tools"
+          echo "ANDROID_HOME=$ANDROID_HOME" >> "$GITHUB_ENV"
+      - name: Use available JDK21 compiler for CI only
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import os
+          from pathlib import Path
+          p=Path("android-tv/app/build.gradle.kts")
+          txt=p.read_text()
+          original='options.forkOptions.executable = "/Applications/Android Studio.app/Contents/jbr/Contents/Home/bin/javac"'
+          assert original in txt, "Original v80 Mac compiler setting changed"
+          txt=txt.replace(original, 'options.forkOptions.executable = System.getenv("JAVA_HOME") + "/bin/javac"')
+          p.write_text(txt)
+          print("CI compiler adapted locally without changing recorded source")
+          PY
+      - name: Check phone remote atomic search script
+        shell: bash
+        run: |
+          node - <<'JS'
+          const fs=require('fs'),txt=fs.readFileSync('android-tv/app/src/main/assets/phone/index.html','utf8');
+          const script=txt.match(/<script>([\s\S]*?)<\/script>/)?.[1];
+          if(!script)throw Error('Phone script missing');
+          new Function(script);
+          for(const x of ['send("Q "+bounded)','send((submit?"E ":"T ")+bounded)','SEARCH_SENT','SEARCH A FILM OR SERIES','id="backspace"','id="clear-text"','send("B")','send("X")','send("L "+input.value.slice(0,256))','send("J "+s.number)','id="sources-list"','data-a="SOURCES"','setPlayback'])
+            if(!txt.includes(x))throw Error('Missing '+x);
+          console.log('Atomic phone search protocol present');
+          JS
+      - name: Compile Android TV v80 debug package from archived Java sources
+        working-directory: android-tv
+        run: bash ./gradlew --no-daemon --console=plain :app:assembleDebug
+      - name: Confirm package version code
+        run: |
+          "$ANDROID_HOME/build-tools/36.0.0/aapt" dump badging android-tv/app/build/outputs/apk/debug/app-debug.apk |
+            grep "name='in.ghartv.nova' versionCode='80' versionName='0.7.6-live-sources-review-debug'"
