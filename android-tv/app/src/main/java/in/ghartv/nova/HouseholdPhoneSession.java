@@ -53,6 +53,7 @@ final class HouseholdPhoneSession {
             @Override public void action(String action){PhoneLinkServer.Sink s=foreground;if(s!=null)s.action(action);}
             @Override public void search(String term){PhoneLinkServer.Sink s=foreground;if(s!=null)s.search(term);}
             @Override public void submitPageText(String term){PhoneLinkServer.Sink s=foreground;if(s!=null)s.submitPageText(term);}
+            @Override public void edit(String command){PhoneLinkServer.Sink s=foreground;if(s!=null)s.edit(command);}
             @Override public void connected(boolean yes){
                 connected=yes;
                 PhoneLinkServer.Sink s=foreground;if(s!=null)s.connected(yes);
