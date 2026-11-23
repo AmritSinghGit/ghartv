@@ -57,6 +57,12 @@ public final class PhoneLinkServer {
     private volatile String hostPort = "";
     private volatile boolean stopped;
     private volatile OutputStream activeOutput;
+    // Android StrictMode forbids socket writes on the main thread. All outbound
+    // screen state uses this bounded single socket writer, not the UI looper.
+    private final java.util.concurrent.ExecutorService outbound=
+        java.util.concurrent.Executors.newSingleThreadExecutor(r->{
+            Thread t=new Thread(r,"ghartv-phone-network-writer");t.setDaemon(true);return t;
+        });
     private volatile String lastMode="BROWSE";
     public boolean isRunning(){return !stopped&&server!=null&&!server.isClosed();}
     /** Coarse screen state only; never URLs, text or playback identifiers. */
@@ -64,8 +70,14 @@ public final class PhoneLinkServer {
         if(!("HOME".equals(mode)||"BROWSE".equals(mode)||"EDITOR".equals(mode)||
              "VIDEO".equals(mode)||"STARTING".equals(mode)||"FULLSCREEN".equals(mode)))return;
         lastMode=mode;
-        OutputStream out=activeOutput;
-        if(out!=null){try{writeFrame(out,1,("V "+mode).getBytes(StandardCharsets.UTF_8));}catch(IOException ignored){}}
+        final OutputStream out=activeOutput;
+        if(out!=null&&!outbound.isShutdown()){
+            outbound.execute(()->{
+                if(activeOutput!=out||stopped)return;
+                try{writeFrame(out,1,("V "+mode).getBytes(StandardCharsets.UTF_8));}
+                catch(IOException ignored){}
+            });
+        }
     }
     private volatile long lastActivity;
 
@@ -107,7 +119,7 @@ public final class PhoneLinkServer {
     }
 
     public void stop() {
-        stopped = true;activeOutput=null;
+        stopped = true;activeOutput=null;outbound.shutdownNow();
         try { if (server != null) server.close(); } catch (IOException ignored) {}
         sink.connected(false);
     }
