@@ -1,0 +1,96 @@
+from pathlib import Path
+import json
+R=Path(__file__).resolve().parents[2];J=R/'android-tv/app/src/main/java/in/ghartv/nova'
+m=(J/'MainActivity.java').read_text();c=(J/'HeroPreviewController.java').read_text();p=(J/'PlaybackComfort.java').read_text()
+tv=(J/'TvUi.java').read_text();player=(J/'PlayerActivity.java').read_text();family=(J/'FamilyTheme.java').read_text();api=(J/'JioApiClient.java').read_text()
+assert 'Preview 12s' not in m and 'previewNow(' not in c
+assert 'PreviewGate.defaultEnabled' in p and 'if(preview.isChecked()!=originalPreview)' in p
+assert 'PreviewGate.FOCUS_DELAY_MS' in c and 'PreviewGate.FIRST_FRAME_BUDGET_MS' in c and 'PreviewGate.VISIBLE_PREVIEW_MS' in c
+assert 'gate.firstFrame(token)' in c and 'Muted preview · OK to watch' in c
+assert c.index('playerView.setVisibility(View.VISIBLE)')<c.index('private void prepare(')
+assert 'findContainingViewHolder' in m and 'epoch!=focusEpoch' in m and 'renderGuide(firstGuide)' in m
+assert 'PreviewSession' not in m
+contract=json.loads((R/'TV_EXPERIENCE_CONTRACT.json').read_text());assert len(contract['rules'])==9
+assert 'emulator-5580' in contract['canonical_serial']
+print('TV_EXPERIENCE_CONTRACT=PASS_9_RULES_SOURCE_CHECKED')
+assert 'pointerTarget(view, true)' in tv and 'TYPE_HAND' in tv and 'ACTION_HOVER_ENTER' in tv
+assert 'playerView.setOnClickListener(view -> showGuide(true, nextButton))' in player
+assert 'MediaStore.ACTION_PICK_IMAGES' in family and 'ACTION_GET_CONTENT' in family and 'takePersistableUriPermission' in family
+assert 'takePlaybackHandoff' in api and 'PLAYBACK_HANDOFF_MS = 20_000L' in api
+gradle=(R/'android-tv/app/build.gradle.kts').read_text()
+assert 'versionCode = 64' in gradle and '0.6.0-rc15.5-one-click-play-review' in gradle
+films=(J/'FlixMomoActivity.java').read_text();cursor=(J/'RemoteWebCursor.java').read_text();controls=(J/'FilmNativeControls.java').read_text()
+assert 'cursor.handle(event)' in films and 'onRenderProcessGone' in films and 'certificateFailure(handler::cancel,error)' in films and 'cancel.run()' in films and '.proceed()' not in films
+assert 'onPageFinished' in films and 'if(mainFrameError)' in films
+assert 'postOnAnimation(frame)' in cursor and 'ACTION_CANCEL' in cursor and 'removeCallbacks(frame)' in cursor
+assert 'evaluateJavascript' not in films and 'addJavascriptInterface' not in films
+assert 'renderResults' not in controls and 'resultsView' not in controls
+assert 'posterKey(event)' in films and 'ReviewDisplay.films()' in films
+assert 'BuildConfig.VERSION_CODE' in (J/'ReviewDisplay.java').read_text()
+assert (J/'FilmPosterNavigation.java').is_file()
+assert 'RecognizerIntent.ACTION_RECOGNIZE_SPEECH' in (J/'UnifiedSearch.java').read_text()
+launcher=(R/'tools/owner_review.command.in').read_text()
+assert "version_code=30" in launcher and "manifest.get('version_code')!=30" in launcher
+assert 'transport.attach_or_start(sdk,RUN)' in launcher
+assert 'TV_EXPERIENCE_CONTRACT.json' in (R/'tools/package_owner_review.py').read_text()
+assert 'java.util.Objects.equals(selectedChannel.id,candidate.id)' in m
+assert 'channel.number+":"+safe(channel.id)' not in c
+print('CODE40_ORIGINAL_POSTERS_NO_TEXT_TILE_SURFACE_AND_EXISTING_TV_BEHAVIOR=PASS')
+
+manifest=(R/'android-tv/app/src/main/AndroidManifest.xml').read_text()
+assert not (J/'MovieHubActivity.java').exists()
+assert 'MovieHubActivity' not in manifest and 'Punjabi +' not in m
+assert 'UnifiedSearch.voice(this)' in m and 'UnifiedSearch.open(this,q)' in m
+assert 'UnifiedSearch.dialog(this)' in player and 'UnifiedSearch.voice(this)' in player
+assert 'FilmHomeView' in films and 'showLiveResults(text)' in films
+assert 'protected boolean simplifiedDiscoverExperience(){return true;}' in films and 'keepSubmittedSearchBrowserOnly' in films and 'browserSearchSubmitted=false;' in films
+assert 'beginPreferredNavigation(url)' in films and 'event_version_code' in films
+assert (R/'android-tv/app/src/androidTest/java/in/ghartv/nova/Review56SimplifiedDiscoverTest.java').is_file()
+assert 'FilmPageFocus.script' in controls and 'pageKey(event)' in films
+assert 'FilmHomeView' in (J/'FilmHomeView.java').read_text()
+notice=(J/'ReviewNotice.java').read_text();assert 'uses an app-local Tor route by default' in notice and 'FlixMomo proxy never captures JioTV, IPTV, updates or diagnostics' in notice
+assert (J/'FilmTorFallback.java').is_file() and (J/'FilmTorController.java').is_file() and (J/'FilmTorProxy.java').is_file() and (J/'FilmTorTransport.java').is_file()
+proxy=(J/'FilmTorProxy.java').read_text();assert 'setReverseBypassEnabled(true)' not in proxy and 'bypassSimpleHostnames()' in proxy and 'jiotvapi.cdn.jio.com' in proxy and 'ghartv-telemetry.ghartv-47d9a0.workers.dev' in proxy and 'api.themoviedb.org' in (J/'FilmTorFallback.java').read_text()
+assert 'info.guardianproject:tor-android:0.4.8.22' in gradle and 'androidx.webkit:webkit:1.17.1' in gradle
+assert (J/'IptvActivity.java').is_file() and (J/'IptvPlayerActivity.java').is_file() and (J/'IptvPlaylistParser.java').is_file()
+assert 'https://iptv-org.github.io/iptv/index.m3u' in (J/'AppConfig.java').read_text()
+assert 'Only public HTTPS streams are admitted' in (J/'IptvPlaylistParser.java').read_text()
+assert 'Jio never uses Tor' in (J/'JioNetwork.java').read_text() and 'cloudflare-dns.com/dns-query' in (J/'SecureDns.java').read_text() and 'dns.google/dns-query' in (J/'SecureDns.java').read_text()
+assert 'JioNetwork.api(this.context)' in api and 'IptvActivity.class' in m and 'actionButton("FlixMomo")' in m
+assert 'JioNetwork.media(context).newCall(request)' in api and 'jio_manifest_cookie' in api
+assert 'okhttp-dnsoverhttps:4.12.0' in gradle and 'media3-datasource-okhttp:1.10.1' in gradle
+assert (R/'android-tv/app/src/androidTest/java/in/ghartv/nova/Review58IptvAndDnsTest.java').is_file()
+assert (R/'android-tv/app/src/androidTest/java/in/ghartv/nova/Review59NetworkRecoveryTest.java').is_file()
+assert (R/'android-tv/app/src/androidTest/java/in/ghartv/nova/Review60JioBaselineAndIptvCacheTest.java').is_file()
+assert (R/'android-tv/app/src/androidTest/java/in/ghartv/nova/Review61JioDnsTest.java').is_file()
+assert (R/'android-tv/app/src/androidTest/java/in/ghartv/nova/Review62JioMediaDnsDiagnosticsTest.java').is_file()
+route=(J/'RouteFallbackCallFactory.java').read_text();assert 'secure-DNS-only -> app-local Tor' in route and 'NetworkRouteState.recent(family)' in route
+assert 'IptvNetwork.media(this)' in (J/'IptvPlayerActivity.java').read_text() and 'IptvNetwork.catalogue(value.getApplicationContext())' in (J/'IptvRepository.java').read_text()
+assert '18_000L' in player and 'FIRST_FRAME_BUDGET_MS=15000L' in (J/'PreviewGate.java').read_text()
+assert 'JioMediaDataSource.liveSourceFactory(this, streamHeaders)' in player
+assert 'JioMediaDataSource.previewSourceFactory(activity,headers)' in c
+jio=(J/'JioNetwork.java').read_text();assert '.dns(API_DNS)' in jio and '.dns(MEDIA_DNS)' in jio and 'RouteFallbackCallFactory' not in jio and 'torUsedRecently() { return false; }' in jio
+assert (J/'JioMediaDataSource.java').is_file() and 'setDrmHttpDataSourceFactory(http)' in (J/'JioMediaDataSource.java').read_text()
+assert 'parseCached(cache' in (J/'IptvRepository.java').read_text() and 'Choose Refresh to update it' in (J/'IptvRepository.java').read_text()
+assert json.loads((R/'RELEASE_HOLD.json').read_text())['public_feed_write'] is False
+print('CODE40_HOME_SHARED_SEARCH_DETAIL_FOCUS_PUNJABI_PLUS_REMOVAL_RELEASE_HOLD=PASS')
+
+assert 'searchQuery="";selectedChannel=null;startAtFirst=true;' in m
+assert 'chipAdapter = new ChipAdapter(this::selectGuideCategory)' in m
+assert 'actionButton("Voice")' not in m
+assert 'FOCUS_BLOCK_DESCENDANTS' in (J/'FilmHomeView.java').read_text()
+assert 'homePanel.handleRemote(event,getCurrentFocus())' in films
+
+assert 'postVisualStateCallback' in controls and 'pageActions' in controls
+assert 'FilmDetailView' in films and 'FilmProviderPolicy.CREDIT' in films
+assert 'FilmPlayerOptions.JS' in (J/'FilmPageSnapshot.java').read_text()
+
+# Every failed certificate is cancelled; only observed subresources avoid the document fatal state.
+assert 'scope==FilmConnectionState.Scope.SUBRESOURCE' in films
+assert 'connection.observe(request.getUrl().toString(),request.isForMainFrame())' in films
+tel=(J/'Telemetry.java').read_text()
+assert '.followRedirects(false).followSslRedirects(false)' in tel
+assert 'TelemetryDelivery.endpoint(config.endpoint)' in tel and 'TelemetryDelivery.acknowledged' in tel
+assert 'diagnostic_delivery_check' in tel and 'film_playback_ready' in films
+assert 'query.getText' not in films[films.index('private void filmEvent'):films.index('private void showFilmConnection')]
+print('CODE41_SCOPED_TLS_CANCELLATION_AND_PRIVATE_DIAGNOSTICS=PASS')

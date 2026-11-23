@@ -1,0 +1,68 @@
+package in.ghartv.nova;
+
+import androidx.media3.datasource.HttpDataSource;
+/** Root-cause classification independent of Media3's wrapper class and message text. */
+public final class NetworkFailure {
+    private NetworkFailure() {}
+    public static String classify(Throwable error) {
+        for(int i=0; error!=null && i<12; i++,error=error.getCause()) {
+            if(error instanceof HttpDataSource.InvalidResponseCodeException)
+                return classifyHttpStatus(((HttpDataSource.InvalidResponseCodeException) error).responseCode);
+            if(error instanceof java.net.UnknownHostException) return "DNS_UNAVAILABLE";
+            if(error instanceof javax.net.ssl.SSLException) return "TLS_FAILED";
+            if(error instanceof java.net.SocketTimeoutException || error instanceof java.io.InterruptedIOException) return "TIMED_OUT";
+            if(error instanceof java.net.ConnectException || error instanceof java.net.NoRouteToHostException) return "CONNECTION_FAILED";
+        }
+        return "UNCLASSIFIED";
+    }
+    /** Classify an HTTP response separately from DNS, transport and TLS failures. */
+    public static String classifyHttpStatus(int status) {
+        if (status == 401) return "HTTP_AUTH_REQUIRED";
+        if (status == 403) return "HTTP_ACCESS_DENIED";
+        if (status == 404 || status == 410) return "HTTP_STREAM_UNAVAILABLE";
+        if (status == 408 || status == 504) return "HTTP_PROVIDER_TIMEOUT";
+        if (status == 429) return "HTTP_RATE_LIMITED";
+        if (status >= 500 && status <= 599) return "HTTP_PROVIDER_ERROR";
+        if (status >= 400 && status <= 499) return "HTTP_PROVIDER_REJECTED";
+        return "UNCLASSIFIED";
+    }
+
+    /** Route failures may use secure DNS/Tor. TLS, HTTP, auth and DRM failures may not. */
+    public static boolean routeFailure(Throwable error) {
+        for(int i=0; error!=null && i<16; i++,error=error.getCause()) {
+            if(error instanceof java.net.UnknownHostException
+                    || error instanceof java.net.ConnectException
+                    || error instanceof java.net.NoRouteToHostException
+                    || error instanceof java.net.SocketTimeoutException) return true;
+            if(error instanceof javax.net.ssl.SSLException) return false;
+        }
+        return false;
+    }
+    /** Safe for non-idempotent retry because no application response body was exchanged. */
+    public static boolean beforeRequestConnection(Throwable error) {
+        for(int i=0; error!=null && i<16; i++,error=error.getCause()) {
+            if(error instanceof java.net.UnknownHostException
+                    || error instanceof java.net.ConnectException
+                    || error instanceof java.net.NoRouteToHostException) return true;
+            if(error instanceof javax.net.ssl.SSLException
+                    || error instanceof java.net.SocketTimeoutException) return false;
+        }
+        return false;
+    }
+
+    public static String tlsReason(Throwable error) {
+        boolean tls=false,chain=false;
+        for(int i=0;error!=null&&i<12;i++,error=error.getCause()) {
+            if(error instanceof java.security.cert.CertificateExpiredException)return "CERTIFICATE_EXPIRED";
+            if(error instanceof java.security.cert.CertificateNotYetValidException)return "CERTIFICATE_NOT_YET_VALID";
+            if(error instanceof java.security.cert.CertPathValidatorException)chain=true;
+            if(error instanceof javax.net.ssl.SSLException)tls=true;
+        }
+        return chain?"CERTIFICATE_CHAIN_REJECTED":tls?"TLS_VALIDATION_FAILED":"NO_CERTIFICATE_CAUSE_IDENTIFIED";
+    }
+    public static String rootType(Throwable error) {
+        if(error==null)return "Unknown"; int i=0;
+        while(error.getCause()!=null&&error.getCause()!=error&&i++<12)error=error.getCause();
+        return error.getClass().getSimpleName();
+    }
+}

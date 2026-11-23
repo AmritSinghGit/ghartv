@@ -72,6 +72,10 @@ public final class Telemetry {
     private static final String KEY_CONFIG_KEY = "config_ingest_key";
     private static final String KEY_CONFIG_ENABLED = "config_enabled";
     private static final String KEY_CONFIG_FETCHED_AT = "config_fetched_at";
+    private static final String KEY_LAUNCH_PENDING = "launch_pending";
+    private static final String KEY_LAUNCH_STAGE = "launch_stage";
+    private static final String KEY_LAUNCH_STARTED_AT = "launch_started_at";
+    private static final String KEY_LAUNCH_VERSION_CODE = "launch_version_code";
 
     private static final String QUEUE_DIR = "telemetry";
     private static final String QUEUE_FILE = "events.jsonl";
@@ -96,6 +100,7 @@ public final class Telemetry {
             .writeTimeout(25, TimeUnit.SECONDS)
             .callTimeout(45, TimeUnit.SECONDS)
             .retryOnConnectionFailure(true)
+            .followRedirects(false).followSslRedirects(false)
             .build();
 
     private static final Pattern EVENT_NAME = Pattern.compile("^[a-z][a-z0-9_]{1,63}$");
@@ -130,6 +135,7 @@ public final class Telemetry {
                     "queue_depth", queuedCount(appContext)
             ));
             enqueueUpload(appContext, false);
+            HardwareDiagnostics.maybeReport(appContext);
         }
     }
 
@@ -150,6 +156,7 @@ public final class Telemetry {
         if (enabled) {
             event(context, "consent_changed", data("enabled", true, "source", "tv_settings"));
             enqueueUpload(context, true);
+            HardwareDiagnostics.maybeReport(context);
         } else {
             clearQueuedEvents(context, false);
         }
@@ -196,6 +203,59 @@ public final class Telemetry {
         event(context, "screen_view", data("screen", safe));
     }
 
+    /**
+     * Starts a consent-gated startup trace. If Android killed the preceding run before
+     * the guide became healthy, the next launch reports the last completed stage. This
+     * does not attempt to guess whether the cause was a crash, power loss or force-stop.
+     */
+    public static void beginLaunch(Context context, String firstStage) {
+        if (context == null || !isEnabled(context)) return;
+        SharedPreferences preferences = prefs(context);
+        boolean previousPending = preferences.getBoolean(KEY_LAUNCH_PENDING, false);
+        String previousStage = preferences.getString(KEY_LAUNCH_STAGE, "unknown");
+        long previousStartedAt = preferences.getLong(KEY_LAUNCH_STARTED_AT, 0L);
+        int previousVersion = preferences.getInt(KEY_LAUNCH_VERSION_CODE, 0);
+        if (previousPending) {
+            long elapsed = previousStartedAt <= 0L ? 0L
+                    : Math.max(0L, System.currentTimeMillis() - previousStartedAt);
+            event(context, "previous_launch_incomplete", data(
+                    "last_stage", safeToken(previousStage, 48, "unknown"),
+                    "previous_version_code", previousVersion,
+                    "elapsed_bucket", durationBucket(elapsed)
+            ));
+        }
+        preferences.edit()
+                .putBoolean(KEY_LAUNCH_PENDING, true)
+                .putString(KEY_LAUNCH_STAGE, safeToken(firstStage, 48, "created"))
+                .putLong(KEY_LAUNCH_STARTED_AT, System.currentTimeMillis())
+                .putInt(KEY_LAUNCH_VERSION_CODE, BuildConfig.VERSION_CODE)
+                .apply();
+        event(context, "startup_stage", data("stage", firstStage));
+    }
+
+    public static void launchStage(Context context, String stage) {
+        if (context == null || !isEnabled(context)) return;
+        String safe = safeToken(stage, 48, "unknown");
+        prefs(context).edit().putString(KEY_LAUNCH_STAGE, safe).apply();
+        event(context, "startup_stage", data("stage", safe));
+    }
+
+    public static void markLaunchHealthy(Context context) {
+        if (context == null || !isEnabled(context)) return;
+        SharedPreferences preferences = prefs(context);
+        long startedAt = preferences.getLong(KEY_LAUNCH_STARTED_AT, 0L);
+        long duration = startedAt <= 0L ? 0L : Math.max(0L, System.currentTimeMillis() - startedAt);
+        preferences.edit()
+                .putBoolean(KEY_LAUNCH_PENDING, false)
+                .putString(KEY_LAUNCH_STAGE, "healthy")
+                .apply();
+        event(context, "startup_healthy", data(
+                "duration_ms", duration,
+                "screen", preferences.getString(KEY_LAST_SCREEN, "unknown")
+        ));
+        enqueueUpload(context, false);
+    }
+
     public static void event(Context context, String name, JSONObject attributes) {
         if (context == null || !isEnabled(context)) return;
         String normalized = safeToken(name, 64, "event");
@@ -203,7 +263,10 @@ public final class Telemetry {
         final String eventName = normalized;
         final JSONObject attrs = attributes == null ? new JSONObject() : attributes;
         final Context application = context.getApplicationContext();
-        IO.execute(() -> appendEvent(application, buildEvent(application, null, eventName, attrs)));
+        IO.execute(() -> {
+            appendEvent(application, buildEvent(application, null, eventName, attrs));
+            if(eventName.startsWith("film_")||eventName.equals("discover_open")||eventName.equals("consent_changed"))enqueueUpload(application,false);
+        });
     }
 
     public static String error(Context context, String stage, Throwable error, JSONObject attributes) {
@@ -213,6 +276,8 @@ public final class Telemetry {
         try {
             attrs.put("stage", safeToken(stage, 48, "unknown"));
             attrs.put("error_type", error == null ? "Unknown" : error.getClass().getSimpleName());
+            attrs.put("cause_type", NetworkFailure.rootType(error));
+            attrs.put("failure_kind", NetworkFailure.classify(error));
             attrs.put("message", scrubString(error == null ? "Unknown error" : readable(error)));
             attrs.put("fingerprint", errorFingerprint(error));
             attrs.put("stack_frames", stackFrames(error));
@@ -221,7 +286,7 @@ public final class Telemetry {
         Context application = context.getApplicationContext();
         IO.execute(() -> {
             appendEvent(application, buildEvent(application, eventId, "app_error", attrs));
-            enqueueUpload(application, true);
+            enqueueUpload(application, false);
         });
         return reference(eventId);
     }
@@ -287,13 +352,16 @@ public final class Telemetry {
         );
     }
 
-    static UploadOutcome upload(Context context) {
+    static UploadOutcome upload(Context context) { return upload(context,CLIENT); }
+
+    // Package-private transport injection for owned tests; production always uses CLIENT.
+    static synchronized UploadOutcome upload(Context context,OkHttpClient transport) {
         if (context == null || !isEnabled(context)) return UploadOutcome.DISABLED;
         List<String> lines = readBatch(context, MAX_BATCH_EVENTS);
         if (lines.isEmpty()) return UploadOutcome.EMPTY;
 
         try {
-            CollectorConfig config = resolveConfig(context);
+            CollectorConfig config = resolveConfig(context,transport);
             if (!config.enabled) {
                 saveStatus(context, "Collector is temporarily disabled", false);
                 return UploadOutcome.PERMANENT_FAILURE;
@@ -303,6 +371,7 @@ public final class Telemetry {
                 return UploadOutcome.PERMANENT_FAILURE;
             }
 
+            if(!isEnabled(context)) return UploadOutcome.DISABLED;
             JSONArray events = new JSONArray();
             for (String line : lines) events.put(new JSONObject(line));
             JSONObject batch = new JSONObject();
@@ -315,23 +384,33 @@ public final class Telemetry {
             batch.put("device", deviceEnvelope(context));
             batch.put("events", events);
 
-            String endpoint = config.endpoint.endsWith("/v1/events")
-                    ? config.endpoint
-                    : stripTrailingSlash(config.endpoint) + "/v1/events";
-            Request request = new Request.Builder()
+            String endpoint = TelemetryDelivery.endpoint(config.endpoint);
+            if(endpoint.isEmpty()) {saveStatus(context,"Collector address rejected; queued reports retained",false);return UploadOutcome.PERMANENT_FAILURE;}
+            String[] credential = RemoteControl.telemetryCredential(context);
+            if (credential == null) { RemoteControl.registerForTelemetry(context); credential = RemoteControl.telemetryCredential(context); }
+            Request.Builder builder = new Request.Builder()
                     .url(endpoint)
-                    .header("User-Agent", "GharTV-Jio-Live/" + BuildConfig.VERSION_NAME)
-                    .header("X-GharTV-Ingest-Key", config.ingestKey)
-                    .post(RequestBody.create(batch.toString(), JSON))
-                    .build();
-            try (Response response = CLIENT.newCall(request).execute()) {
+                    .header("User-Agent", "GharTV-Jio-Live/" + BuildConfig.VERSION_NAME);
+            // Per-install credential when this install has registered; the shared value only as the fallback until then.
+            if (credential != null) builder.header("X-GharTV-Device-Id", credential[0]).header("Authorization", "Device " + credential[1]);
+            else builder.header("X-GharTV-Ingest-Key", config.ingestKey);
+            Request request = builder.post(RequestBody.create(batch.toString(), JSON)).build();
+            try (Response response = transport.newCall(request).execute()) {
                 int code = response.code();
                 if (response.isSuccessful()) {
-                    removeFirst(context, lines.size());
+                    if(response.body()==null||response.body().contentLength()>65536){saveStatus(context,"Collector receipt missing or oversized; reports retained",false);return UploadOutcome.RETRY;}
+                    okio.BufferedSource ackSource=response.body().source();ackSource.request(65537);
+                    if(ackSource.getBuffer().size()>65536){saveStatus(context,"Collector receipt oversized; reports retained",false);return UploadOutcome.RETRY;}
+                    JSONObject ack = new JSONObject(ackSource.readUtf8());
+                    if(!TelemetryDelivery.acknowledged(ack,lines.size())) {
+                        saveStatus(context,"Collector acknowledgement incomplete; local reports retained",false); return UploadOutcome.RETRY;
+                    }
+                    removeAcknowledged(context, lines);
                     saveStatus(context, "Sent " + lines.size() + " diagnostics", true);
                     return UploadOutcome.SUCCESS;
                 }
-                String status = "Collector returned HTTP " + code;
+                if (credential != null && code == 401) RemoteControl.forgetTelemetryRegistration(context);
+                String status = "Collector returned HTTP " + code + (code==401||code==403?"; collector access needs repair. Reports retained.":code>=300&&code<400?"; redirect not followed. Reports retained.":"; reports retained.");
                 saveStatus(context, status, false);
                 return code == 408 || code == 425 || code == 429 || code >= 500
                         ? UploadOutcome.RETRY : UploadOutcome.PERMANENT_FAILURE;
@@ -342,8 +421,24 @@ public final class Telemetry {
         }
     }
 
+    public interface DeliveryCallback { void complete(UploadOutcome outcome,String status,int queued); }
+    public static void sendNow(Context context,boolean deliveryCheck,DeliveryCallback callback) {
+        final Context app=context.getApplicationContext();
+        IO.execute(()->{
+            if(!isEnabled(app)){MAIN.post(()->callback.complete(UploadOutcome.DISABLED,"Diagnostics are off. No event was created or sent.",queuedCount(app)));return;}
+            if(deliveryCheck)appendEvent(app,buildEvent(app,null,"diagnostic_delivery_check",data("purpose","manual_delivery_check")));
+            UploadOutcome outcome=upload(app);
+            final UploadOutcome result=outcome;final String status=outcome==UploadOutcome.EMPTY?"No reports are queued. Use Send a delivery check to test this connection.":lastStatus(app);
+            final int queued=queuedCount(app);MAIN.post(()->callback.complete(result,status,queued));
+        });
+    }
+
     public static int queuedCount(Context context) {
         synchronized (FILE_LOCK) { return readAllLocked(context).size(); }
+    }
+
+    public static String deliveryHint(Context context) {
+        return isEnabled(context) ? "Diagnostics are enabled; this reference may still be queued. Cloud visibility requires a successful send. Open Diagnostics & privacy for queue/send status." : "Diagnostics are off. This reference was not uploaded; turning diagnostics on does not recover this earlier error.";
     }
 
     public static String lastStatus(Context context) {
@@ -420,7 +515,7 @@ public final class Telemetry {
         return device;
     }
 
-    private static CollectorConfig resolveConfig(Context context) throws Exception {
+    private static CollectorConfig resolveConfig(Context context,OkHttpClient transport) throws Exception {
         SharedPreferences preferences = prefs(context);
         long now = System.currentTimeMillis();
         long fetched = preferences.getLong(KEY_CONFIG_FETCHED_AT, 0L);
@@ -433,7 +528,7 @@ public final class Telemetry {
                     .url(AppConfig.TELEMETRY_CONFIG)
                     .header("User-Agent", "GharTV-Jio-Live/" + BuildConfig.VERSION_NAME)
                     .build();
-            try (Response response = CLIENT.newCall(request).execute()) {
+            try (Response response = transport.newCall(request).execute()) {
                 if (response.isSuccessful() && response.body() != null) {
                     JSONObject json = new JSONObject(response.body().string());
                     endpoint = json.optString("endpoint", endpoint);
@@ -458,6 +553,7 @@ public final class Telemetry {
 
     private static void appendEvent(Context context, JSONObject event) {
         synchronized (FILE_LOCK) {
+            if(!isEnabled(context))return;
             try {
                 File file = queueFile(context);
                 File parent = file.getParentFile();
@@ -478,7 +574,13 @@ public final class Telemetry {
         synchronized (FILE_LOCK) {
             List<String> all = readAllLocked(context);
             if (all.isEmpty()) return Collections.emptyList();
-            return new ArrayList<>(all.subList(0, Math.min(max, all.size())));
+            java.util.List<String> errors = new ArrayList<>(), other = new ArrayList<>();
+            for(String line : all) try {
+                String name=new JSONObject(line).optString("name", "");
+                if(name.equals("app_error") || name.equals("app_crash")) errors.add(line); else other.add(line);
+            } catch(Exception ignored) { other.add(line); }
+            errors.addAll(other);
+            return new ArrayList<>(errors.subList(0, Math.min(max, errors.size())));
         }
     }
 
@@ -496,12 +598,14 @@ public final class Telemetry {
         return lines;
     }
 
-    private static void removeFirst(Context context, int count) {
+    private static void removeAcknowledged(Context context, List<String> sent) {
+        // The queue may have been trimmed or changed during the HTTP request. Never
+        // remove a positional prefix: remove only exact acknowledged event records.
         synchronized (FILE_LOCK) {
-            List<String> all = readAllLocked(context);
-            if (all.isEmpty()) return;
-            int from = Math.min(count, all.size());
-            rewriteLocked(context, new ArrayList<>(all.subList(from, all.size())));
+            java.util.Set<String> acknowledged = new java.util.HashSet<>(sent);
+            List<String> remaining = readAllLocked(context);
+            remaining.removeAll(acknowledged);
+            rewriteLocked(context, remaining);
         }
     }
 
@@ -704,6 +808,7 @@ public final class Telemetry {
             if (context != null && isEnabled(context)) {
                 JSONObject attrs = data(
                         "thread", safeToken(thread == null ? "unknown" : thread.getName(), 48, "unknown"),
+                        "launch_stage", prefs(context).getString(KEY_LAUNCH_STAGE, "unknown"),
                         "error_type", error == null ? "Unknown" : error.getClass().getSimpleName(),
                         "message", scrubString(readable(error)),
                         "fingerprint", errorFingerprint(error),
@@ -713,6 +818,14 @@ public final class Telemetry {
             }
             if (previousCrashHandler != null) previousCrashHandler.uncaughtException(thread, error);
         });
+    }
+
+    private static String durationBucket(long durationMs) {
+        if (durationMs < 5_000L) return "under_5s";
+        if (durationMs < 30_000L) return "5_to_30s";
+        if (durationMs < 5 * 60_000L) return "30s_to_5m";
+        if (durationMs < 60 * 60_000L) return "5m_to_1h";
+        return "over_1h";
     }
 
     private static final class CollectorConfig {
