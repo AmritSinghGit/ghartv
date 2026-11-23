@@ -267,7 +267,13 @@ function connect(){
  ws.onopen=()=>{attempts=0;setOnline(true,"● Connected");};
  ws.onclose=()=>{
    setOnline(false,"● Disconnected");
-   if(session&&attempts++<40){status.textContent="● Reconnecting";setTimeout(connect,1000);}
+   if(session&&attempts++<8){
+     status.textContent="● Reconnecting";
+     setTimeout(connect,1400);
+   }else{
+     status.textContent="● Offline · scan again";
+     phoneNotice("Connect your phone to the same Wi-Fi as the TV/Mac, then scan a fresh QR. Mobile data cannot reach this private address.");
+   }
  };
  ws.onmessage=e=>{
    const data=String(e.data||"");

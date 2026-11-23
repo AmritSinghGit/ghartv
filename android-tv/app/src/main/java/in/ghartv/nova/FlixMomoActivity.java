@@ -1433,13 +1433,15 @@ public class FlixMomoActivity extends Activity {
         String typed=raw.substring(0,Math.min(256,raw.length()));
         if(torWebMode&&browserBar!=null&&browserBar.showing()
                 &&browserBar.address().hasFocus()){
-            browserBar.address().append(typed);
+            browserBar.address().setText(typed);
+            browserBar.address().setSelection(browserBar.address().length());
             if(submit)browserBar.goFromPhone();
             phonePairEvent("typed_address");
             HouseholdPhoneSession.feedback("WEB_TEXT_SENT");return;
         }
         if(chrome!=null&&chrome.isShown()&&query!=null&&query.hasFocus()){
-            query.append(typed);
+            query.setText(typed);
+            query.setSelection(query.length());
             if(submit){search();HouseholdPhoneSession.feedback("SEARCH_SENT");}
             else HouseholdPhoneSession.feedback("WEB_TEXT_SENT");
             phonePairEvent("typed_search");return;
@@ -1467,13 +1469,15 @@ public class FlixMomoActivity extends Activity {
           "const t=el.type||'text';if(!/^(text|search|url|email)$/i.test(t)&&el.tagName==='INPUT')return 'NOT_EDITABLE';"+
           "let start=el.selectionStart,end=el.selectionEnd;"+
           "if(start==null||end==null){start=end=el.value.length;}"+
-          "el.setRangeText(value,start,end,'end');"+
+          "el.setRangeText(value,0,el.value.length,'end');"+
           "el.dispatchEvent(new Event('input',{bubbles:true}));"+
           "if(submit){if(el.form&&el.form.requestSubmit)el.form.requestSubmit();"+
           "else el.dispatchEvent(new KeyboardEvent('keydown',{key:'Enter',code:'Enter',bubbles:true}));}"+
           "return submit?'FIELD_SUBMITTED':'FIELD_SELECTED';}"+
           "if(el.isContentEditable){"+
-          "const ok=document.execCommand('insertText',false,value);"+
+          "const existing=el.textContent||'';"+
+          "if(existing!==value)el.textContent=value;"+
+          "const ok=true;"+
           "if(ok){el.dispatchEvent(new Event('input',{bubbles:true}));"+
           "if(submit)el.dispatchEvent(new KeyboardEvent('keydown',{key:'Enter',code:'Enter',bubbles:true}));"+
           "return submit?'FIELD_SUBMITTED':'FIELD_SELECTED';}"+
