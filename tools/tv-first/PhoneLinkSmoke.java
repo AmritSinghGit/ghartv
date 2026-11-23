@@ -17,6 +17,8 @@ public final class PhoneLinkSmoke {
         public void key(int k){got.add("K "+k);} public void text(String t){got.add("T "+t);}
         public void scroll(int x,int y){got.add("S "+x+" "+y);}
         public void action(String a){got.add("A "+a);}
+        public void search(String term){got.add("Q "+term);}
+        public void submitPageText(String term){got.add("E "+term);}
         public void connected(boolean c){got.add(c?"on":"off");}};
     static String hp,sess;
     static String http(int port,String target,String extra) throws Exception{
@@ -54,16 +56,24 @@ public final class PhoneLinkSmoke {
             String hello=readFrame(in);ok(hello.startsWith("S ")&&hello.length()==34);sess=hello.substring(2);
             ok(readFrame(in).equals("V BROWSE"));
             s.mode("FULLSCREEN");ok(readFrame(in).equals("V FULLSCREEN"));
+            s.mode("SEARCH");ok(readFrame(in).equals("V SEARCH"));
+            s.feedback("SEARCH_SENT");ok(readFrame(in).equals("R SEARCH_SENT"));
+            s.feedback("FIELD_REQUIRED");ok(readFrame(in).equals("R FIELD_REQUIRED"));
+            s.feedback("PASSWORD"); // unsupported feedback never sent
             s.mode("PASSWORD");  // unsupported mode ignored, no frame
             frame(o,"S 0 350");frame(o,"S 9000 -9000");frame(o,"A PLAY");
             frame(o,"A NEXT");frame(o,"A FULLSCREEN");frame(o,"A SEARCH");
             frame(o,"A GO");frame(o,"A MALWARE");frame(o,"A OPEN_URL");
+            frame(o,"Q Planet Earth");
+            frame(o,"E my documentary");
+            frame(o,"Q "); // empty request is ignored by app validation
             frame(o,"M 5 -7");frame(o,"C");frame(o,"K 23");frame(o,"K 26");frame(o,"K 224");frame(o,"K 4");frame(o,"T hello हि");frame(o,"M 9999 -9999");frame(o,"K junk");
             long t0=System.nanoTime();frame(o,"P");ok(readFrame(in).equals("P"));long ping=(System.nanoTime()-t0)/1000;
             // 60 Hz pointer stream for 2 s then a ping
             for(int i=0;i<120;i++){frame(o,"M 1 1");Thread.sleep(16);}
             long t1=System.nanoTime();frame(o,"P");ok(readFrame(in).equals("P"));long lag=(System.nanoTime()-t1)/1000;
             ok(got.contains("M 5 -7")&&got.contains("C")&&got.contains("K 23")&&got.contains("T hello हि"));
+            ok(got.contains("Q Planet Earth")&&got.contains("E my documentary"));
             ok(got.contains("M 400 -400"));                                          // clamped
             ok(got.contains("S 0 350")&&got.contains("S 400 -400"));
             ok(got.contains("A PLAY")&&got.contains("A NEXT")&&got.contains("A FULLSCREEN")&&

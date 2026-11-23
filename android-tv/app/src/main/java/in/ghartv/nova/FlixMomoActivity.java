@@ -257,7 +257,9 @@ public class FlixMomoActivity extends Activity {
         });}
         @Override public void scroll(int dx,int dy){runOnUiThread(()->phoneScroll(dx,dy));}
         @Override public void action(String action){runOnUiThread(()->phoneAction(action));}
-        @Override public void text(String value){runOnUiThread(()->phoneText(value));}
+        @Override public void text(String value){runOnUiThread(()->phoneText(value,false));}
+        @Override public void search(String term){runOnUiThread(()->phoneSubmitFilmQuery(term));}
+        @Override public void submitPageText(String term){runOnUiThread(()->phoneText(term,true));}
         @Override public void connected(boolean yes){runOnUiThread(()->{
             if(isFinishing()||isDestroyed())return;
             if(phoneConnected!=yes){
@@ -266,17 +268,36 @@ public class FlixMomoActivity extends Activity {
             }
             if(yes&&pairingDialog!=null&&pairingDialog.isShowing()){
                 pairingDialog.dismiss();pairingDialog=null;
-                hideKeyboard();
+                focusPhoneFilmSearch();
             }
             notifyPhoneMode();
         });}
     };
+    /** Pair completion should leave a viewer ready to search, with no TV IME
+     * hiding the provider; the phone gets a dedicated SEARCH state. */
+    private void focusPhoneFilmSearch(){
+        if(isFinishing()||isDestroyed()||custom!=null||verifiedImmersive)return;
+        if(!browserSearchSubmitted&&!oneClickPlay){
+            if(simplifiedDiscoverExperience())showBrowserSearch(false);
+            else toolbar();
+            query.requestFocus();
+            hideTvSoftKeyboard();
+            handler.postDelayed(this::hideTvSoftKeyboard,250L);
+            notifyPhoneMode();
+        }
+    }
+    private void hideTvSoftKeyboard(){
+        android.view.inputmethod.InputMethodManager ime=
+            (android.view.inputmethod.InputMethodManager)getSystemService(INPUT_METHOD_SERVICE);
+        if(ime!=null&&query!=null)ime.hideSoftInputFromWindow(query.getWindowToken(),0);
+    }
     private void notifyPhoneMode(){
         if(custom!=null||verifiedImmersive)HouseholdPhoneSession.mode("FULLSCREEN");
         else if(startMonitor!=null&&startMonitor.healthy())HouseholdPhoneSession.mode("VIDEO");
         else if(startMonitor!=null&&startMonitor.running())HouseholdPhoneSession.mode("STARTING");
+        else if(chrome!=null&&chrome.isShown()&&query!=null&&query.hasFocus())
+            HouseholdPhoneSession.mode("SEARCH");
         else if(pointerPage&&(pageEditor||
-                 (chrome!=null&&chrome.isShown()&&query!=null&&query.hasFocus())||
                  (torWebMode&&browserBar!=null&&browserBar.showing()&&
                   browserBar.address().hasFocus())))HouseholdPhoneSession.mode("EDITOR");
         else HouseholdPhoneSession.mode("BROWSE");
@@ -337,6 +358,24 @@ public class FlixMomoActivity extends Activity {
                 if(verifiedImmersive)leaveVerifiedFullscreen();
                 toolbar();query.requestFocus();notifyPhoneMode();return;
         }
+    }
+    /** Atomic search: no dependency on WebView focus or a prior Type press. */
+    private void phoneSubmitFilmQuery(String term){
+        if(isFinishing()||isDestroyed())return;
+        String cleaned=UnifiedSearch.clean(term==null?"":term);
+        if(!UnifiedSearch.valid(cleaned)){
+            HouseholdPhoneSession.feedback("INVALID_QUERY");return;
+        }
+        if(custom!=null)exitFullScreen();
+        if(verifiedImmersive)leaveVerifiedFullscreen();
+        toolbar();
+        query.setText(cleaned);
+        query.setSelection(query.length());
+        query.requestFocus();
+        hideTvSoftKeyboard();
+        search();
+        hideTvSoftKeyboard();
+        HouseholdPhoneSession.feedback("SEARCH_SENT");
     }
     private void phoneMediaKey(int code){
         long t=android.os.SystemClock.uptimeMillis();
@@ -600,7 +639,10 @@ public class FlixMomoActivity extends Activity {
         });
         browseRoot.addView(startMonitor.panel,browseRoot.indexOfChild(stage),new LinearLayout.LayoutParams(-1,-2));
         homePanel.setToolbarAnchor(toolbarAnchor);
-        query.setOnFocusChangeListener((v,focused)->{if(focused)cursor.leave();});
+        query.setOnFocusChangeListener((v,focused)->{
+            if(focused)cursor.leave();
+            if(phoneConnected)notifyPhoneMode();
+        });
         search.setOnClickListener(v->search());voice.setOnClickListener(v->voiceSearch());browse.setOnClickListener(v->showHome(false));guide.setOnClickListener(v->finish());
         query.setOnEditorActionListener((v,action,event)->{if(action==android.view.inputmethod.EditorInfo.IME_ACTION_SEARCH||event!=null&&event.getKeyCode()==KeyEvent.KEYCODE_ENTER&&event.getAction()==KeyEvent.ACTION_UP){search();return true;}return false;});
         pageButton.setOnClickListener(v->showOptions());
@@ -623,10 +665,11 @@ public class FlixMomoActivity extends Activity {
                 phoneIntroShown=true;
                 if(HouseholdPhoneSession.connected()){
                     HouseholdPhoneSession.attach(filmPhoneSink);
-                    phoneConnected=true;updatePhoneBadge();notifyPhoneMode();
-                }else if(!HouseholdPhoneSession.offeredThisProcess()){
-                    // Deep-link directly to Films? Offer once here. If the user
-                    // already dismissed Home QR, respect that decision.
+                    phoneConnected=true;updatePhoneBadge();
+                    focusPhoneFilmSearch();notifyPhoneMode();
+                }else{
+                    // Films is its own entry: one non-blocking pairing offer
+                    // every time Films opens unpaired, even when Home QR was skipped.
                     phonePairEvent("offered");showPhoneRemote();
                 }
             }
@@ -1196,7 +1239,7 @@ public class FlixMomoActivity extends Activity {
         LinearLayout content=new LinearLayout(this);content.setOrientation(LinearLayout.VERTICAL);
         content.setGravity(android.view.Gravity.CENTER_HORIZONTAL);
         android.widget.ImageView qr=new android.widget.ImageView(this);
-        try{qr.setImageBitmap(GharTvQr.bitmap(link,TvUi.dp(this,162)));}
+        try{qr.setImageBitmap(GharTvQr.bitmap(link,TvUi.dp(this,250)));}
         catch(Exception problem){
             android.widget.Toast.makeText(this,"Could not render pairing QR",android.widget.Toast.LENGTH_SHORT).show();
             return;
@@ -1207,14 +1250,12 @@ public class FlixMomoActivity extends Activity {
             15,TvUi.TEXT,false);
         hint.setGravity(android.view.Gravity.CENTER);
         content.addView(hint,new LinearLayout.LayoutParams(-1,-2));
-        LinearLayout.LayoutParams qp=new LinearLayout.LayoutParams(TvUi.dp(this,172),TvUi.dp(this,172));
+        LinearLayout.LayoutParams qp=new LinearLayout.LayoutParams(TvUi.dp(this,266),TvUi.dp(this,266));
         qp.topMargin=TvUi.dp(this,5);
         content.addView(qr,qp);
         HouseholdPhoneSession.markOffered();
         pairingDialog=new TvModal(this,"GHARTV · PHONE","Scan to control your TV",
-            "Phone optional · You can always use your TV remote. "+
-            (viaMac?"Mac emulator bridge connected. ":"")+
-            "Use the same Wi-Fi. Don't enter passwords or OTPs.")
+            "Phone optional · Same home Wi-Fi · Press OK to keep using your TV remote.")
             .add(content)
             .action("Use TV remote",true,android.app.Dialog::dismiss)
             .show();
@@ -1244,22 +1285,28 @@ public class FlixMomoActivity extends Activity {
         return cursor.enabled();
     }
     /** A phone's Send targets the selected field, not an invisible top search. */
-    private void phoneText(String raw){
-        if(raw==null||raw.isEmpty())return;
+    private void phoneText(String raw){phoneText(raw,false);}
+    private void phoneText(String raw,boolean submit){
+        if(raw==null||raw.isEmpty()){if(submit)HouseholdPhoneSession.feedback("INVALID_QUERY");return;}
         String typed=raw.substring(0,Math.min(256,raw.length()));
         if(torWebMode&&browserBar!=null&&browserBar.showing()
                 &&browserBar.address().hasFocus()){
             browserBar.address().append(typed);
-            phonePairEvent("typed_address");return;
+            if(submit)browserBar.goFromPhone();
+            phonePairEvent("typed_address");
+            HouseholdPhoneSession.feedback("WEB_TEXT_SENT");return;
         }
         if(chrome!=null&&chrome.isShown()&&query!=null&&query.hasFocus()){
             query.append(typed);
+            if(submit){search();HouseholdPhoneSession.feedback("SEARCH_SENT");}
+            else HouseholdPhoneSession.feedback("WEB_TEXT_SENT");
             phonePairEvent("typed_search");return;
         }
         if(browser==null||!pointerPage||homeRequested||detailRequested||custom!=null){
             android.widget.Toast.makeText(this,
                 "Select a website text field first",android.widget.Toast.LENGTH_SHORT).show();
-            phonePairEvent("text_no_field");return;
+            phonePairEvent("text_no_field");
+            HouseholdPhoneSession.feedback("FIELD_REQUIRED");return;
         }
         // Never inspect or send text into opaque third-party iframes, passwords,
         // OTP, PIN, payment or other private form fields over a plain-HTTP phone
@@ -1272,21 +1319,33 @@ public class FlixMomoActivity extends Activity {
           "if(type==='password'||type==='tel'||type==='number'||"+
           "/(otp|pass|pin|card|cvv|secret|one-time|verification|payment)/i.test(name))return 'SENSITIVE_FIELD';"+
           "const value="+org.json.JSONObject.quote(typed)+";"+
+          "const submit="+submit+";"+
           "if(el.tagName==='INPUT'||el.tagName==='TEXTAREA'){"+
           "if(el.readOnly||el.disabled)return 'NOT_EDITABLE';"+
           "const t=el.type||'text';if(!/^(text|search|url|email)$/i.test(t)&&el.tagName==='INPUT')return 'NOT_EDITABLE';"+
           "let start=el.selectionStart,end=el.selectionEnd;"+
           "if(start==null||end==null){start=end=el.value.length;}"+
           "el.setRangeText(value,start,end,'end');"+
-          "el.dispatchEvent(new Event('input',{bubbles:true}));return 'FIELD_SELECTED';}"+
+          "el.dispatchEvent(new Event('input',{bubbles:true}));"+
+          "if(submit){if(el.form&&el.form.requestSubmit)el.form.requestSubmit();"+
+          "else el.dispatchEvent(new KeyboardEvent('keydown',{key:'Enter',code:'Enter',bubbles:true}));}"+
+          "return submit?'FIELD_SUBMITTED':'FIELD_SELECTED';}"+
           "if(el.isContentEditable){"+
           "const ok=document.execCommand('insertText',false,value);"+
-          "if(ok){el.dispatchEvent(new Event('input',{bubbles:true}));return 'FIELD_SELECTED';}"+
+          "if(ok){el.dispatchEvent(new Event('input',{bubbles:true}));"+
+          "if(submit)el.dispatchEvent(new KeyboardEvent('keydown',{key:'Enter',code:'Enter',bubbles:true}));"+
+          "return submit?'FIELD_SUBMITTED':'FIELD_SELECTED';}"+
           "return 'NOT_EDITABLE';}return 'NO_FIELD';"+
           "}catch(e){return 'NOT_EDITABLE';}})()";
         browser.evaluateJavascript(js,result->{
             if(isFinishing()||isDestroyed())return;
-            if(result!=null&&result.contains("FIELD_SELECTED")){phonePairEvent("typed_website");return;}
+            if(result!=null&&(result.contains("FIELD_SELECTED")||result.contains("FIELD_SUBMITTED"))){
+                phonePairEvent("typed_website");
+                HouseholdPhoneSession.feedback("WEB_TEXT_SENT");
+                return;
+            }
+            HouseholdPhoneSession.feedback(result!=null&&result.contains("SENSITIVE_FIELD")
+                ?"FIELD_BLOCKED":"FIELD_REQUIRED");
             phonePairEvent("text_no_field");
             android.widget.Toast.makeText(this,
                 "Tap the text box on the website first · phone text stays private",

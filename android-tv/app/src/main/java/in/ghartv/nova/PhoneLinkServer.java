@@ -34,6 +34,8 @@ public final class PhoneLinkServer {
         void connected(boolean connected);
         default void scroll(int dx,int dy) {}
         default void action(String action) {}
+        default void search(String term) {}
+        default void submitPageText(String term) {}
     }
 
     static final int MAX_FRAME = 4096;
@@ -64,10 +66,24 @@ public final class PhoneLinkServer {
             Thread t=new Thread(r,"ghartv-phone-network-writer");t.setDaemon(true);return t;
         });
     private volatile String lastMode="BROWSE";
+    /** No text/URL/secrets in protocol feedback; codes are strictly bounded. */
+    public void feedback(String code){
+        if(!("SEARCH_SENT".equals(code)||"INVALID_QUERY".equals(code)||
+             "WEB_TEXT_SENT".equals(code)||"FIELD_REQUIRED".equals(code)||
+             "FIELD_BLOCKED".equals(code)||"SEARCH_UNAVAILABLE".equals(code)))return;
+        final OutputStream out=activeOutput;
+        if(out!=null&&!outbound.isShutdown()){
+            try{outbound.execute(()->{
+                if(activeOutput!=out||stopped)return;
+                try{writeFrame(out,1,("R "+code).getBytes(StandardCharsets.UTF_8));}
+                catch(IOException ignored){}
+            });}catch(java.util.concurrent.RejectedExecutionException ignored){}
+        }
+    }
     public boolean isRunning(){return !stopped&&server!=null&&!server.isClosed();}
     /** Coarse screen state only; never URLs, text or playback identifiers. */
     public void mode(String mode){
-        if(!("HOME".equals(mode)||"BROWSE".equals(mode)||"EDITOR".equals(mode)||
+        if(!("HOME".equals(mode)||"BROWSE".equals(mode)||"SEARCH".equals(mode)||"EDITOR".equals(mode)||
              "VIDEO".equals(mode)||"STARTING".equals(mode)||"FULLSCREEN".equals(mode)))return;
         lastMode=mode;
         final OutputStream out=activeOutput;
@@ -273,6 +289,10 @@ public final class PhoneLinkServer {
                 case 'U': sink.up(); return true;
                 case 'K': { int code = Integer.parseInt(m.substring(2).trim()); if (ALLOWED_KEYS.contains(code)) sink.key(code); return true; }
                 case 'T': sink.text(m.length() > 2 ? m.substring(2) : ""); return true;
+                // One frame = one complete film-search command, not separate
+                // "type" and "Go" messages whose focus can diverge.
+                case 'Q': if(m.startsWith("Q ")&&m.length()<=258)sink.search(m.substring(2));return true;
+                case 'E': if(m.startsWith("E ")&&m.length()<=258)sink.submitPageText(m.substring(2));return true;
                 case 'S': {
                     if(m.length()>18||!m.startsWith("S "))return true;
                     String[] p=m.substring(2).split(" ");

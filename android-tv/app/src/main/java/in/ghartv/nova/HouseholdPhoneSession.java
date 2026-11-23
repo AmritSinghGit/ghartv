@@ -51,6 +51,8 @@ final class HouseholdPhoneSession {
             @Override public void text(String value){PhoneLinkServer.Sink s=foreground;if(s!=null)s.text(value);}
             @Override public void scroll(int x,int y){PhoneLinkServer.Sink s=foreground;if(s!=null)s.scroll(x,y);}
             @Override public void action(String action){PhoneLinkServer.Sink s=foreground;if(s!=null)s.action(action);}
+            @Override public void search(String term){PhoneLinkServer.Sink s=foreground;if(s!=null)s.search(term);}
+            @Override public void submitPageText(String term){PhoneLinkServer.Sink s=foreground;if(s!=null)s.submitPageText(term);}
             @Override public void connected(boolean yes){
                 connected=yes;
                 PhoneLinkServer.Sink s=foreground;if(s!=null)s.connected(yes);
@@ -59,6 +61,7 @@ final class HouseholdPhoneSession {
     }
     static boolean connected(){return server!=null&&server.isRunning()&&server.isConnected();}
     static void mode(String mode){PhoneLinkServer s=server;if(s!=null&&s.isRunning())s.mode(mode);}
+    static void feedback(String code){PhoneLinkServer s=server;if(s!=null&&s.isRunning())s.feedback(code);}
     static void attach(PhoneLinkServer.Sink sink){
         foreground=sink;
         if(sink!=null)sink.connected(connected());

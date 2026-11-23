@@ -136,6 +136,9 @@ public final class MainActivity extends Activity implements ChannelNavigator.Lis
                 (x>=0?KeyEvent.KEYCODE_DPAD_RIGHT:KeyEvent.KEYCODE_DPAD_LEFT);
             phoneHomeKey(code);
         });}
+        @Override public void search(String term){runOnUiThread(()->{
+            HouseholdPhoneSession.feedback("SEARCH_UNAVAILABLE");
+        });}
         @Override public void action(String action){runOnUiThread(()->{
             if("BACK".equals(action))phoneHomeKey(KeyEvent.KEYCODE_BACK);
             else if("PLAY".equals(action)||"PAUSE".equals(action))
@@ -155,8 +158,11 @@ public final class MainActivity extends Activity implements ChannelNavigator.Lis
         homePhoneButton.setBackground(TvUi.rounded(paired?0xFF08574B:0xFF352431,
             13,paired?0xFF54D9B2:0xFFC28073,1f,this));
     }
-    private void offerHomePhone(){
-        if(offeredHomePhoneInProcess||isFinishing()||isDestroyed()||!guideActive)return;
+    private void offerHomePhone(){offerHomePhone(false);}
+    private void offerHomePhone(boolean ownerPressed){
+        // The automatic first-run offer is once per process. The explicit
+        // Phone button must *always* reopen pairing after a dismiss.
+        if((!ownerPressed&&offeredHomePhoneInProcess)||isFinishing()||isDestroyed()||!guideActive)return;
         HouseholdPhoneSession.open(this,homePhoneSink,link->{
             if(isFinishing()||isDestroyed()||!guideActive)return;
             updateHomePhoneBadge();
@@ -171,11 +177,11 @@ public final class MainActivity extends Activity implements ChannelNavigator.Lis
             TextView hint=TvUi.label(this,"Scan with your phone Camera to use it as a TV remote.",16,TvUi.TEXT,false);
             hint.setGravity(Gravity.CENTER);body.addView(hint);
             ImageView qr=new ImageView(this);
-            try{qr.setImageBitmap(GharTvQr.bitmap(link.url,TvUi.dp(this,155)));}
+            try{qr.setImageBitmap(GharTvQr.bitmap(link.url,TvUi.dp(this,206)));}
             catch(Exception ignored){return;}
             qr.setContentDescription("Scan this QR to pair the local phone remote");
             LinearLayout.LayoutParams q=new LinearLayout.LayoutParams(
-                TvUi.dp(this,166),TvUi.dp(this,166));
+                TvUi.dp(this,218),TvUi.dp(this,218));
             q.topMargin=TvUi.dp(this,7);body.addView(qr,q);
             TextView next=TvUi.label(this,"Move on phone · Tap to choose",15,TvUi.MUTED,false);
             next.setGravity(Gravity.CENTER);body.addView(next);
@@ -193,7 +199,7 @@ public final class MainActivity extends Activity implements ChannelNavigator.Lis
               .action("Disconnect",false,d->{HouseholdPhoneSession.disconnect();
                   updateHomePhoneBadge();d.dismiss();})
               .action("Continue",true,android.app.Dialog::dismiss).show();
-        }else offerHomePhone();
+        }else offerHomePhone(true);
     }
     private TextView numberOverlay;
     private TextView emptyState;

@@ -15,8 +15,8 @@ android {
         applicationId = "in.ghartv.nova"
         minSdk = 26
         targetSdk = 35
-        versionCode = if (updateTestBase.isNotEmpty()) ((project.findProperty("testVersionCode") as String?)?.toIntOrNull() ?: 77) else 77
-        versionName = "0.7.3-phone-first-review"
+        versionCode = if (updateTestBase.isNotEmpty()) ((project.findProperty("testVersionCode") as String?)?.toIntOrNull() ?: 78) else 78
+        versionName = "0.7.4-phone-search-review"
         buildConfigField("String", "UPDATE_TEST_BASE", "\"\"")
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }

@@ -56,6 +56,10 @@ input{flex:1;min-width:0;height:46px;padding:10px 12px;color:var(--ink);
   background:#041822;border:1px solid #427b85;border-radius:11px;font-size:16px}
 .field button{min-height:46px;padding:0 12px;white-space:nowrap}
 #mic{font-size:20px;padding:0 9px}
+body.typing-active .editor{border-color:#82efd9;scroll-margin-bottom:16px}
+body.typing-active .track{min-height:65px}
+body.typing-active .dpad{grid-template-rows:repeat(3,32px);max-width:245px}
+body.typing-active .dpad button{min-height:32px}
 footer{text-align:center;color:var(--muted);font-size:11px;line-height:1.25}
 [hidden]{display:none!important}
 #video[hidden],#tools[hidden]{display:none}
@@ -107,13 +111,13 @@ body.editor-mode .editor{border-color:var(--mint)}
   <button data-a="SOURCES">☷ Sources</button>
   <button data-a="NEXT">↪ Try next</button>
 </div>
-<div class="editor" id="editor">
-  <label class="hint" id="input-hint" for="typing">Choose Search or select a website field, then type here.</label>
+<div class="editor" id="editor" role="search">
+  <label class="hint" id="input-hint" for="typing">Open FlixMomo Search, or select a website text box.</label>
   <div class="field">
     <input id="typing" type="text" enterkeyhint="done" placeholder="Type on the TV" autocomplete="off" autocapitalize="off" spellcheck="false">
     <button id="mic" aria-label="Speak using phone microphone">🎙</button>
-    <button id="send" class="primary">Type</button>
-    <button id="go" aria-label="Search or go">Go</button>
+    <button id="send" class="primary">Search</button>
+    <button id="go" aria-label="Submit website field" hidden>Go</button>
   </div>
 </div>
 <footer id="footnote">Private home network only · No passwords, OTPs or payment details</footer>
@@ -126,6 +130,16 @@ const status=document.getElementById("status"),modeEl=document.getElementById("m
 const key=new URLSearchParams(location.search).get("k");
 let ws=null,session="",attempts=0,mode="HOME",points=new Map(),
     dx=0,dy=0,sx=0,sy=0,tapDistance=0,tapTime=0,multi=false,ready=false;
+const sendButton=document.getElementById("send"),
+      goButton=document.getElementById("go"),
+      micButton=document.getElementById("mic");
+let lastSubmission="",submissionPending=false;
+function phoneNotice(message){hint.textContent=message;}
+function focusPhoneInput(){
+  // Chrome on Android may show the keyboard here. iOS Safari requires a
+  // direct viewer gesture; a large tap target remains ready if blocked.
+  try{input.focus({preventScroll:true});}catch(e){input.focus();}
+}
 function setOnline(online,message){
  ready=online;status.textContent=message;
  status.classList.toggle("connected",online);
@@ -147,31 +161,49 @@ function connect(){
    const data=String(e.data||"");
    if(data.startsWith("S "))session=data.slice(2);
    else if(data.startsWith("V "))setMode(data.slice(2));
-   else if(data==="P")setOnline(true,"● Connected");
+   else if(data.startsWith("R ")){
+     const code=data.slice(2);
+     submissionPending=false;
+     if(code==="SEARCH_SENT"){
+       input.value="";phoneNotice("Search sent to GharTV. Choose a result on the TV.");
+     }else if(code==="WEB_TEXT_SENT"){
+       input.value="";phoneNotice("Text sent to the selected website field.");
+     }else if(code==="INVALID_QUERY")phoneNotice("Please enter a film or series title.");
+     else if(code==="FIELD_BLOCKED")phoneNotice("This field is private. Use the TV remote.");
+     else if(code==="FIELD_REQUIRED")phoneNotice("Select the website's text field first.");
+     else if(code==="SEARCH_UNAVAILABLE")phoneNotice("Open FlixMomo on the TV to search.");
+   }else if(data==="P")setOnline(true,"● Connected");
  };
 }
 function send(message){if(ready&&ws&&ws.readyState===1)ws.send(message);}
 function setMode(next){
- if(!["HOME","BROWSE","EDITOR","STARTING","VIDEO","FULLSCREEN"].includes(next))return;
+ if(!["HOME","BROWSE","SEARCH","EDITOR","STARTING","VIDEO","FULLSCREEN"].includes(next))return;
  mode=next;
  const video=next==="VIDEO"||next==="FULLSCREEN"||next==="STARTING";
  document.body.classList.toggle("video-mode",video);
- document.body.classList.toggle("editor-mode",next==="EDITOR");
+ document.body.classList.toggle("editor-mode",next==="EDITOR"||next==="SEARCH");
+ editor.setAttribute("aria-label",next==="SEARCH"?"Search films or series":"Type into selected TV field");
+ const searching=next==="SEARCH";
+ sendButton.textContent=searching?"Search":next==="EDITOR"?"Type":"Type";
+ goButton.hidden=next!=="EDITOR";
+ if(searching&&ready){phoneNotice("Type a title and tap Search — one step.");
+   // Focus after pairing without opening the TV's on-screen keyboard.
+   focusPhoneInput();
+ }
  document.getElementById("video").hidden=!video;
  document.getElementById("tools").hidden=video;
- const labels={HOME:"TV GUIDE",BROWSE:"BROWSER · FLIXMOMO",
-  EDITOR:"TEXT BOX SELECTED",STARTING:"OPENING VIDEO",VIDEO:"PLAYING VIDEO",FULLSCREEN:"FULLSCREEN VIDEO"};
+ const labels={HOME:"TV GUIDE",BROWSE:"BROWSER · FLIXMOMO",SEARCH:"SEARCH A FILM OR SERIES",
+  EDITOR:"WEBSITE TEXT BOX",STARTING:"OPENING VIDEO",VIDEO:"PLAYING VIDEO",FULLSCREEN:"FULLSCREEN VIDEO"};
  modeEl.textContent=labels[next];
  tip.textContent=next==="EDITOR"?"Type below on your phone":
    video?"Back · Play · Fullscreen · Sources":"Point, tap or use arrows";
- hint.textContent=next==="EDITOR"?"TV text field selected. Type or use your phone mic.":
-   video?"Video controls above · Type only after selecting a text box.":
-   "Tap Search or select a website field, then type.";
- if(next==="EDITOR"){
-   // iOS may require a real user tap to show the keyboard; never force
-   // keyboard focus in a way that steals the TV's website selection.
-   input.placeholder="Type in selected TV text field";
- }else input.placeholder="Search or type on TV";
+ hint.textContent=searching?"Type your film or series title here. Tap Search once.":
+   next==="EDITOR"?"Website text field selected. Type or use your phone keyboard microphone.":
+   video?"Video controls above. You may use Try next if a source fails.":
+   "Open FlixMomo and choose Search, or tap a website field.";
+ if(searching)input.placeholder="Film or series name";
+ else if(next==="EDITOR")input.placeholder="Type in selected website field";
+ else input.placeholder="Select a TV text box first";
 }
 connect();
 setOnline(false,"● Connecting");
@@ -210,20 +242,32 @@ track.addEventListener("pointercancel",e=>{points.delete(e.pointerId);multi=true
 track.addEventListener("touchmove",e=>e.preventDefault(),{passive:false});
 document.querySelectorAll("[data-k]").forEach(b=>b.addEventListener("click",()=>send("K "+b.dataset.k)));
 document.querySelectorAll("[data-a]").forEach(b=>b.addEventListener("click",()=>send("A "+b.dataset.a)));
-function typeOnTv(){
- const value=input.value;
- if(!value||!ready)return;
- send("T "+value.slice(0,256));
- input.value="";
- input.blur();
+function sendText(submit){
+ const value=input.value.trim();
+ if(!ready){phoneNotice("Pair the phone before sending text.");return;}
+ if(submissionPending){return;}
+ if(!value){phoneNotice("Type a film name or tap the microphone.");focusPhoneInput();return;}
+ const bounded=value.slice(0,256);
+ if(mode==="SEARCH"){
+   // One atomic search message. The TV owns focus and performs Search.
+   send("Q "+bounded);submissionPending=true;
+   phoneNotice("Searching GharTV…");return;
+ }
+ if(mode==="EDITOR"){
+   send((submit?"E ":"T ")+bounded);
+   if(submit)submissionPending=true;
+   else {input.value="";phoneNotice("Text typed into the selected TV field.");}
+   return;
+ }
+ phoneNotice("Open FlixMomo Search, or select a website text box first.");
 }
-document.getElementById("send").addEventListener("click",typeOnTv);
-document.getElementById("go").addEventListener("click",()=>{
- typeOnTv();send("A GO");
-});
+sendButton.addEventListener("click",()=>sendText(false));
+goButton.addEventListener("click",()=>sendText(true));
 input.addEventListener("keydown",e=>{
- if(e.key==="Enter"){e.preventDefault();typeOnTv();send("A GO");}
+ if(e.key==="Enter"){e.preventDefault();sendText(mode==="EDITOR");}
 });
+input.addEventListener("focus",()=>{document.body.classList.add("typing-active");});
+input.addEventListener("blur",()=>{document.body.classList.remove("typing-active");});
 document.getElementById("mic").addEventListener("click",()=>{
  const Recognizer=window.SpeechRecognition||window.webkitSpeechRecognition;
  if(!Recognizer){
