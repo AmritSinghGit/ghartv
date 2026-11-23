@@ -1,0 +1,17 @@
+{
+  "versionCode": 75,
+  "versionName": "0.7.1-qr-lan-corrected",
+  "apkUrl": "https://github.com/AmritSinghGit/ghartv/releases/download/v0.7.1-qr-lan-corrected/GharTV-code75-household-update.apk",
+  "sha256": "65f1837bb4aecdb2693610d96023c188c2dfe14cb48e675abe66ee463c54eca4",
+  "sourceCommit": "de7ce7740981e935c6eb77d58bd64532af61e0c8",
+  "artifactTag": "v0.7.1-qr-lan-corrected",
+  "channel": "production",
+  "publishedAt": "2026-11-23T06:03:38Z",
+  "ownerDecision": "OWNER_REQUESTED_PUBLISH_EXACT_EMULATOR_V75_20261123",
+  "distributionMode": "exact-installed-signed-apk-no-rebuild",
+  "notes": "GharTV v75: Tor Web, improved remote and keypad, phone QR pairing and network settings. Your login and TV guide are preserved. Android will ask before installing; player playback and fullscreen depend on source availability.",
+  "mandatoryUpdateSupported": false,
+  "silentInstallSupported": false,
+  "previousVersionCode": 63,
+  "previousArtifactSha256": "91aa47d31afbbd28fed8ebec40cbcbb77789e3373dfdfc75e18c9d85285c7b7b"
+}

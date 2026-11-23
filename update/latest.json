@@ -1,17 +1,17 @@
 {
-  "versionCode": 75,
-  "versionName": "0.7.1-qr-lan-corrected",
-  "apkUrl": "https://github.com/AmritSinghGit/ghartv/releases/download/v0.7.1-qr-lan-corrected/GharTV-code75-household-update.apk",
-  "sha256": "65f1837bb4aecdb2693610d96023c188c2dfe14cb48e675abe66ee463c54eca4",
-  "sourceCommit": "de7ce7740981e935c6eb77d58bd64532af61e0c8",
-  "artifactTag": "v0.7.1-qr-lan-corrected",
+  "versionCode": 78,
+  "versionName": "0.7.4-phone-search-review",
+  "apkUrl": "https://github.com/AmritSinghGit/ghartv/releases/download/v0.7.4-phone-search-review/GharTV-code78-owner-review.apk",
+  "sha256": "267aa4b5eee4f8a3ed9402d5689db0253abfb253e759c9e7201acb8e60c94866",
+  "sourceCommit": "e7921d925370ea53bf838f5bf4b58f6653c75dbc",
+  "artifactTag": "v0.7.4-phone-search-review",
   "channel": "production",
-  "publishedAt": "2026-11-23T06:03:38Z",
-  "ownerDecision": "OWNER_REQUESTED_PUBLISH_EXACT_EMULATOR_V75_20261123",
+  "publishedAt": "2026-11-23T09:38:03Z",
+  "ownerDecision": "OWNER_APPROVED_PUBLISH_V78_AUTOMATIC_UPDATE_20261123",
   "distributionMode": "exact-installed-signed-apk-no-rebuild",
-  "notes": "GharTV v75: Tor Web, improved remote and keypad, phone QR pairing and network settings. Your login and TV guide are preserved. Android will ask before installing; player playback and fullscreen depend on source availability.",
+  "notes": "GharTV v78: optional phone QR, pairing and one-step FlixMomo phone search. Same original app and saved login. On code75 select Jio account > Check for GharTV update once; from code78 automatic startup checks are enabled. Android must confirm installation. Third-party video playback and fullscreen remain provider-dependent.",
   "mandatoryUpdateSupported": false,
   "silentInstallSupported": false,
-  "previousVersionCode": 63,
-  "previousArtifactSha256": "91aa47d31afbbd28fed8ebec40cbcbb77789e3373dfdfc75e18c9d85285c7b7b"
+  "previousVersionCode": 75,
+  "previousArtifactSha256": "65f1837bb4aecdb2693610d96023c188c2dfe14cb48e675abe66ee463c54eca4"
 }
