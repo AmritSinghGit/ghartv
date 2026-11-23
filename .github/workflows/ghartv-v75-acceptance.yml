@@ -37,9 +37,13 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          command -v sdkmanager
-          yes | sdkmanager --licenses >/dev/null || true
-          sdkmanager "platforms;android-36" "build-tools;36.0.0" "platform-tools"
+          export ANDROID_HOME="${ANDROID_HOME:-/usr/local/lib/android/sdk}"
+          export ANDROID_SDK_ROOT="$ANDROID_HOME"
+          sdk="$(find "$ANDROID_HOME/cmdline-tools" -path '*/bin/sdkmanager' -type f | sort -Vr | head -1)"
+          test -n "$sdk" && test -x "$sdk"
+          yes | "$sdk" --licenses >/dev/null || true
+          "$sdk" "platforms;android-36" "build-tools;36.0.0" "platform-tools"
+          echo "ANDROID_HOME=$ANDROID_HOME" >> "$GITHUB_ENV"
       - name: Use available JDK21 compiler for CI only
         shell: bash
         run: |
