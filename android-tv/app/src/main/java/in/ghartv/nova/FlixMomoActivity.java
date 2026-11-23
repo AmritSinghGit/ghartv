@@ -260,6 +260,7 @@ public class FlixMomoActivity extends Activity {
         @Override public void text(String value){runOnUiThread(()->phoneText(value,false));}
         @Override public void search(String term){runOnUiThread(()->phoneSubmitFilmQuery(term));}
         @Override public void submitPageText(String term){runOnUiThread(()->phoneText(term,true));}
+        @Override public void edit(String command){runOnUiThread(()->phoneEdit(command));}
         @Override public void connected(boolean yes){runOnUiThread(()->{
             if(isFinishing()||isDestroyed())return;
             if(phoneConnected!=yes){
@@ -289,7 +290,10 @@ public class FlixMomoActivity extends Activity {
     private void hideTvSoftKeyboard(){
         android.view.inputmethod.InputMethodManager ime=
             (android.view.inputmethod.InputMethodManager)getSystemService(INPUT_METHOD_SERVICE);
-        if(ime!=null&&query!=null)ime.hideSoftInputFromWindow(query.getWindowToken(),0);
+        if(ime!=null){
+            if(query!=null)ime.hideSoftInputFromWindow(query.getWindowToken(),0);
+            if(browser!=null)ime.hideSoftInputFromWindow(browser.getWindowToken(),0);
+        }
     }
     private void notifyPhoneMode(){
         if(custom!=null||verifiedImmersive)HouseholdPhoneSession.mode("FULLSCREEN");
@@ -375,6 +379,7 @@ public class FlixMomoActivity extends Activity {
         hideTvSoftKeyboard();
         search();
         hideTvSoftKeyboard();
+        handler.postDelayed(this::hideTvSoftKeyboard,300L);
         HouseholdPhoneSession.feedback("SEARCH_SENT");
     }
     private void phoneMediaKey(int code){
@@ -641,7 +646,10 @@ public class FlixMomoActivity extends Activity {
         homePanel.setToolbarAnchor(toolbarAnchor);
         query.setOnFocusChangeListener((v,focused)->{
             if(focused)cursor.leave();
-            if(phoneConnected)notifyPhoneMode();
+            if(phoneConnected){
+                if(focused)handler.postDelayed(this::hideTvSoftKeyboard,95L);
+                notifyPhoneMode();
+            }
         });
         search.setOnClickListener(v->search());voice.setOnClickListener(v->voiceSearch());browse.setOnClickListener(v->showHome(false));guide.setOnClickListener(v->finish());
         query.setOnEditorActionListener((v,action,event)->{if(action==android.view.inputmethod.EditorInfo.IME_ACTION_SEARCH||event!=null&&event.getKeyCode()==KeyEvent.KEYCODE_ENTER&&event.getAction()==KeyEvent.ACTION_UP){search();return true;}return false;});
@@ -753,6 +761,7 @@ public class FlixMomoActivity extends Activity {
                 loading=false;handler.removeCallbacks(slowLoad);if(mainFrameError){pageReady=false;return;}
                 if("/dummy".equals(Uri.parse(url).getPath())){fail("FlixMomo declined this session. No provider protection was changed.");return;}
                 if(torWebMode&&browserBar!=null)browserBar.current(url);
+                if(phoneConnected)handler.postDelayed(FlixMomoActivity.this::hideTvSoftKeyboard,200L);
                 keepSubmittedSearchBrowserOnly();pageReady=allowedBrowserPage(Uri.parse(url));
                 if(pageReady&&torController!=null&&torController.active()){
                     torController.documentLoaded(url);hideProviderStatus();
@@ -1283,6 +1292,70 @@ public class FlixMomoActivity extends Activity {
         }
         if(!mouseActive)enterPagePointer();
         return cursor.enabled();
+    }
+    /** Backspace or clear only the active non-sensitive text field.
+     * Never inject global keys or inspect cross-origin iframe contents. */
+    private void phoneEdit(String command){
+        if(isFinishing()||isDestroyed()||
+            !("BACKSPACE".equals(command)||"CLEAR".equals(command)))return;
+        final boolean clear="CLEAR".equals(command);
+        android.widget.EditText active=null;
+        if(torWebMode&&browserBar!=null&&browserBar.showing()&&
+           browserBar.address().hasFocus())active=browserBar.address();
+        else if(chrome!=null&&chrome.isShown()&&query!=null&&query.hasFocus())
+            active=query;
+        if(active!=null){
+            PhoneTextEdit.Result edit=PhoneTextEdit.edit(active.getText().toString(),
+                active.getSelectionStart(),active.getSelectionEnd(),clear);
+            active.setText(edit.value);
+            active.setSelection(edit.caret);
+            hideTvSoftKeyboard();
+            HouseholdPhoneSession.feedback("EDIT_APPLIED");return;
+        }
+        if(browser==null||!pointerPage||custom!=null){
+            HouseholdPhoneSession.feedback("EDIT_FIELD_REQUIRED");return;
+        }
+        // Strict top-document-only editing. Never reach into embeds or
+        // private authentication, phone numbers, PINs or payment fields.
+        final String js="(function(){try{"+
+          "const el=document.activeElement;"+
+          "if(!el||el===document.body||el.tagName==='IFRAME')return 'NO_FIELD';"+
+          "const t=(el.type||'').toLowerCase();"+
+          "const n=((el.name||'')+' '+(el.id||'')+' '+(el.autocomplete||'')).toLowerCase();"+
+          "if(t==='password'||t==='tel'||t==='number'||"+
+          "/(otp|pass|pin|card|cvv|secret|one-time|verification|payment)/i.test(n))"+
+          "return 'BLOCKED';"+
+          "const clear="+clear+";"+
+          "if(el.tagName==='INPUT'||el.tagName==='TEXTAREA'){"+
+          "if(el.readOnly||el.disabled||"+
+          "(el.tagName==='INPUT'&&!/^(text|search|url|email)$/.test(t||'text')))return 'NO_FIELD';"+
+          "let a=el.selectionStart,b=el.selectionEnd;"+
+          "if(a==null||b==null)return 'NO_FIELD';"+
+          "if(clear){a=0;b=el.value.length;}"+
+          "else if(a===b&&a>0){"+
+          "const prefix=el.value.slice(0,a);"+
+          "a-=Array.from(prefix).slice(-1)[0].length;}"+
+          "el.setRangeText('',a,b,'start');"+
+          "el.dispatchEvent(new Event('input',{bubbles:true}));"+
+          "return 'EDIT_APPLIED';}"+
+          "if(el.isContentEditable){"+
+          "if(clear){el.textContent='';el.dispatchEvent(new Event('input',{bubbles:true}));return 'EDIT_APPLIED';}"+
+          "const sel=window.getSelection();if(!sel||sel.rangeCount!==1)return 'NO_FIELD';"+
+          "const range=sel.getRangeAt(0);"+
+          "if(range.collapsed){const node=range.startContainer;"+
+          "if(node.nodeType!==3||range.startOffset===0)return 'NO_FIELD';"+
+          "const txt=node.textContent.slice(0,range.startOffset);"+
+          "range.setStart(node,range.startOffset-Array.from(txt).slice(-1)[0].length);}"+
+          "range.deleteContents();"+
+          "el.dispatchEvent(new Event('input',{bubbles:true}));return 'EDIT_APPLIED';}"+
+          "return 'NO_FIELD';"+
+          "}catch(e){return 'NO_FIELD';}})()";
+        browser.evaluateJavascript(js,result->{
+            if(isFinishing()||isDestroyed())return;
+            if(result!=null&&result.contains("EDIT_APPLIED"))HouseholdPhoneSession.feedback("EDIT_APPLIED");
+            else if(result!=null&&result.contains("BLOCKED"))HouseholdPhoneSession.feedback("FIELD_BLOCKED");
+            else HouseholdPhoneSession.feedback("EDIT_FIELD_REQUIRED");
+        });
     }
     /** A phone's Send targets the selected field, not an invisible top search. */
     private void phoneText(String raw){phoneText(raw,false);}

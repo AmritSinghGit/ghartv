@@ -56,6 +56,11 @@ input{flex:1;min-width:0;height:46px;padding:10px 12px;color:var(--ink);
   background:#041822;border:1px solid #427b85;border-radius:11px;font-size:16px}
 .field button{min-height:46px;padding:0 12px;white-space:nowrap}
 #mic{font-size:20px;padding:0 9px}
+.edit-tools{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.edit-tools button{height:43px;min-height:43px;font-size:14px;
+ border:1px solid #497e87;background:#113846;color:#d9fff4}
+.edit-tools button:active{background:#20696d}
+body.video-mode .edit-tools{display:none}
 body.typing-active .editor{border-color:#82efd9;scroll-margin-bottom:16px}
 body.typing-active .track{min-height:65px}
 body.typing-active .dpad{grid-template-rows:repeat(3,32px);max-width:245px}
@@ -119,6 +124,10 @@ body.editor-mode .editor{border-color:var(--mint)}
     <button id="send" class="primary">Search</button>
     <button id="go" aria-label="Submit website field" hidden>Go</button>
   </div>
+  <div class="edit-tools" role="group" aria-label="Edit text on the phone and TV">
+    <button id="backspace" type="button" aria-label="Delete last character">⌫ Backspace</button>
+    <button id="clear-text" type="button" aria-label="Clear selected text">Clear text</button>
+  </div>
 </div>
 <footer id="footnote">Private home network only · No passwords, OTPs or payment details</footer>
 <script>
@@ -172,6 +181,8 @@ function connect(){
      else if(code==="FIELD_BLOCKED")phoneNotice("This field is private. Use the TV remote.");
      else if(code==="FIELD_REQUIRED")phoneNotice("Select the website's text field first.");
      else if(code==="SEARCH_UNAVAILABLE")phoneNotice("Open FlixMomo on the TV to search.");
+     else if(code==="EDIT_APPLIED")phoneNotice("Text corrected on the TV.");
+     else if(code==="EDIT_FIELD_REQUIRED")phoneNotice("Tap Search on the phone or select a website text box.");
    }else if(data==="P")setOnline(true,"● Connected");
  };
 }
@@ -242,6 +253,33 @@ track.addEventListener("pointercancel",e=>{points.delete(e.pointerId);multi=true
 track.addEventListener("touchmove",e=>e.preventDefault(),{passive:false});
 document.querySelectorAll("[data-k]").forEach(b=>b.addEventListener("click",()=>send("K "+b.dataset.k)));
 document.querySelectorAll("[data-a]").forEach(b=>b.addEventListener("click",()=>send("A "+b.dataset.a)));
+function editBackspace(){
+ if(!ready)return;
+ // When editing the phone's unsent draft, delete locally first. When the
+ // phone field is empty, Backspace edits the currently selected TV field.
+ const a=input.selectionStart,b=input.selectionEnd;
+ if(input.value.length){
+   const start=a==null?input.value.length:a, end=b==null?start:b;
+   let from=Math.min(start,end),to=Math.max(start,end);
+   if(from===to&&from>0){const prefix=input.value.slice(0,from);
+     from-=Array.from(prefix).slice(-1)[0].length;}
+   input.setRangeText("",from,to,"start");
+   phoneNotice("Text corrected. Tap Search to send the title.");
+   return;
+ }
+ if(mode==="SEARCH"||mode==="EDITOR"){
+   send("B");phoneNotice("Deleting from the selected TV text field…");
+ }else phoneNotice("Tap Search or select a website field first.");
+}
+function clearPhoneAndTv(){
+ input.value="";
+ if(!ready)return;
+ if(mode==="SEARCH"||mode==="EDITOR"){
+   send("X");phoneNotice("Clearing the selected TV field…");
+ }else phoneNotice("Phone draft cleared.");
+}
+document.getElementById("backspace").addEventListener("click",editBackspace);
+document.getElementById("clear-text").addEventListener("click",clearPhoneAndTv);
 function sendText(submit){
  const value=input.value.trim();
  if(!ready){phoneNotice("Pair the phone before sending text.");return;}
@@ -265,6 +303,9 @@ sendButton.addEventListener("click",()=>sendText(false));
 goButton.addEventListener("click",()=>sendText(true));
 input.addEventListener("keydown",e=>{
  if(e.key==="Enter"){e.preventDefault();sendText(mode==="EDITOR");}
+ else if(e.key==="Backspace"&&input.value===""){
+   e.preventDefault();editBackspace();
+ }
 });
 input.addEventListener("focus",()=>{document.body.classList.add("typing-active");});
 input.addEventListener("blur",()=>{document.body.classList.remove("typing-active");});
@@ -282,7 +323,7 @@ document.getElementById("mic").addEventListener("click",()=>{
    rec.onresult=e=>{
      const spoken=e.results?.[0]?.[0]?.transcript||"";
      input.value=spoken.slice(0,256);
-     hint.textContent="Tap Type or Go to send this text to the TV.";
+     hint.textContent=mode==="SEARCH"?"Tap Search to find this title on TV.":"Tap Type to send to the selected website field.";
    };
    rec.onerror=()=>{
      hint.textContent="Use the phone keyboard's own microphone to dictate instead.";

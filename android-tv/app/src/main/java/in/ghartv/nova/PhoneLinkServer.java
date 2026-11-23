@@ -36,6 +36,8 @@ public final class PhoneLinkServer {
         default void action(String action) {}
         default void search(String term) {}
         default void submitPageText(String term) {}
+        /** Explicit editing of the currently selected safe TV field. */
+        default void edit(String command) {}
     }
 
     static final int MAX_FRAME = 4096;
@@ -70,7 +72,8 @@ public final class PhoneLinkServer {
     public void feedback(String code){
         if(!("SEARCH_SENT".equals(code)||"INVALID_QUERY".equals(code)||
              "WEB_TEXT_SENT".equals(code)||"FIELD_REQUIRED".equals(code)||
-             "FIELD_BLOCKED".equals(code)||"SEARCH_UNAVAILABLE".equals(code)))return;
+             "FIELD_BLOCKED".equals(code)||"SEARCH_UNAVAILABLE".equals(code)||
+             "EDIT_APPLIED".equals(code)||"EDIT_FIELD_REQUIRED".equals(code)))return;
         final OutputStream out=activeOutput;
         if(out!=null&&!outbound.isShutdown()){
             try{outbound.execute(()->{
@@ -293,6 +296,10 @@ public final class PhoneLinkServer {
                 // "type" and "Go" messages whose focus can diverge.
                 case 'Q': if(m.startsWith("Q ")&&m.length()<=258)sink.search(m.substring(2));return true;
                 case 'E': if(m.startsWith("E ")&&m.length()<=258)sink.submitPageText(m.substring(2));return true;
+                // B and X are exact, bounded edits: no arbitrary JavaScript,
+                // delete key spam or remote injection into secure fields.
+                case 'B': if("B".equals(m))sink.edit("BACKSPACE");return true;
+                case 'X': if("X".equals(m))sink.edit("CLEAR");return true;
                 case 'S': {
                     if(m.length()>18||!m.startsWith("S "))return true;
                     String[] p=m.substring(2).split(" ");

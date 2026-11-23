@@ -130,6 +130,23 @@ public final class MainActivity extends Activity implements ChannelNavigator.Lis
                 ((EditText)v).append(value.substring(0,Math.min(256,value.length())));
             }else Toast.makeText(MainActivity.this,"Select Search on TV first",Toast.LENGTH_SHORT).show();
         });}
+        @Override public void edit(String command){runOnUiThread(()->{
+            View focus=getCurrentFocus();
+            if(!(focus instanceof EditText)){
+                HouseholdPhoneSession.feedback("EDIT_FIELD_REQUIRED");return;
+            }
+            EditText edit=(EditText)focus;
+            int type=edit.getInputType();
+            if((type&android.text.InputType.TYPE_MASK_CLASS)!=android.text.InputType.TYPE_CLASS_TEXT ||
+               (type&android.text.InputType.TYPE_TEXT_VARIATION_PASSWORD)!=0){
+                HouseholdPhoneSession.feedback("FIELD_BLOCKED");return;
+            }
+            PhoneTextEdit.Result result=PhoneTextEdit.edit(edit.getText().toString(),
+                edit.getSelectionStart(),edit.getSelectionEnd(),"CLEAR".equals(command));
+            edit.setText(result.value);
+            edit.setSelection(result.caret);
+            HouseholdPhoneSession.feedback("EDIT_APPLIED");
+        });}
         @Override public void scroll(int x,int y){runOnUiThread(()->{
             int code=Math.abs(y)>=Math.abs(x)?
                 (y>=0?KeyEvent.KEYCODE_DPAD_DOWN:KeyEvent.KEYCODE_DPAD_UP):

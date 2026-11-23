@@ -19,6 +19,7 @@ public final class PhoneLinkSmoke {
         public void action(String a){got.add("A "+a);}
         public void search(String term){got.add("Q "+term);}
         public void submitPageText(String term){got.add("E "+term);}
+        public void edit(String command){got.add("EDIT "+command);}
         public void connected(boolean c){got.add(c?"on":"off");}};
     static String hp,sess;
     static String http(int port,String target,String extra) throws Exception{
@@ -59,6 +60,8 @@ public final class PhoneLinkSmoke {
             s.mode("SEARCH");ok(readFrame(in).equals("V SEARCH"));
             s.feedback("SEARCH_SENT");ok(readFrame(in).equals("R SEARCH_SENT"));
             s.feedback("FIELD_REQUIRED");ok(readFrame(in).equals("R FIELD_REQUIRED"));
+            s.feedback("EDIT_APPLIED");ok(readFrame(in).equals("R EDIT_APPLIED"));
+            s.feedback("EDIT_FIELD_REQUIRED");ok(readFrame(in).equals("R EDIT_FIELD_REQUIRED"));
             s.feedback("PASSWORD"); // unsupported feedback never sent
             s.mode("PASSWORD");  // unsupported mode ignored, no frame
             frame(o,"S 0 350");frame(o,"S 9000 -9000");frame(o,"A PLAY");
@@ -66,6 +69,8 @@ public final class PhoneLinkSmoke {
             frame(o,"A GO");frame(o,"A MALWARE");frame(o,"A OPEN_URL");
             frame(o,"Q Planet Earth");
             frame(o,"E my documentary");
+            frame(o,"B");frame(o,"X");
+            frame(o,"B MALWARE");frame(o,"X EXEC");
             frame(o,"Q "); // empty request is ignored by app validation
             frame(o,"M 5 -7");frame(o,"C");frame(o,"K 23");frame(o,"K 26");frame(o,"K 224");frame(o,"K 4");frame(o,"T hello हि");frame(o,"M 9999 -9999");frame(o,"K junk");
             long t0=System.nanoTime();frame(o,"P");ok(readFrame(in).equals("P"));long ping=(System.nanoTime()-t0)/1000;
@@ -74,6 +79,9 @@ public final class PhoneLinkSmoke {
             long t1=System.nanoTime();frame(o,"P");ok(readFrame(in).equals("P"));long lag=(System.nanoTime()-t1)/1000;
             ok(got.contains("M 5 -7")&&got.contains("C")&&got.contains("K 23")&&got.contains("T hello हि"));
             ok(got.contains("Q Planet Earth")&&got.contains("E my documentary"));
+            ok(got.contains("EDIT BACKSPACE")&&got.contains("EDIT CLEAR"));
+            ok(got.stream().filter(x->x.equals("EDIT BACKSPACE")).count()==1 &&
+               got.stream().filter(x->x.equals("EDIT CLEAR")).count()==1);
             ok(got.contains("M 400 -400"));                                          // clamped
             ok(got.contains("S 0 350")&&got.contains("S 400 -400"));
             ok(got.contains("A PLAY")&&got.contains("A NEXT")&&got.contains("A FULLSCREEN")&&
