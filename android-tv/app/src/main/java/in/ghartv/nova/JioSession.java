@@ -73,6 +73,7 @@ public final class JioSession {
     }
 
     public static void clear(Context context) {
+        JioApiClient.clearPlaybackHandoffs();
         SecureStore.remove(context, STORE_KEY);
     }
 

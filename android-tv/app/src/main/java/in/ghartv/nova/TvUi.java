@@ -6,14 +6,17 @@ import android.content.res.ColorStateList;
 import android.graphics.Color;
 import android.graphics.Typeface;
 import android.graphics.drawable.GradientDrawable;
+import android.os.Build;
 import android.view.Gravity;
+import android.view.MotionEvent;
+import android.view.PointerIcon;
 import android.view.View;
 import android.view.animation.AccelerateDecelerateInterpolator;
 import android.widget.Button;
 import android.widget.TextView;
 
 public final class TvUi {
-    public static final int BG = Color.rgb(1, 5, 11);
+    public static final int BG = Color.rgb(5, 7, 16);
     public static final int SURFACE = Color.rgb(4, 18, 28);
     public static final int SURFACE_2 = Color.rgb(7, 32, 44);
     public static final int SURFACE_3 = Color.rgb(10, 74, 78);
@@ -27,6 +30,14 @@ public final class TvUi {
 
     private TvUi() {}
 
+    public static String istTime(long epoch){
+        java.text.SimpleDateFormat f=new java.text.SimpleDateFormat("h:mm a",java.util.Locale.forLanguageTag("en-IN"));
+        f.setTimeZone(java.util.TimeZone.getTimeZone("Asia/Kolkata"));return f.format(new java.util.Date(epoch));
+    }
+    public static String istDateTime(long epoch){
+        java.text.SimpleDateFormat f=new java.text.SimpleDateFormat("dd MMM, h:mm a 'IST'",java.util.Locale.forLanguageTag("en-IN"));
+        f.setTimeZone(java.util.TimeZone.getTimeZone("Asia/Kolkata"));return f.format(new java.util.Date(epoch));
+    }
     public static int dp(Context context, float value) {
         return Math.round(value * context.getResources().getDisplayMetrics().density);
     }
@@ -89,6 +100,7 @@ public final class TvUi {
     public static void focusCard(View view, int normalColor, int focusColor, float radiusDp) {
         view.setFocusable(true);
         view.setFocusableInTouchMode(true);
+        pointerTarget(view, true);
         view.setClipToOutline(false);
         view.setBackground(rounded(normalColor, radiusDp, Color.argb(42, 255, 255, 255), 1, view.getContext()));
         view.setOnFocusChangeListener((v, focused) -> {
@@ -98,15 +110,25 @@ public final class TvUi {
                     focused ? Color.rgb(225, 255, 249) : Color.argb(42, 255, 255, 255),
                     focused ? 2.3f : 1f,
                     v.getContext()));
-            v.animate()
-                    .scaleX(focused ? 1.035f : 1f)
-                    .scaleY(focused ? 1.035f : 1f)
-                    .translationZ(focused ? dp(v.getContext(), 8) : 0)
-                    .alpha(focused ? 1f : .96f)
-                    .setInterpolator(new AccelerateDecelerateInterpolator())
-                    .setDuration(120)
-                    .start();
+            v.animate().cancel();v.setScaleX(1f);v.setScaleY(1f);v.setTranslationZ(0);v.setAlpha(1f);
         });
+    }
+
+    /** Make emulator/TV mouse input visible and keep pointer selection aligned with D-pad focus. */
+    public static void pointerTarget(View view, boolean focusOnHover) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+            view.setPointerIcon(PointerIcon.getSystemIcon(view.getContext(), PointerIcon.TYPE_HAND));
+        }
+        if (focusOnHover) {
+            view.setOnHoverListener((target, event) -> {
+                if ((event.getActionMasked() == MotionEvent.ACTION_HOVER_ENTER
+                        || event.getActionMasked() == MotionEvent.ACTION_HOVER_MOVE)
+                        && !target.hasFocus()) {
+                    target.requestFocus();
+                }
+                return false;
+            });
+        }
     }
 
 

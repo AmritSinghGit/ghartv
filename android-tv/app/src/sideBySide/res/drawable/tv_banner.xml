@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Test copy 'GharTV fixes': solid orange banner with a white frame. -->
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+    <item>
+        <shape android:shape="rectangle">
+            <solid android:color="#FF6A00" />
+        </shape>
+    </item>
+    <item android:left="14dp" android:right="14dp" android:top="14dp" android:bottom="14dp">
+        <shape android:shape="rectangle">
+            <corners android:radius="20dp" />
+            <stroke android:width="6dp" android:color="#FFFFFF" />
+        </shape>
+    </item>
+</layer-list>

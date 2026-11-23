@@ -1,0 +1,225 @@
+package in.ghartv.nova;
+
+import android.app.Activity;
+import android.graphics.Color;
+import android.graphics.drawable.ColorDrawable;
+import android.net.Uri;
+import android.view.Gravity;
+import android.view.View;
+import android.view.ViewGroup;
+import android.view.KeyEvent;
+import android.graphics.Rect;
+import android.widget.Button;
+import android.widget.FrameLayout;
+import android.widget.ImageView;
+import android.widget.LinearLayout;
+import android.widget.ScrollView;
+import android.widget.TextView;
+import com.bumptech.glide.Glide;
+import com.bumptech.glide.load.engine.DiskCacheStrategy;
+import org.json.JSONArray;
+import org.json.JSONObject;
+import java.util.ArrayList;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Set;
+
+/** GharTV landing surface. It covers the provider before the first network load;
+ * only current provider data is rendered. No fixture catalogue or video auto-play. */
+final class FilmHomeView extends FrameLayout {
+    interface Host { void open(String url); void refresh(); void provider(); void privacy(); }
+    interface PosterLoader { void load(ImageView target,String url); }
+    interface LoadingObserver { boolean timeout(); void readable(int count); }
+    private final Activity activity;
+    private final Host host;
+    private final PosterLoader loader;
+    private final ScrollView scroll;
+    private final LinearLayout content;
+    private final TextView status;
+    private final android.widget.ProgressBar progress;
+    private boolean loadingData;
+    private LoadingObserver loadingObserver;
+    private String unavailableReason="";
+    private final Runnable loadingDeadline=()->{if(loadingData){if(loadingObserver!=null&&loadingObserver.timeout())return;unavailable("The provider is taking longer to supply suggestions.");}};
+    private TextView heading;private String searchText="";
+    private final LinearLayout grid;
+    private String identity="";
+    private int cardCount;
+    private final List<View> actions=new ArrayList<>(),cards=new ArrayList<>();
+    private int columns=4;
+    private View toolbarAnchor;
+    private ViewGroup underlyingPage;
+    private boolean savedFocusable,savedTouchFocusable;
+    private int savedDescendants,savedAccessibility;
+    private boolean pageBlocked;
+    private static final class PosterTask {
+        final ImageView view;final String url;boolean loaded;
+        PosterTask(ImageView view,String url){this.view=view;this.url=url;}
+    }
+    private final List<PosterTask> posterTasks=new ArrayList<>();
+    private boolean posterPass;
+    private void schedulePosters(){
+        if(posterTasks==null||posterPass||posterTasks.isEmpty()||getVisibility()!=VISIBLE)return;
+        posterPass=true;postOnAnimation(()->{posterPass=false;loadNearbyPosters();});
+    }
+    private void loadNearbyPosters(){
+        if(!isShown()||getHeight()==0)return;
+        int[] origin=new int[2],position=new int[2];getLocationInWindow(origin);
+        int top=origin[1]-dp(260),bottom=origin[1]+getHeight()+dp(260);
+        for(PosterTask task:posterTasks){
+            if(task.loaded||task.view.getHeight()==0)continue;
+            task.view.getLocationInWindow(position);
+            if(position[1]+task.view.getHeight()>=top&&position[1]<=bottom){task.loaded=true;loader.load(task.view,task.url);}
+        }
+    }
+    private void clearPosters(){
+        for(PosterTask task:posterTasks)if(task.loaded&&!activity.isDestroyed())Glide.with(activity).clear(task.view);
+        posterTasks.clear();
+    }
+    @Override protected void onAttachedToWindow(){super.onAttachedToWindow();schedulePosters();}
+    @Override protected void onVisibilityChanged(View changed,int visible){super.onVisibilityChanged(changed,visible);if(visible==VISIBLE)schedulePosters();}
+    @Override protected void onDetachedFromWindow(){removeCallbacks(loadingDeadline);super.onDetachedFromWindow();}
+    @Override protected void onSizeChanged(int w,int h,int oldw,int oldh){super.onSizeChanged(w,h,oldw,oldh);schedulePosters();}
+
+
+    void setToolbarAnchor(View anchor){toolbarAnchor=anchor;if(anchor.getId()==View.NO_ID)anchor.setId(View.generateViewId());wireFocus();}
+    void setLoadingObserver(LoadingObserver observer){loadingObserver=observer;}
+    void routeStatus(String message){loadingData=true;progress.setVisibility(VISIBLE);status.setText(message);removeCallbacks(loadingDeadline);}
+    void bindUnderlyingPage(ViewGroup page){restorePage();underlyingPage=page;syncPageFocus();}
+    @Override public void setVisibility(int visibility){super.setVisibility(visibility);syncPageFocus();if(visibility==VISIBLE)schedulePosters();}
+    private void syncPageFocus(){
+        if(underlyingPage==null)return;
+        if(getVisibility()==VISIBLE&&!pageBlocked){
+            savedFocusable=underlyingPage.isFocusable();savedTouchFocusable=underlyingPage.isFocusableInTouchMode();
+            savedDescendants=underlyingPage.getDescendantFocusability();savedAccessibility=underlyingPage.getImportantForAccessibility();
+            underlyingPage.clearFocus();underlyingPage.setDescendantFocusability(ViewGroup.FOCUS_BLOCK_DESCENDANTS);
+            underlyingPage.setFocusableInTouchMode(false);underlyingPage.setFocusable(false);
+            underlyingPage.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO_HIDE_DESCENDANTS);pageBlocked=true;
+        }else if(getVisibility()!=VISIBLE)restorePage();
+    }
+    private void restorePage(){if(underlyingPage==null||!pageBlocked)return;
+        underlyingPage.setDescendantFocusability(savedDescendants);underlyingPage.setFocusable(savedFocusable);
+        underlyingPage.setFocusableInTouchMode(savedTouchFocusable);underlyingPage.setImportantForAccessibility(savedAccessibility);pageBlocked=false;
+    }
+    void focusRefresh(){for(View a:actions)if(a.isEnabled()){focusVisible(a);return;}}
+    private void focusVisible(View target){
+        if(target==null||!target.isShown())return;target.requestFocus();
+        Rect rect=new Rect(0,0,target.getWidth(),target.getHeight());target.requestRectangleOnScreen(rect,true);
+    }
+    private void wireFocus(){
+        for(int i=0;i<actions.size();i++){
+            View v=actions.get(i);v.setNextFocusLeftId(actions.get(Math.max(0,i-1)).getId());v.setNextFocusRightId(actions.get(Math.min(actions.size()-1,i+1)).getId());
+            v.setNextFocusUpId(toolbarAnchor==null?v.getId():toolbarAnchor.getId());
+            v.setNextFocusDownId(cards.isEmpty()?v.getId():cards.get(Math.min(i,cards.size()-1)).getId());
+        }
+        for(int i=0;i<cards.size();i++){
+            View v=cards.get(i);int col=i%columns;
+            v.setNextFocusLeftId(cards.get(col==0?i:i-1).getId());
+            v.setNextFocusRightId(cards.get(col==columns-1||i+1>=cards.size()?i:i+1).getId());
+            v.setNextFocusUpId(i<columns?actions.get(Math.min(col,actions.size()-1)).getId():cards.get(i-columns).getId());
+            v.setNextFocusDownId(cards.get(i+columns>=cards.size()?i:i+columns).getId());
+        }
+    }
+    boolean handleRemote(KeyEvent event,View focused){
+        int key=event.getKeyCode();if(key!=KeyEvent.KEYCODE_DPAD_UP&&key!=KeyEvent.KEYCODE_DPAD_DOWN&&key!=KeyEvent.KEYCODE_DPAD_LEFT&&key!=KeyEvent.KEYCODE_DPAD_RIGHT)return false;
+        int a=actions.indexOf(focused),c=cards.indexOf(focused);
+        if(a<0&&c<0){
+            if(key!=KeyEvent.KEYCODE_DPAD_DOWN)return false;
+            if(event.getAction()==KeyEvent.ACTION_DOWN)focusRefresh();return true;
+        }
+        if(event.getAction()==KeyEvent.ACTION_UP)return true;
+        if(event.getAction()!=KeyEvent.ACTION_DOWN)return false;
+        View target=focused;
+        if(a>=0){
+            if(key==KeyEvent.KEYCODE_DPAD_LEFT)target=actions.get(Math.max(0,a-1));
+            if(key==KeyEvent.KEYCODE_DPAD_RIGHT)target=actions.get(Math.min(actions.size()-1,a+1));
+            if(key==KeyEvent.KEYCODE_DPAD_UP&&toolbarAnchor!=null)target=toolbarAnchor;
+            if(key==KeyEvent.KEYCODE_DPAD_DOWN&&!cards.isEmpty())target=cards.get(Math.min(a,cards.size()-1));
+        }else{
+            int col=c%columns;
+            if(key==KeyEvent.KEYCODE_DPAD_LEFT&&col>0)target=cards.get(c-1);
+            if(key==KeyEvent.KEYCODE_DPAD_RIGHT&&col<columns-1&&c+1<cards.size())target=cards.get(c+1);
+            if(key==KeyEvent.KEYCODE_DPAD_UP)target=c<columns?actions.get(Math.min(col,actions.size()-1)):cards.get(c-columns);
+            if(key==KeyEvent.KEYCODE_DPAD_DOWN&&c+columns<cards.size())target=cards.get(c+columns);
+        }
+        if(!target.isEnabled()){if(key==KeyEvent.KEYCODE_DPAD_DOWN&&!cards.isEmpty())target=cards.get(0);else {focusRefresh();return true;}}
+        focusVisible(target);return true;
+    }
+    FilmHomeView(Activity a,Host host) {this(a,host,(view,url)->{
+        if(!safePoster(url))return;
+        Glide.with(a).load(url).override(240,360).centerCrop()
+            .diskCacheStrategy(DiskCacheStrategy.NONE)
+            .placeholder(new ColorDrawable(TvUi.SURFACE_2)).error(new ColorDrawable(TvUi.SURFACE_2)).into(view);
+    });}
+    FilmHomeView(Activity a,Host host,PosterLoader loader) {
+        super(a);activity=a;this.host=host;this.loader=loader;
+        setBackground(TvUi.gradient(0xff09282e,TvUi.BG,0,Color.TRANSPARENT,0,a));
+        scroll=new ScrollView(a);scroll.setFocusable(false);scroll.setDescendantFocusability(ViewGroup.FOCUS_AFTER_DESCENDANTS);scroll.setSmoothScrollingEnabled(false);scroll.setFillViewport(true);addView(scroll,new FrameLayout.LayoutParams(-1,-1));
+        content=new LinearLayout(a);content.setOrientation(LinearLayout.VERTICAL);content.setPadding(dp(24),dp(18),dp(24),dp(24));scroll.addView(content);
+        scroll.getViewTreeObserver().addOnScrollChangedListener(this::schedulePosters);
+        heading=TvUi.label(a,"Your next watch.",30,TvUi.TEXT,true);content.addView(heading);
+
+        TextView info=TvUi.label(a,"Search above for live channels, films and series. Browse below with your remote.",14,TvUi.MUTED,false);info.setPadding(0,dp(8),0,dp(10));content.addView(info);
+        LinearLayout actionRow=new LinearLayout(a);button(actionRow,"Refresh suggestions",host::refresh);button(actionRow,"Open provider page",host::provider);button(actionRow,"Privacy & content use",host::privacy);content.addView(actionRow);
+        progress=new android.widget.ProgressBar(a,null,android.R.attr.progressBarStyleHorizontal);progress.setIndeterminate(true);progress.setVisibility(GONE);progress.setImportantForAccessibility(IMPORTANT_FOR_ACCESSIBILITY_NO);content.addView(progress,new LinearLayout.LayoutParams(-1,dp(5)));
+        status=TvUi.label(a,"Loading suggestions from the provider…",13,TvUi.MUTED,false);status.setPadding(0,dp(12),0,dp(12));content.addView(status);
+        grid=new LinearLayout(a);grid.setOrientation(LinearLayout.VERTICAL);content.addView(grid);
+        // Child rows can be added after this outer panel was already laid out.
+        // A scroll must not be necessary to trigger the first image requests.
+        grid.addOnLayoutChangeListener((v,l,t,r,b,ol,ot,or,ob)->schedulePosters());
+    }
+    void mode(String query){String next=UnifiedSearch.clean(query);if(!next.equals(searchText)){discardSuggestions();searchText=next;}heading.setText(next.isEmpty()?"Your next watch.":"Results for “"+next+"”");}
+    JSONObject card(String target){for(JSONObject c:lastCards)if(target.equals(c.optString("url")))return c;return null;}
+    private final java.util.List<JSONObject> lastCards=new java.util.ArrayList<>();
+    private int dp(int value){return TvUi.dp(activity,value);}
+    private void button(LinearLayout row,String label,Runnable action){Button b=TvUi.button(activity,label,false);b.setId(View.generateViewId());b.setOnClickListener(v->action.run());actions.add(b);LinearLayout.LayoutParams p=new LinearLayout.LayoutParams(-2,dp(40));p.rightMargin=dp(8);row.addView(b,p);}
+    static boolean safePoster(String raw){try {Uri u=Uri.parse(raw);return "https".equals(u.getScheme())&&u.getPort()==-1&&u.getUserInfo()==null&&(FlixMomoActivity.providerHost(u.getHost())||"image.tmdb.org".equals(u.getHost()));}catch(Exception e){return false;}}
+    void loading(){unavailableReason="";loadingData=true;progress.setVisibility(VISIBLE);if(!actions.isEmpty()){actions.get(0).setEnabled(false);actions.get(1).setEnabled(false);}status.setText(cardCount==0?"Loading FlixMomo suggestions… Please wait; you can still search or leave.":"Refreshing FlixMomo suggestions… Your existing cards remain available.");removeCallbacks(loadingDeadline);postDelayed(loadingDeadline,15000);}
+    private void ready(){loadingData=false;removeCallbacks(loadingDeadline);progress.setVisibility(GONE);if(!actions.isEmpty()){actions.get(0).setEnabled(true);actions.get(1).setEnabled(true);}}
+    boolean isLoadingData(){return loadingData;}
+    void unavailable(String reason){unavailableReason=reason;ready();status.setText(reason+" Use Refresh or Open provider page. No sample catalogue has been substituted.");}
+    int cardCount(){return cardCount;}
+    void render(JSONObject snapshot){
+        if(snapshot==null)return;
+        JSONArray results=snapshot.optJSONArray("results");if(results==null)return;
+        List<JSONObject> allowed=new ArrayList<>();Set<String> seen=new HashSet<>();
+        for(int i=0;i<Math.min(results.length(),60);i++){
+            JSONObject item=results.optJSONObject(i);if(item==null)continue;
+            String url=item.optString("url"),name=item.optString("title"),image=item.optString("image");
+            Uri u=Uri.parse(url);
+            if(url.length()>2048||!FlixMomoActivity.allowedTop(u)||u.getQuery()!=null||u.getFragment()!=null||u.getPath()==null||!u.getPath().matches("(?i)^/(movie|tv|show|watch|title)/[a-z0-9].*")||name.length()<2||name.length()>180||!seen.add(url))continue;
+            if(!safePoster(image))continue; // No image-less text-tile fallback.
+            allowed.add(item);
+        }
+        if(allowed.isEmpty()){if(loadingData||!unavailableReason.isEmpty())return;unavailable("The current page has not supplied any readable poster suggestions yet.");return;}
+        unavailableReason="";ready();
+
+        String next=allowed.toString();if(identity.equals(next)){status.setText(cardCount+" suggestions supplied by FlixMomo · availability is not verified");if(loadingObserver!=null)loadingObserver.readable(cardCount);return;}
+        // Do not reset a user's focus while they are browsing an already-rendered set.
+        if(grid.hasFocus()&&cardCount>0){status.setText("Browsing "+cardCount+" suggestions · Refresh loads the latest set");return;}
+        lastCards.clear();lastCards.addAll(allowed);
+        identity=next;clearPosters();grid.removeAllViews();cards.clear();cardCount=0;
+        columns=activity.getResources().getConfiguration().screenWidthDp>=900?5:4;
+        LinearLayout row=null;
+        for(JSONObject item:allowed){
+            if(cardCount%columns==0){row=new LinearLayout(activity);row.setGravity(Gravity.START|Gravity.TOP);grid.addView(row,new LinearLayout.LayoutParams(-1,-2));}
+            String url=item.optString("url"),title=readable(item.optString("title")),meta=item.optString("metadata");
+            LinearLayout card=new LinearLayout(activity);card.setOrientation(LinearLayout.VERTICAL);card.setPadding(dp(7),dp(7),dp(7),dp(8));
+            TvUi.focusCard(card,TvUi.SURFACE,TvUi.SURFACE_3,12);card.setId(View.generateViewId());card.setDescendantFocusability(ViewGroup.FOCUS_BLOCK_DESCENDANTS);cards.add(card);card.setClickable(true);card.setContentDescription(title+". "+meta);card.setOnClickListener(v->host.open(url));
+            ImageView image=new ImageView(activity);image.setImageDrawable(new ColorDrawable(TvUi.SURFACE_2));image.setScaleType(ImageView.ScaleType.CENTER_CROP);image.setFocusable(false);image.setContentDescription(title+" poster");
+            card.addView(image,new LinearLayout.LayoutParams(-1,dp(166)));posterTasks.add(new PosterTask(image,item.optString("image")));
+            TextView label=TvUi.label(activity,title,14,TvUi.TEXT,true);label.setMaxLines(2);label.setEllipsize(android.text.TextUtils.TruncateAt.END);card.addView(label,new LinearLayout.LayoutParams(-1,dp(40)));
+            TextView metadata=TvUi.label(activity,meta.isEmpty()?"FlixMomo catalogue":meta.replace(item.optString("title"),"").trim(),11,TvUi.MUTED,false);metadata.setMaxLines(2);metadata.setEllipsize(android.text.TextUtils.TruncateAt.END);card.addView(metadata,new LinearLayout.LayoutParams(-1,dp(31)));
+            LinearLayout.LayoutParams p=new LinearLayout.LayoutParams(0,dp(260),1);p.setMargins(dp(4),dp(4),dp(4),dp(4));row.addView(card,p);cardCount++;
+        }
+        if(row!=null&&cardCount%columns!=0)for(int n=cardCount%columns;n<columns;n++)row.addView(new View(activity),new LinearLayout.LayoutParams(0,1,1));
+        wireFocus();schedulePosters();
+        // Start the first row without waiting for measured child geometry.
+        // All remaining rows still use bounded viewport scheduling.
+        if(isAttachedToWindow()&&isShown())for(int i=0;i<Math.min(columns*2,posterTasks.size());i++){PosterTask task=posterTasks.get(i);if(!task.loaded){task.loaded=true;loader.load(task.view,task.url);}}
+        status.setText(cardCount+" suggestions supplied by FlixMomo · availability is not verified");
+        if(loadingObserver!=null)loadingObserver.readable(cardCount);
+    }
+    static String readable(String text){String s=text.trim();if(s.indexOf(' ')>=0)return s;String[] words=s.replace('-',' ').replace('_',' ').split(" ");StringBuilder result=new StringBuilder();for(String word:words){if(word.isEmpty())continue;if(result.length()>0)result.append(' ');result.append(Character.toUpperCase(word.charAt(0))).append(word.substring(1));}return result.toString();}
+    void discardSuggestions(){boolean focused=grid.hasFocus();identity="";cardCount=0;lastCards.clear();clearPosters();grid.removeAllViews();cards.clear();wireFocus();if(focused)focusRefresh();}
+}

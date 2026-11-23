@@ -1,0 +1,166 @@
+package in.ghartv.nova;
+
+import android.content.Context;
+import android.graphics.Canvas;
+import android.graphics.Color;
+import android.graphics.Paint;
+import android.os.SystemClock;
+import android.view.InputDevice;
+import android.view.KeyEvent;
+import android.view.MotionEvent;
+import android.view.View;
+import android.webkit.WebView;
+
+/** On-demand D-pad pointer over this activity's provider view, not system input injection.
+ *  No accessibility service, DOM script, automation flag, provider rewrite or polling.
+ */
+public final class RemoteWebCursor extends View {
+    private final RemoteCursorState state=new RemoteCursorState();
+    private final Paint paint=new Paint(Paint.ANTI_ALIAS_FLAG);
+    private final float density;
+    private View target;
+    private java.util.function.Consumer<String> observer;
+    private java.util.function.BiConsumer<Float,Float> edge;
+    public void setEdgeListener(java.util.function.BiConsumer<Float,Float> listener){edge=listener;}
+    public void setObserver(java.util.function.Consumer<String> value){observer=value;}
+    private void observed(String name){if(observer!=null)observer.accept(name);}
+    private boolean enabled=true,scrollMode,scheduled,pressed;
+    private long lastFrame,started,downAt;
+    private long userSequence;
+    public long placementToken(){return userSequence;}
+    public boolean aimFraction(float x,float y,long token){if(!enabled||token!=userSequence||!Float.isFinite(x)||!Float.isFinite(y)||x<0||x>1||y<0||y>1)return false;state.position(x*getWidth(),y*getHeight());invalidate();return true;}
+    private int clickCode=-1;
+    private float clickX,clickY;
+    public static final long IDLE_HIDE_MS=5000;
+    private final Runnable frame=()->tick();
+    private final Runnable idleHide=()->{if(!pressed&&!state.moving()){setVisibility(INVISIBLE);observed("POINTER_FADE");}};
+
+    public RemoteWebCursor(Context context){
+        super(context);density=getResources().getDisplayMetrics().density;
+        setFocusable(false);setClickable(false);setImportantForAccessibility(IMPORTANT_FOR_ACCESSIBILITY_NO);
+        setVisibility(INVISIBLE);
+    }
+    public void target(View view){cancel();target=view;}
+    public void enable(boolean value){cancel();enabled=value;setVisibility(value?VISIBLE:INVISIBLE);invalidate();}
+    public boolean enabled(){return enabled;}
+    public void center(){cancel();state.position(getWidth()/2f,getHeight()/2f);invalidate();}
+    /** Paired phone touchpad delta: only moves this activity's WebView cursor. No global input. */
+    public void moveRelative(float dx,float dy){
+        if(!enabled||target==null||!Float.isFinite(dx)||!Float.isFinite(dy))return;
+        if(getWidth()<=0||getHeight()<=0)return;
+        userSequence++;
+        float nx=Math.min(getWidth(),Math.max(0,state.x()+dx));
+        float ny=Math.min(getHeight(),Math.max(0,state.y()+dy));
+        state.position(nx,ny);enter();hover();invalidate();
+        if(edge!=null)edge.accept(nx,ny);
+    }
+    public void scrollMode(boolean value){cancel();scrollMode=value;invalidate();}
+    public boolean scrolling(){return scrollMode;}
+    public void enter(){if(enabled&&target!=null){removeCallbacks(idleHide);boolean hidden=getVisibility()!=VISIBLE;setVisibility(VISIBLE);if(hidden)observed("POINTER_WAKE");bringToFront();invalidate();postDelayed(idleHide,IDLE_HIDE_MS);}}
+    public void leave(){cancel();setVisibility(INVISIBLE);}
+    public void cancel(){
+        state.stop();removeCallbacks(frame);removeCallbacks(idleHide);scheduled=false;
+        if(pressed)touch(MotionEvent.ACTION_CANCEL,SystemClock.uptimeMillis());
+        pressed=false;clickCode=-1;invalidate();
+    }
+    @Override protected void onSizeChanged(int w,int h,int oldw,int oldh){state.resize(w,h,12*density);}
+    private int direction(int key){
+        switch(key){case KeyEvent.KEYCODE_DPAD_LEFT:return RemoteCursorState.LEFT;
+            case KeyEvent.KEYCODE_DPAD_RIGHT:return RemoteCursorState.RIGHT;
+            case KeyEvent.KEYCODE_DPAD_UP:return RemoteCursorState.UP;
+            case KeyEvent.KEYCODE_DPAD_DOWN:return RemoteCursorState.DOWN;default:return 0;}
+    }
+    public boolean handle(KeyEvent event){
+        if(!enabled||target==null)return false;
+        final int key=event.getKeyCode(),dir=direction(key);
+        boolean relevant=dir!=0||key==KeyEvent.KEYCODE_DPAD_CENTER||key==KeyEvent.KEYCODE_ENTER||key==KeyEvent.KEYCODE_NUMPAD_ENTER||key==KeyEvent.KEYCODE_PAGE_UP||key==KeyEvent.KEYCODE_PAGE_DOWN;
+        if(!relevant)return false;
+        removeCallbacks(idleHide);postDelayed(idleHide,IDLE_HIDE_MS);
+        if(event.getAction()==KeyEvent.ACTION_DOWN)userSequence++;
+        if(dir!=0){
+            if(event.getAction()==KeyEvent.ACTION_DOWN){
+                enter();state.setDirection(dir,true);
+                // A short D-pad tap can finish before the next animation frame.
+                // Apply its first movement now; held keys continue on animation frames.
+                if(event.getRepeatCount()==0){
+                    if(scrollMode)scroll(state.horizontal()*.3f,state.vertical()*.3f);
+                    else {state.advance(.016f,450*density);hover();}
+                    invalidate();
+                }
+                if(!scheduled){started=lastFrame=SystemClock.uptimeMillis();schedule();}
+            }else if(event.getAction()==KeyEvent.ACTION_UP){state.setDirection(dir,false);if(!state.moving()){removeCallbacks(frame);scheduled=false;}}
+            return true;
+        }
+        if(key==KeyEvent.KEYCODE_DPAD_CENTER || key==KeyEvent.KEYCODE_ENTER || key==KeyEvent.KEYCODE_NUMPAD_ENTER){
+            if(event.getAction()==KeyEvent.ACTION_DOWN && event.getRepeatCount()==0 && !pressed){
+                enter();state.stop();removeCallbacks(frame);scheduled=false;
+                clickCode=key;clickX=state.x();clickY=state.y();pressed=true;downAt=SystemClock.uptimeMillis();
+                touch(MotionEvent.ACTION_DOWN,downAt);invalidate();
+            }else if(event.getAction()==KeyEvent.ACTION_UP && pressed && key==clickCode){
+                touch(event.isCanceled()?MotionEvent.ACTION_CANCEL:MotionEvent.ACTION_UP,SystemClock.uptimeMillis());if(!event.isCanceled())observed("POINTER_CLICK");pressed=false;clickCode=-1;invalidate();
+            }
+            return true;
+        }
+        if(key==KeyEvent.KEYCODE_PAGE_UP || key==KeyEvent.KEYCODE_PAGE_DOWN){
+            if(event.getAction()==KeyEvent.ACTION_DOWN)scroll(0,key==KeyEvent.KEYCODE_PAGE_UP?-6f:6f);
+            return true;
+        }
+        return false;
+    }
+    /** Observes a physical mouse/touchpad, without synthesizing a second click. */
+    public void observePointer(MotionEvent e){
+        if(!enabled||target==null)return;
+        int action=e.getActionMasked();
+        if(action!=MotionEvent.ACTION_HOVER_MOVE&&action!=MotionEvent.ACTION_MOVE&&action!=MotionEvent.ACTION_DOWN&&action!=MotionEvent.ACTION_UP&&action!=MotionEvent.ACTION_SCROLL)return;
+        int[] xy=new int[2];getLocationOnScreen(xy);
+        float x=e.getRawX()-xy[0],y=e.getRawY()-xy[1];
+        if(!Float.isFinite(x)||!Float.isFinite(y)||x<0||y<0||x>getWidth()||y>getHeight())return;
+        userSequence++;state.position(x,y);enter();
+        if(edge!=null)edge.accept(x,y);
+    }
+    private void schedule(){if(!scheduled){scheduled=true;postOnAnimation(frame);}}
+    private void tick(){
+        scheduled=false;
+        if(!enabled||target==null||!state.moving()||!isShown())return;
+        long now=SystemClock.uptimeMillis();float dt=Math.min(.05f,Math.max(.001f,(now-lastFrame)/1000f));lastFrame=now;
+        float speed=density*HeldKeyRamp.pointerDpPerSec(now-started);   // slow first, stepped up while held (fix 2)
+        if(scrollMode){scroll(state.horizontal()*dt*12,state.vertical()*dt*12);}
+        else{
+            state.advance(dt,speed);
+            hover();if(edge!=null)edge.accept(state.x(),state.y());
+            if(state.edgeInDirection())scroll(state.horizontal()*dt*7,state.vertical()*dt*7);
+        }
+        invalidate();schedule();
+    }
+    private void hover(){
+        MotionEvent event=mouse(MotionEvent.ACTION_HOVER_MOVE,0,0);
+        try{target.dispatchGenericMotionEvent(event);}finally{event.recycle();}
+    }
+    private void scroll(float dx,float dy){
+        MotionEvent event=mouse(MotionEvent.ACTION_SCROLL,dx,-dy);
+        boolean handled;
+        try{handled=target.dispatchGenericMotionEvent(event);}finally{event.recycle();}
+        if(!handled && target instanceof WebView)target.scrollBy(Math.round(dx*48*density),Math.round(dy*48*density));
+    }
+    private MotionEvent mouse(int action,float horizontal,float vertical){
+        MotionEvent.PointerProperties properties=new MotionEvent.PointerProperties();properties.id=0;properties.toolType=MotionEvent.TOOL_TYPE_MOUSE;
+        MotionEvent.PointerCoords coords=new MotionEvent.PointerCoords();coords.x=state.x();coords.y=state.y();coords.pressure=0;coords.size=1;
+        coords.setAxisValue(MotionEvent.AXIS_HSCROLL,horizontal);coords.setAxisValue(MotionEvent.AXIS_VSCROLL,vertical);
+        long now=SystemClock.uptimeMillis();
+        return MotionEvent.obtain(now,now,action,1,new MotionEvent.PointerProperties[]{properties},new MotionEvent.PointerCoords[]{coords},0,0,1,1,0,0,InputDevice.SOURCE_MOUSE,0);
+    }
+    private void touch(int action,long when){
+        if(target==null)return;
+        MotionEvent event=MotionEvent.obtain(downAt,when,action,clickX,clickY,0);event.setSource(InputDevice.SOURCE_TOUCHSCREEN);
+        try{target.dispatchTouchEvent(event);}finally{event.recycle();}
+    }
+    @Override protected void onDraw(Canvas canvas){
+        super.onDraw(canvas);float radius=(pressed?8:10)*density;
+        paint.setStyle(Paint.Style.STROKE);paint.setStrokeWidth(5*density);paint.setColor(Color.BLACK);
+        canvas.drawCircle(state.x(),state.y(),radius,paint);
+        paint.setStrokeWidth(2.5f*density);paint.setColor(scrollMode?Color.WHITE:0xFF8CF4D5);
+        canvas.drawCircle(state.x(),state.y(),radius,paint);
+        paint.setStyle(Paint.Style.FILL);canvas.drawCircle(state.x(),state.y(),2*density,paint);
+    }
+    @Override protected void onDetachedFromWindow(){cancel();target=null;super.onDetachedFromWindow();}
+}

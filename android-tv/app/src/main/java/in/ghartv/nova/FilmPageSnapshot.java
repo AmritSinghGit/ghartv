@@ -1,0 +1,85 @@
+package in.ghartv.nova;
+import org.json.JSONObject;
+
+/** Bounded top-document labels and permitted controls. No cookies, media URLs,
+ * scripts, player iframe contents, or access-control changes are returned. */
+final class FilmPageSnapshot {
+    static final String CORE=("""
+        const hosts=__GHARTV_HOSTS__;
+        function permitted(u){return u.protocol==='https:'&&hosts.includes(u.hostname)&&!u.username&&!u.password&&!u.port;}
+        const here=new URL(location.href);
+        if(!permitted(here))return JSON.stringify({state:'ORIGIN_REJECTED'});
+        const clean=t=>String(t||'').replace(/[\\x00-\\x1f]/g,' ').replace(/\\s+/g,' ').trim();
+        const visible=e=>{const r=e.getBoundingClientRect(),s=getComputedStyle(e);return r.width>0&&r.height>0&&s.display!=='none'&&s.visibility!=='hidden';};
+        const heading=clean(document.title+' '+Array.from(document.querySelectorAll('h1,h2')).slice(0,4).map(x=>x.textContent).join(' '));
+        if(here.pathname==='/dummy'||/just a moment|verify (that )?you are human|checking your browser|security verification|access denied/i.test(heading))return JSON.stringify({state:'PROVIDER_VERIFICATION_REQUIRED'});
+        """ + FilmPlayerOptions.JS + """
+        let playerRead={detectedCount:0,returnedCount:0,truncated:false};
+        function players(){
+          const observed=[],elements=new Map();
+          const nodes=Array.from(document.querySelectorAll('button,[role="button"],[role="tab"],input[type="button"],a[href],select'));
+          let scanned=0;
+          for(const e of nodes){
+            if(++scanned>700)break;
+            if(!visible(e)||e.disabled||e.getAttribute('aria-disabled')==='true')continue;
+            if(e.tagName==='A'){let u;try{u=new URL(e.getAttribute('href'),here);}catch(error){continue;}if(!permitted(u)||u.origin!==here.origin||u.pathname!==here.pathname||u.search!==here.search)continue;}
+            const add=(node,option=-1)=>{
+              const isOption=option>=0;
+              const o={kind:isOption?'select-option':e.tagName==='A'?'link':e.getAttribute('role')==='tab'?'tab':'button',visible:true,
+                disabled:!!node.disabled,text:clean(node.innerText||node.value||node.textContent||node.getAttribute('aria-label')),
+                directText:clean(Array.from(node.childNodes).filter(x=>x.nodeType===3).map(x=>x.textContent).join(' ')),
+                badges:Array.from(node.querySelectorAll('span,small,[data-badge]')).slice(0,8).map(x=>clean(x.textContent)),href:e.getAttribute('href'),
+                selected:isOption?node.selected:e.getAttribute('aria-pressed')==='true'||e.getAttribute('aria-selected')==='true'||e.getAttribute('data-state')==='active'};
+              observed.push(o);const id=PlayerOptions.identifyPlayer(o);if(id&&!elements.has(id.id))elements.set(id.id,{element:e,option,kind:isOption?'select':'button'});
+            };
+            if(e.tagName==='SELECT')Array.from(e.options).slice(0,64).forEach((o,i)=>add(o,i));else add(e);
+          }
+          playerRead=PlayerOptions.enumeratePlayers(observed,here.href,{limit:48,scanLimit:700});
+          playerRead.truncated=playerRead.truncated||nodes.length>700;
+          return playerRead.choices.map(p=>({...p,...elements.get(p.id)}));
+        }
+        """).replace("__GHARTV_HOSTS__",FilmProviderPolicy.hostsJavascript());
+    static String read(){return FilmSnapshotCache.wrap(fullRead());}
+    static String fullRead(){return "(()=>{"+CORE+FilmDetailSnapshot.JS+"""
+        const results=[],seen=new Set();
+        Array.from(document.querySelectorAll('a[href]')).slice(0,900).forEach(a=>{
+          if(results.length>=60||!visible(a))return;
+          let u;try{u=new URL(a.getAttribute('href'),here);}catch(e){return;}
+          if(!permitted(u)||!/^\\/(movie|tv|show|watch|title)\\/[a-z0-9]/i.test(u.pathname)||seen.has(u.href))return;
+          const img=a.querySelector('img'),h=a.querySelector('h1,h2,h3,h4');
+          const label=clean(h?.textContent||a.getAttribute('title')||a.getAttribute('aria-label')||img?.alt||a.innerText);
+          if(label.length<2||label.length>180)return;
+          let image='';
+          // Missing artwork is missing, never new URL('', here), which fabricates
+          // the current page as an image. Read only nonempty image data actually exposed.
+          const rawImage=img?String(img.currentSrc||img.getAttribute('src')||img.getAttribute('data-src')||'').trim():'';
+          if(rawImage)try {
+            const v=new URL(rawImage,here);
+            if(v.protocol==='https:'&&!v.username&&!v.password&&!v.port&&(permitted(v)||v.hostname==='image.tmdb.org'))image=v.href;
+          }catch(e){}
+          const card=a.closest('article')||a.parentElement;
+          const metadata=clean(a.innerText||card?.innerText||'').slice(0,180);
+          seen.add(u.href);results.push({title:label,url:u.href,image,metadata});
+        });
+        const offered=players().map((p,i)=>({index:i,id:p.id,label:p.label,badges:p.badges,providerLabel:p.providerLabel,selected:p.selected}));
+        const media=Array.from(document.querySelectorAll('video')).filter(visible);
+        const mediaError=media.length===1&&media[0].error?media[0].error.code:0;
+        const frames=Array.from(document.querySelectorAll('iframe')).filter(e=>visible(e)&&e.getBoundingClientRect().width>=160&&e.getBoundingClientRect().height>=90);
+        const mediaTime=media.length===1?media[0].currentTime:0;
+        const mediaPlaying=media.length===1&&!media[0].paused&&!media[0].ended&&media[0].readyState>=2;
+        
+        return JSON.stringify({state:'SNAPSHOT',url:here.href,search:here.pathname.replace(/\\/+$/,'')==='/search',results,players:offered,playerDetectedCount:playerRead.detectedCount,playerTruncated:playerRead.truncated,detail:detail(),mediaError,mediaObservable:media.length===1,mediaTime,mediaPlaying,mediaCandidates:media.length+frames.length,frameCount:frames.length});
+        """+"})()";}
+    static String select(String pageUrl,int index,String label){
+        if(index<0||index>=48)throw new IllegalArgumentException("Invalid player index");
+        return "(()=>{"+CORE+"if(location.href!=="+JSONObject.quote(pageUrl)+")return JSON.stringify({state:'STALE_PAGE'});"+
+            "const list=players(),p=list.find(x=>x.label==="+JSONObject.quote(label)+");if(!p)return JSON.stringify({state:'PLAYER_CHANGED'});"+
+            """
+            const media=Array.from(document.querySelectorAll('video,audio')).slice(0,24);
+            for(const v of media){v.pause();v.removeAttribute('src');for(const s of v.querySelectorAll('source'))s.remove();v.load();}
+            for(const f of Array.from(document.querySelectorAll('iframe')).slice(0,32).filter(e=>visible(e)&&e.getBoundingClientRect().width>=160&&e.getBoundingClientRect().height>=90)){f.setAttribute('src','about:blank');f.removeAttribute('srcdoc');}
+            """+
+            "if(p.kind==='select'){p.element.selectedIndex=p.option;p.element.dispatchEvent(new Event('change',{bubbles:true}));}else{p.element.click();}"+
+            "return JSON.stringify({state:'SELECTION_REQUESTED',label:p.label});})()";
+    }
+}
