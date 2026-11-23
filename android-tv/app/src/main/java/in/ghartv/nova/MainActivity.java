@@ -82,6 +82,15 @@ public final class MainActivity extends Activity implements ChannelNavigator.Lis
     private Button homePhoneButton;
     private android.app.Dialog homePairDialog;
     private static boolean offeredHomePhoneInProcess;
+    private final Runnable deferredTelemetryConsent=new Runnable(){
+        @Override public void run(){
+            if(isFinishing()||isDestroyed()||!guideActive)return;
+            if(homePairDialog!=null&&homePairDialog.isShowing()){
+                mainHandler.postDelayed(this,3500L);return;
+            }
+            Telemetry.maybeRequestConsent(MainActivity.this);
+        }
+    };
     private long lastPhoneNavigation;
     private int pendingPhoneX,pendingPhoneY;
     private final PhoneLinkServer.Sink homePhoneSink=new PhoneLinkServer.Sink(){
@@ -147,12 +156,15 @@ public final class MainActivity extends Activity implements ChannelNavigator.Lis
             13,paired?0xFF54D9B2:0xFFC28073,1f,this));
     }
     private void offerHomePhone(){
-        if(isFinishing()||isDestroyed()||!guideActive)return;
+        if(offeredHomePhoneInProcess||isFinishing()||isDestroyed()||!guideActive)return;
         HouseholdPhoneSession.open(this,homePhoneSink,link->{
             if(isFinishing()||isDestroyed()||!guideActive)return;
             updateHomePhoneBadge();
             HouseholdPhoneSession.mode("HOME");
-            if(link==null||HouseholdPhoneSession.connected())return;
+            if(link==null)return;
+            if(HouseholdPhoneSession.connected()){
+                offeredHomePhoneInProcess=true;return;
+            }
             if(homePairDialog!=null&&homePairDialog.isShowing())homePairDialog.dismiss();
             LinearLayout body=new LinearLayout(this);body.setOrientation(LinearLayout.VERTICAL);
             body.setGravity(Gravity.CENTER_HORIZONTAL);
@@ -171,6 +183,7 @@ public final class MainActivity extends Activity implements ChannelNavigator.Lis
             homePairDialog=new TvModal(this,"GHAR TV · OPTIONAL","Connect your phone",
                 "No setup needed. Press OK for the normal TV remote; the phone can connect later.")
                 .add(body).action("Continue with TV",true,android.app.Dialog::dismiss).show();
+            offeredHomePhoneInProcess=true;
         });
     }
     private void showHomePhone(){
@@ -232,13 +245,13 @@ public final class MainActivity extends Activity implements ChannelNavigator.Lis
         Telemetry.screen(this, "guide");
         Telemetry.event(this, "home_start", Telemetry.data("view", selectedCategory));
         Telemetry.launchStage(this, "guide_content_set");
-        mainHandler.postDelayed(() -> Telemetry.maybeRequestConsent(this), 1200L);
+        // Let the first, nonintrusive phone offer finish before asking the
+        // separate opt-in diagnostics question. Never stack two modal screens.
+        mainHandler.postDelayed(deferredTelemetryConsent,10000L);
         mainHandler.post(clockTicker);
         mainHandler.post(()->loadFromDisk(true));
-        if(!offeredHomePhoneInProcess){
-            offeredHomePhoneInProcess=true;
-            mainHandler.postDelayed(this::offerHomePhone,1250L);
-        }
+        if(!offeredHomePhoneInProcess)
+            mainHandler.postDelayed(this::offerHomePhone,1100L);
         // Household channel: a non-blocking check when the owner opens GharTV.
         // Existing updater caches successful checks (12h), verifies package SHA
         // and requires Android installation confirmation; never silent installs.
@@ -264,6 +277,8 @@ public final class MainActivity extends Activity implements ChannelNavigator.Lis
         HouseholdPhoneSession.attach(homePhoneSink);
         HouseholdPhoneSession.mode("HOME");
         updateHomePhoneBadge();
+        if(!offeredHomePhoneInProcess)
+            mainHandler.postDelayed(this::offerHomePhone,650L);
         // Jio playback remains direct. Warm the separate Tor service in the
         // background so the film/IPTV route is ready before first selection.
         if(!torPrewarmRequested&&JioSession.load(this).isPresent()){
@@ -278,7 +293,15 @@ public final class MainActivity extends Activity implements ChannelNavigator.Lis
 
     @Override protected void onPause() {
         HouseholdPhoneSession.detach(homePhoneSink);
-        if(homePairDialog!=null&&homePairDialog.isShowing()){homePairDialog.dismiss();homePairDialog=null;}
+        mainHandler.removeCallbacks(deferredTelemetryConsent);
+        if(homePairDialog!=null&&homePairDialog.isShowing()){
+            if(!HouseholdPhoneSession.connected()){
+                // A system interruption, not the viewer's Continue button.
+                offeredHomePhoneInProcess=false;
+                HouseholdPhoneSession.interruptedOffer();
+            }
+            homePairDialog.dismiss();homePairDialog=null;
+        }
         guideActive=false;
         mainHandler.removeCallbacks(visibleEpgTask);
         if (heroPreviewController != null) heroPreviewController.focused(false);
@@ -293,6 +316,7 @@ public final class MainActivity extends Activity implements ChannelNavigator.Lis
         if(homePairDialog!=null){homePairDialog.dismiss();homePairDialog=null;}
         if (pendingEpgLoad != null) mainHandler.removeCallbacks(pendingEpgLoad);
         mainHandler.removeCallbacks(clockTicker);
+        mainHandler.removeCallbacks(deferredTelemetryConsent);
         if (heroPreviewController != null) heroPreviewController.release();
         executor.shutdownNow();
         epgExecutor.shutdownNow();

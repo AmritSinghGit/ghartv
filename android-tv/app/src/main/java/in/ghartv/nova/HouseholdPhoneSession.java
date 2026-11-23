@@ -37,6 +37,8 @@ final class HouseholdPhoneSession {
     private static volatile boolean offeredThisProcess;
     static boolean offeredThisProcess(){return offeredThisProcess;}
     static void markOffered(){offeredThisProcess=true;}
+    /** Only for an OS interruption before any scan/skip, not a viewer dismissal. */
+    static void interruptedOffer(){if(!connected())offeredThisProcess=false;}
     private static volatile Consumer<Link> pending;
 
     private static PhoneLinkServer.Sink route(){
