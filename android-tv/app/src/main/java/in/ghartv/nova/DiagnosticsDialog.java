@@ -19,7 +19,7 @@ public final class DiagnosticsDialog {
         boolean enabled = Telemetry.isEnabled(activity);
         int queued = Telemetry.queuedCount(activity);
         long last = Telemetry.lastUploadAt(activity);
-        String lastText = last <= 0 ? "Never" : DateFormat.getDateTimeInstance().format(new Date(last));
+        String lastText = last <= 0 ? "Never" : new java.text.SimpleDateFormat("dd MMM yyyy HH:mm:ss", java.util.Locale.ENGLISH) {{ setTimeZone(java.util.TimeZone.getTimeZone("Asia/Kolkata")); }}.format(new Date(last)) + " IST";
         String message = "Technical diagnostics: " + (enabled ? "ON" : "OFF")
                 + "\nReports waiting: " + queued
                 + "\nLast successful send: " + lastText
@@ -30,11 +30,17 @@ public final class DiagnosticsDialog {
                 "Preview queued diagnostics",
                 "Delete queued diagnostics and reset ID",
                 "What GharTV collects",
-                "Open privacy policy"
+                "Open privacy policy",
+                "Check TV connection (DNS / HTTPS)",
+                "Send a delivery check",
+                "Refresh delivery status"
         };
+        TextView statusTitle = new TextView(activity);
+        statusTitle.setText("Diagnostics & privacy\n\n" + message);
+        statusTitle.setTextSize(16);
+        statusTitle.setPadding(28,20,28,16);
         new AlertDialog.Builder(activity)
-                .setTitle("Diagnostics & privacy")
-                .setMessage(message)
+                .setCustomTitle(statusTitle)
                 .setItems(items, (dialog, which) -> {
                     switch (which) {
                         case 0:
@@ -46,8 +52,7 @@ public final class DiagnosticsDialog {
                             } else if (Telemetry.queuedCount(activity) == 0) {
                                 Toast.makeText(activity, "No diagnostics are waiting", Toast.LENGTH_SHORT).show();
                             } else {
-                                Telemetry.enqueueUpload(activity, true);
-                                Toast.makeText(activity, "Diagnostics will send when the TV is online", Toast.LENGTH_LONG).show();
+                                send(activity,false);
                             }
                             break;
                         case 2:
@@ -62,12 +67,35 @@ public final class DiagnosticsDialog {
                         case 5:
                             activity.startActivity(new Intent(Intent.ACTION_VIEW, Uri.parse(AppConfig.PRIVACY_PAGE)));
                             break;
+                        case 6:
+                            NetworkDiagnostics.show(activity);
+                            break;
+                        case 7:
+                            send(activity,true);
+                            break;
+                        case 8:
+                            show(activity);
+                            break;
                         default:
                             break;
                     }
                 })
                 .setNegativeButton("Close", null)
                 .show();
+    }
+
+    private static void send(Activity activity,boolean check) {
+        if(!Telemetry.isEnabled(activity)){
+            new AlertDialog.Builder(activity).setTitle("Diagnostics are off").setMessage("No event was created or sent. You can opt in from Diagnostics & privacy; this check does not change consent.").setPositiveButton("Close",null).show();return;
+        }
+        AlertDialog wait=new AlertDialog.Builder(activity).setTitle("Checking diagnostic delivery")
+            .setMessage("Sending privacy-filtered queued reports to the existing collector. This can take up to 90 seconds. A check event is labelled as a delivery check, not viewing activity.").setNegativeButton("Close",null).show();
+        Telemetry.sendNow(activity,check,(outcome,message,queued)->{
+            if(activity.isFinishing()||activity.isDestroyed()||!wait.isShowing())return;wait.dismiss();
+            new AlertDialog.Builder(activity).setTitle(outcome==Telemetry.UploadOutcome.SUCCESS?"Collector acknowledged reports":"Delivery not confirmed")
+                .setMessage(message+"\n\nStill queued: "+queued+"\n\nA collector acknowledgement confirms receipt, not that the private report has refreshed. No movie titles or searches are in these reports.")
+                .setPositiveButton("Refresh status",(d,w)->show(activity)).setNegativeButton("Close",null).show();
+        });
     }
 
     private static void confirmEnable(Activity activity) {
@@ -120,7 +148,7 @@ public final class DiagnosticsDialog {
         new AlertDialog.Builder(activity)
                 .setTitle("Diagnostics waiting to send")
                 .setView(text)
-                .setPositiveButton("Send now", (dialog, which) -> Telemetry.enqueueUpload(activity, true))
+                .setPositiveButton("Send now", (dialog, which) -> send(activity,false))
                 .setNegativeButton("Close", null)
                 .show();
     }
@@ -132,7 +160,7 @@ public final class DiagnosticsDialog {
                         "Collected only after you opt in:\n"
                                 + "• app version and pseudonymous installation hash\n"
                                 + "• TV manufacturer/model, Android version, language and connection type\n"
-                                + "• screen and feature-use events\n"
+                                + "• screen and feature-use events (including film search/watch counts, never the text or title)\n"
                                 + "• guide/update success or failure and timing\n"
                                 + "• playback protocol, DRM flag, startup/buffering measurements\n"
                                 + "• errors, short code stack frames, HTTP status and a report reference\n"
@@ -143,7 +171,7 @@ public final class DiagnosticsDialog {
                                 + "• stream/manifest/licence URLs or request headers\n"
                                 + "• successful channel names/IDs or programme titles\n"
                                 + "• IP address, Wi-Fi name, MAC, Android ID or TV serial number\n\n"
-                                + "Unsent data is visible and deletable on this TV. The collector keeps accepted events for no more than 30 days."
+                                + "Unsent data is visible and deletable on this TV. The collector keeps accepted events for no more than 30 days. To stop abuse it turns your connection address into a scrambled code and keeps only counts against that code for 48 hours; the address itself is not stored."
                 )
                 .setPositiveButton("Close", null)
                 .show();
