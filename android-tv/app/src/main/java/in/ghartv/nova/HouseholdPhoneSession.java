@@ -56,6 +56,7 @@ final class HouseholdPhoneSession {
             @Override public void edit(String command){PhoneLinkServer.Sink s=foreground;if(s!=null)s.edit(command);}
             @Override public void liveText(String value){PhoneLinkServer.Sink s=foreground;if(s!=null)s.liveText(value);}
             @Override public void chooseSource(int number){PhoneLinkServer.Sink s=foreground;if(s!=null)s.chooseSource(number);}
+            @Override public void seek(long ms){PhoneLinkServer.Sink s=foreground;if(s!=null)s.seek(ms);}
             @Override public void connected(boolean yes){
                 connected=yes;
                 PhoneLinkServer.Sink s=foreground;if(s!=null)s.connected(yes);
@@ -66,6 +67,7 @@ final class HouseholdPhoneSession {
     static void mode(String mode){PhoneLinkServer s=server;if(s!=null&&s.isRunning())s.mode(mode);}
     static void feedback(String code){PhoneLinkServer s=server;if(s!=null&&s.isRunning())s.feedback(code);}
     static void sources(String json){PhoneLinkServer s=server;if(s!=null&&s.isRunning())s.sources(json);}
+    static void refreshSources(){PhoneLinkServer s=server;if(s!=null&&s.isRunning())s.refreshSources();}
     static void playback(String json){PhoneLinkServer s=server;if(s!=null&&s.isRunning())s.playback(json);}
     static void attach(PhoneLinkServer.Sink sink){
         foreground=sink;

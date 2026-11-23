@@ -65,6 +65,12 @@ body.sources-open .dpad{display:none}
 .tools button,.video button{height:45px;font-size:13px;padding:0 4px}
 .video{grid-template-columns:repeat(3,minmax(0,1fr))}
 .video button{height:48px}
+.seekbar{display:grid;grid-template-columns:auto minmax(0,1fr) auto;gap:8px;align-items:center;
+  padding:7px 11px;background:#0b2835;border:1px solid #39727b;border-radius:13px}
+.seekbar span{font-size:12px;color:#d3f9ee;font-variant-numeric:tabular-nums}
+.seekbar input[type=range]{width:100%;height:28px;min-height:28px;padding:0;border:0;
+  background:transparent;accent-color:var(--mint);touch-action:pan-x}
+.seekbar input[type=range]:disabled{opacity:.5}
 .editor{display:flex;flex-direction:column;gap:5px;border:1px solid #366571;border-radius:16px;
   background:#082533;padding:8px 10px}
 .editor .hint{color:var(--muted);font-size:12px;font-weight:600}
@@ -141,6 +147,12 @@ body.editor-mode .editor{border-color:var(--mint)}
     <button id="sources-next" class="primary" type="button">↪ Try next</button>
     <button id="sources-refresh" type="button">↻ Refresh list</button>
   </div>
+</section>
+<section id="timeline" class="seekbar" aria-label="TV playback timeline" hidden>
+  <span id="played-time">0:00</span>
+  <input id="seek-position" type="range" min="0" max="1000" step="1000" value="0"
+         aria-label="Seek TV video from phone">
+  <span id="total-time">0:00</span>
 </section>
 <div class="editor" id="editor" role="search">
   <label class="hint" id="input-hint" for="typing">Open FlixMomo Search, or select a website text box.</label>
@@ -229,21 +241,55 @@ document.getElementById("sources-next").addEventListener("click",()=>{
 document.getElementById("sources-refresh").addEventListener("click",()=>{
  send("A SOURCES");sourcesNote.textContent="Refreshing choices from the current TV page…";
 });
+const timeline=document.getElementById("timeline"),seekPosition=document.getElementById("seek-position"),
+ playedTime=document.getElementById("played-time"),totalTime=document.getElementById("total-time");
+let scrubbing=false,lastSeekAt=0;
+function timeLabel(ms){
+ const seconds=Math.max(0,Math.floor(ms/1000));
+ return seconds>=3600?Math.floor(seconds/3600)+":"+String(Math.floor(seconds/60)%60).padStart(2,"0")+":"+String(seconds%60).padStart(2,"0"):
+  Math.floor(seconds/60)+":"+String(seconds%60).padStart(2,"0");
+}
+seekPosition.addEventListener("input",()=>{
+ scrubbing=true;playedTime.textContent=timeLabel(Number(seekPosition.value));
+});
+seekPosition.addEventListener("change",()=>{
+ if(ready&&!timeline.hidden&&seekPosition.value!==""){
+   send("Z "+Math.round(Number(seekPosition.value)));
+   lastSeekAt=Date.now();phoneNotice("Seek requested · waiting for the TV player.");
+ }
+ scrubbing=false;
+});
 function setPlayback(d){
  if(!d||typeof d!=="object")return;
  lastPlayback=d;
- const playing=d.state==="playing";
+ const playing=d.state==="playing",paused=d.state==="paused";
  const video=document.getElementById("video");
+ const active=["VIDEO","FULLSCREEN","STARTING"].includes(mode);
  const play=video.querySelector('[data-a="PLAY"]');
  const pause=video.querySelector('[data-a="PAUSE"]');
  const full=video.querySelector('[data-a="FULLSCREEN"]');
- play.disabled=!ready||playing;
- pause.disabled=!ready||!playing;
+ play.disabled=!ready||!active||playing;
+ pause.disabled=!ready||!active||paused;
  full.disabled=!ready||!d.fullscreen;
- const msg=playing?"Verified playback · use Pause, Back or Fullscreen":
-   d.state==="starting"?"Opening player · controls may appear after playback starts":
-   "Playback not confirmed · source selection stays available";
- tip.textContent=msg;
+ full.textContent=mode==="FULLSCREEN"?"⛶ Exit fullscreen":"⛶ Fullscreen";
+ const start=Number(d.seekStartMs),end=Number(d.seekEndMs),
+       pos=Number(d.positionMs);
+ const canSeek=ready&&active&&d.seekable===true&&Number.isFinite(start)&&
+   Number.isFinite(end)&&Number.isFinite(pos)&&end>start&&start>=0&&end<=86400000;
+ timeline.hidden=!canSeek;
+ seekPosition.disabled=!canSeek;
+ if(canSeek){
+   seekPosition.min=String(start);seekPosition.max=String(end);
+   if(!scrubbing&&Date.now()-lastSeekAt>350)
+     seekPosition.value=String(Math.max(start,Math.min(end,pos)));
+   playedTime.textContent=timeLabel(Number(seekPosition.value));
+   totalTime.textContent=timeLabel(end);
+ }
+ tip.textContent=playing?"TV player playing · timeline follows TV":
+   paused?"TV player paused · tap Play to resume":
+   d.state==="starting"?"Opening player · playback not yet confirmed":
+   active?"Player not observable · controls may be unavailable":
+   "Point, tap or use arrows";
 }
 function phoneNotice(message){hint.textContent=message;}
 function focusPhoneInput(){
@@ -256,7 +302,8 @@ function setOnline(online,message){
  status.classList.toggle("connected",online);
  input.disabled=!online;
  document.querySelectorAll("button").forEach(b=>b.disabled=!online);
- if(online)setPlayback(lastPlayback);
+ seekPosition.disabled=!online;
+ setPlayback(lastPlayback);
 }
 function connect(){
  if(!key&&!session){setOnline(false,"Scan QR again");return;}
@@ -298,6 +345,10 @@ function connect(){
      else if(code==="SEARCH_UNAVAILABLE")phoneNotice("Open FlixMomo on the TV to search.");
      else if(code==="EDIT_APPLIED")phoneNotice("Text corrected on the TV.");
      else if(code==="EDIT_FIELD_REQUIRED")phoneNotice("Tap Search on the phone or select a website text box.");
+     else if(code==="CONTROL_UNAVAILABLE")phoneNotice("This player is not directly controllable. Use the TV's video controls.");
+     else if(code==="SEEK_UNAVAILABLE")phoneNotice("This stream does not expose a seekable timeline.");
+     else if(code==="PLAY_REQUESTED"||code==="PAUSE_REQUESTED")phoneNotice("Command sent · awaiting confirmed TV state.");
+     else if(code==="SEEK_REQUESTED")phoneNotice("Seek sent · awaiting TV position update.");
    }else if(data==="P")setOnline(true,"● Connected");
  };
 }
@@ -332,6 +383,7 @@ function setMode(next){
  if(searching)input.placeholder="Film or series name";
  else if(next==="EDITOR")input.placeholder="Type in selected website field";
  else input.placeholder="Select a TV text box first";
+ setPlayback(lastPlayback);
 }
 connect();
 setOnline(false,"● Connecting");

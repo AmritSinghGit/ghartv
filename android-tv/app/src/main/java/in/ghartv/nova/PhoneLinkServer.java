@@ -42,6 +42,8 @@ public final class PhoneLinkServer {
         default void liveText(String value) {}
         /** Source number from the actually observed provider controls. */
         default void chooseSource(int number) {}
+        /** Absolute seek position in milliseconds, validated against observed media. */
+        default void seek(long positionMs) {}
     }
 
     static final int MAX_FRAME = 4096;
@@ -80,6 +82,8 @@ public final class PhoneLinkServer {
         lastPlayback=json;
         sendAsync("H "+json);
     }
+    /** Explicit phone Refresh must receive the current list even if unchanged. */
+    public void refreshSources(){sendAsync("O "+lastSources);}
     /** Only source labels/numbers/badges, no URLs, iframe state or credentials. */
     public void sources(String json){
         if(json==null||json.length()>3500||!json.startsWith("{\"choices\":"))return;
@@ -101,7 +105,10 @@ public final class PhoneLinkServer {
         if(!("SEARCH_SENT".equals(code)||"INVALID_QUERY".equals(code)||
              "WEB_TEXT_SENT".equals(code)||"FIELD_REQUIRED".equals(code)||
              "FIELD_BLOCKED".equals(code)||"SEARCH_UNAVAILABLE".equals(code)||
-             "EDIT_APPLIED".equals(code)||"EDIT_FIELD_REQUIRED".equals(code)))return;
+             "EDIT_APPLIED".equals(code)||"EDIT_FIELD_REQUIRED".equals(code)||
+             "CONTROL_UNAVAILABLE".equals(code)||"SEEK_UNAVAILABLE".equals(code)||
+             "SEEK_REQUESTED".equals(code)||"PLAY_REQUESTED".equals(code)||
+             "PAUSE_REQUESTED".equals(code)))return;
         final OutputStream out=activeOutput;
         if(out!=null&&!outbound.isShutdown()){
             try{outbound.execute(()->{
@@ -116,6 +123,7 @@ public final class PhoneLinkServer {
     public void mode(String mode){
         if(!("HOME".equals(mode)||"BROWSE".equals(mode)||"SEARCH".equals(mode)||"EDITOR".equals(mode)||
              "VIDEO".equals(mode)||"STARTING".equals(mode)||"FULLSCREEN".equals(mode)))return;
+        if(mode.equals(lastMode))return;
         lastMode=mode;
         final OutputStream out=activeOutput;
         if(out!=null&&!outbound.isShutdown()){
@@ -327,6 +335,12 @@ public final class PhoneLinkServer {
                 case 'Q': if(m.startsWith("Q ")&&m.length()<=258)sink.search(m.substring(2));return true;
                 case 'E': if(m.startsWith("E ")&&m.length()<=258)sink.submitPageText(m.substring(2));return true;
                 case 'L': if(m.startsWith("L ")&&m.length()<=258)sink.liveText(m.substring(2));return true;
+                case 'Z': {
+                    if(!m.matches("Z (?:0|[1-9][0-9]{0,7})"))return true;
+                    long value=Long.parseLong(m.substring(2));
+                    if(value<=86_400_000L)sink.seek(value);
+                    return true;
+                }
                 case 'J': {
                     if(!m.matches("J (?:[1-9]|1[0-2])"))return true;
                     sink.chooseSource(Integer.parseInt(m.substring(2)));return true;

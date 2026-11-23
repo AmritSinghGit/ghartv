@@ -82,6 +82,7 @@ final class FilmPlaybackProbe {
     }
     static String reveal(){
         return "(()=>{"+FilmPageSnapshot.CORE+"""
+        if(window.__ghartv_verified_full76||document.fullscreenElement)return JSON.stringify({state:'PLAYER_ALREADY_FULLSCREEN'});
         const items=Array.from(document.querySelectorAll('video,iframe')).filter(e=>visible(e)&&e.getBoundingClientRect().width>=160&&e.getBoundingClientRect().height>=90);
         if(items.length!==1)return JSON.stringify({state:'MANUAL_VIEW'});
         items[0].scrollIntoView({block:'center',behavior:'instant'});

@@ -83,7 +83,7 @@ final class FilmNativeControls {
     void attach(WebView web){documentReadySeen=false;probeBegan=SystemClock.elapsedRealtime();pageActions.clear();posterActions.clear();pageBusy=false;browser=web;generation++;reading=false;posterBusy=false;postersReady=false;}
     private void sendPhoneSources(){
         JSONArray out=new JSONArray();
-        if(browser!=null&&snapshotUrl.equals(browser.getUrl())&&host.pageIsVisible()){
+        if(browser!=null&&snapshotUrl.equals(browser.getUrl())&&active&&!blocked){
             for(int i=0;i<players.length();i++){
                 JSONObject p=players.optJSONObject(i);if(p==null)continue;
                 String label=p.optString("label");
@@ -263,7 +263,8 @@ final class FilmNativeControls {
         trayButtons.get(at).requestFocus();return true;
     }
     void openSources(){showPlayers();}
-    boolean tryNextPlayer(){
+    boolean tryNextPlayer(){return tryNextPlayer(true);}
+    boolean tryNextPlayer(boolean manual){
         if(!active||blocked||pending||browser==null||players.length()==0)return false;
         if(selected.isEmpty()){
             JSONObject current=null;
@@ -271,8 +272,14 @@ final class FilmNativeControls {
             if(current==null)current=players.optJSONObject(0);
             if(current!=null)attempted.add(current.optString("label"));
         }else attempted.add(selected);
-        for(int i=0;i<players.length();i++){JSONObject p=players.optJSONObject(i);if(p!=null&&!attempted.contains(p.optString("label"))){select(i);return true;}}
-        return false;
+        java.util.ArrayList<String> offered=new java.util.ArrayList<>(players.length());
+        for(int i=0;i<players.length();i++){
+            JSONObject item=players.optJSONObject(i);
+            offered.add(item==null?"":item.optString("label"));
+        }
+        int next=FilmSourceCycle.next(offered,attempted,manual);
+        if(next<0)return false;
+        select(next);return true;
     }
     private void showPlayers(){dismissedByViewer=false;host.controlsVisibility(true);probeCount=0;finished();choiceView.setVisibility(View.VISIBLE);choiceView.bringToFront();renderPlayers();}
     private void renderPlayers(){
@@ -395,5 +402,14 @@ final class FilmNativeControls {
         lastPosterKey=SystemClock.uptimeMillis();pageAction(action);return true;
     }
 
-    private void next(boolean viewer){if(!active||blocked||pending)return;if(!selected.isEmpty())attempted.add(selected);for(int i=0;i<players.length();i++){JSONObject p=players.optJSONObject(i);if(p!=null&&!attempted.contains(p.optString("label"))){state.setText(viewer?"Trying the next player you requested…":"Media error; trying the next offered player…");select(i);return;}}state.setText("No untried player remains. Choose a player or return to search.");autoNext=false;if(viewer)showTray(true);}
+    private void next(boolean viewer){
+        if(!active||blocked||pending)return;
+        state.setText(viewer?"Trying the next player you requested…":
+            "Media error; trying the next offered player…");
+        // Phone and TV controls use the same ordered source rotation.
+        // Only a person's explicit Next wraps after all sources are tried.
+        if(tryNextPlayer(viewer))return;
+        state.setText("No untried player remains. Choose a player or return to search.");
+        autoNext=false;if(viewer)showTray(true);
+    }
 }

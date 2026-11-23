@@ -17,7 +17,7 @@ final class FilmPlaybackMonitor {
     interface Host {
         WebView page();
         boolean samePlaybackScreen();
-        boolean next();
+        boolean next(boolean manual);
         void sources();
         void cancelPage();
         void changed(String state);
@@ -122,7 +122,7 @@ final class FilmPlaybackMonitor {
                 if(!"RELEASED".equals(d.optString("state"))||!d.optBoolean("paused")){budget.unavailable("Player cannot be released safely for automatic switching. Manual controls retained.");render();return;}
                 host.changed("PREVIOUS_SOURCE_RELEASED");
                 budget.selected(SystemClock.elapsedRealtime());firstReveal=false;
-                if(!host.next()){budget.noNext();render();return;}
+                if(!host.next(!automatic)){budget.noNext();render();return;}
                 render();schedule();
             }catch(Exception e){budget.unavailable("Source release not confirmed. Cancel or use manual controls.");render();}
         });
