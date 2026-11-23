@@ -72,11 +72,11 @@ public final class PhoneLinkServer {
         lastMode=mode;
         final OutputStream out=activeOutput;
         if(out!=null&&!outbound.isShutdown()){
-            outbound.execute(()->{
+            try{outbound.execute(()->{
                 if(activeOutput!=out||stopped)return;
                 try{writeFrame(out,1,("V "+mode).getBytes(StandardCharsets.UTF_8));}
                 catch(IOException ignored){}
-            });
+            });}catch(java.util.concurrent.RejectedExecutionException ignored){}
         }
     }
     private volatile long lastActivity;

@@ -167,6 +167,7 @@ public final class MainActivity extends Activity implements ChannelNavigator.Lis
             q.topMargin=TvUi.dp(this,7);body.addView(qr,q);
             TextView next=TvUi.label(this,"Move on phone · Tap to choose",15,TvUi.MUTED,false);
             next.setGravity(Gravity.CENTER);body.addView(next);
+            HouseholdPhoneSession.markOffered();
             homePairDialog=new TvModal(this,"GHAR TV · OPTIONAL","Connect your phone",
                 "No setup needed. Press OK for the normal TV remote; the phone can connect later.")
                 .add(body).action("Continue with TV",true,android.app.Dialog::dismiss).show();

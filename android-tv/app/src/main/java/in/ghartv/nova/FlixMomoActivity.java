@@ -275,7 +275,10 @@ public class FlixMomoActivity extends Activity {
         if(custom!=null||verifiedImmersive)HouseholdPhoneSession.mode("FULLSCREEN");
         else if(startMonitor!=null&&startMonitor.healthy())HouseholdPhoneSession.mode("VIDEO");
         else if(startMonitor!=null&&startMonitor.running())HouseholdPhoneSession.mode("STARTING");
-        else if(pointerPage&&pageEditor)HouseholdPhoneSession.mode("EDITOR");
+        else if(pointerPage&&(pageEditor||
+                 (chrome!=null&&chrome.isShown()&&query!=null&&query.hasFocus())||
+                 (torWebMode&&browserBar!=null&&browserBar.showing()&&
+                  browserBar.address().hasFocus())))HouseholdPhoneSession.mode("EDITOR");
         else HouseholdPhoneSession.mode("BROWSE");
     }
     private void phoneScroll(int dx,int dy){
@@ -621,7 +624,11 @@ public class FlixMomoActivity extends Activity {
                 if(HouseholdPhoneSession.connected()){
                     HouseholdPhoneSession.attach(filmPhoneSink);
                     phoneConnected=true;updatePhoneBadge();notifyPhoneMode();
-                }else{phonePairEvent("offered");showPhoneRemote();}
+                }else if(!HouseholdPhoneSession.offeredThisProcess()){
+                    // Deep-link directly to Films? Offer once here. If the user
+                    // already dismissed Home QR, respect that decision.
+                    phonePairEvent("offered");showPhoneRemote();
+                }
             }
         },650L);
     }
@@ -1203,6 +1210,7 @@ public class FlixMomoActivity extends Activity {
         LinearLayout.LayoutParams qp=new LinearLayout.LayoutParams(TvUi.dp(this,172),TvUi.dp(this,172));
         qp.topMargin=TvUi.dp(this,5);
         content.addView(qr,qp);
+        HouseholdPhoneSession.markOffered();
         pairingDialog=new TvModal(this,"GHARTV · PHONE","Scan to control your TV",
             "Phone optional · You can always use your TV remote. "+
             (viaMac?"Mac emulator bridge connected. ":"")+

@@ -34,6 +34,9 @@ final class HouseholdPhoneSession {
     private static volatile boolean emulator;
     private static volatile boolean waiting;
     private static volatile boolean connected;
+    private static volatile boolean offeredThisProcess;
+    static boolean offeredThisProcess(){return offeredThisProcess;}
+    static void markOffered(){offeredThisProcess=true;}
     private static volatile Consumer<Link> pending;
 
     private static PhoneLinkServer.Sink route(){
