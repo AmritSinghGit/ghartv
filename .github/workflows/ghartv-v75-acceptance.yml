@@ -31,9 +31,15 @@ jobs:
           javac -encoding UTF-8 -d "$w" "$j/TorWebUrlPolicy.java" tools/tv-first/TorWebUrlPolicySmoke.java "$j/FilmStartBudget.java" tools/tv-first/FilmStartBudgetSmoke.java
           java -cp "$w" in.ghartv.nova.TorWebUrlPolicySmoke
           java -cp "$w" in.ghartv.nova.FilmStartBudgetSmoke
-      - uses: android-actions/setup-android@v3
-      - name: Install Android SDK 36
-        run: sdkmanager "platforms;android-36" "build-tools;36.0.0" "platform-tools"
+      # ubuntu-latest has SDK command-line tools. The setup-android@v3
+      # action is currently requesting the removed legacy "tools" package.
+      - name: Install Android SDK 36 from runner command-line tools
+        shell: bash
+        run: |
+          set -euo pipefail
+          command -v sdkmanager
+          yes | sdkmanager --licenses >/dev/null || true
+          sdkmanager "platforms;android-36" "build-tools;36.0.0" "platform-tools"
       - name: Use available JDK21 compiler for CI only
         shell: bash
         run: |
