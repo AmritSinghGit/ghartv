@@ -43,6 +43,11 @@ def register(port):
         if current.returncode:raise RuntimeError("ADB forward list unavailable")
         entries=[x.split() for x in current.stdout.splitlines()]
         existing=[x for x in entries if len(x)>=3 and x[1]==f"tcp:{ADB_PORT}"]
+        # The emulator may reboot while the Mac companion stays alive.
+        # ADB silently drops its forward, invalidating our in-memory state.
+        # Reconcile observed state before removing/replacing the forward.
+        if ACTIVE["forward"] and not existing:
+            ACTIVE.update(port=None,forward=False)
         if existing and not ACTIVE["forward"]:
             raise RuntimeError("ADB port already belongs to a different process")
         if ACTIVE["forward"] and ACTIVE["port"]!=port:
