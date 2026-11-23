@@ -1,0 +1,342 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no">
+<meta name="theme-color" content="#061924">
+<title>GharTV · Phone Remote</title>
+<style>
+:root{color-scheme:dark;--bg:#061720;--panel:#0c2a36;--ink:#effcff;--muted:#adc7d2;--mint:#74f3d3;--line:#366571;--danger:#ffd4cb}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{margin:0;width:100%;height:100%;overscroll-behavior:none}
+body{height:100dvh;min-height:460px;display:flex;flex-direction:column;gap:8px;overflow-y:auto;
+  background:radial-gradient(ellipse at 80% -5%,#175959 0%,transparent 42%),var(--bg);
+  color:var(--ink);font:500 15px/1.35 system-ui,-apple-system,sans-serif;
+  padding:max(11px,env(safe-area-inset-top)) 12px max(8px,env(safe-area-inset-bottom))}
+header{display:flex;align-items:center;justify-content:space-between;gap:8px;min-height:44px}
+.brand{display:flex;flex-direction:column;gap:0}
+.brand small{color:var(--mint);font-size:10px;font-weight:900;letter-spacing:.15em}
+.brand b{font-size:23px;line-height:1.12;letter-spacing:-.05em}
+.status{border:1px solid #954f53;border-radius:999px;background:#3d222d;color:var(--danger);
+  padding:9px 12px;font-size:12px;font-weight:900;white-space:nowrap}
+.status.connected{color:#c5ffe9;border-color:#47c99b;background:#0b4d42}
+.context{display:flex;gap:8px;align-items:center;justify-content:space-between;min-height:25px}
+.mode{color:var(--mint);font-size:12px;font-weight:850;letter-spacing:.04em}
+.tip{color:var(--muted);font-size:12px;text-align:right;max-width:65%}
+.track{flex:1;min-height:120px;border-radius:25px;border:1.5px solid #498a94;
+  box-shadow:inset 0 0 35px #0e3645,0 8px 26px #0004;
+  background:radial-gradient(ellipse at 50% 45%,#194b57,#0b2937 70%);
+  position:relative;touch-action:none;display:grid;place-items:center;overflow:hidden}
+.track:after{content:"";position:absolute;inset:9px;border:1px solid #ffffff0b;border-radius:19px;pointer-events:none}
+.track .cross{font-size:54px;color:#79e9d0;opacity:.45;pointer-events:none}
+.track .instruction{position:absolute;bottom:13px;left:0;right:0;text-align:center;
+  color:#bfd9e1;font-size:12px;pointer-events:none}
+.track:active{border-color:var(--mint)}
+.dpad{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));grid-template-rows:repeat(3,42px);
+  gap:6px;max-width:320px;width:100%;align-self:center}
+button{font:800 15px/1 system-ui,-apple-system,sans-serif;color:var(--ink);
+  min-width:0;min-height:42px;border:1px solid var(--line);background:#10313f;
+  border-radius:13px;touch-action:manipulation;cursor:pointer}
+button:active{background:#2a7778;transform:scale(.97)}
+button:focus-visible,input:focus-visible{outline:2px solid var(--mint);outline-offset:2px}
+button.primary{background:#027d78;color:#fff;border-color:#68e9cc}
+button.soft{background:#0b3b46;color:var(--mint)}
+.dpad .up{grid-column:2;grid-row:1}
+.dpad .left{grid-column:1;grid-row:2}
+.dpad .ok{grid-column:2;grid-row:2}
+.dpad .right{grid-column:3;grid-row:2}
+.dpad .down{grid-column:2;grid-row:3}
+.tools,.video{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:7px}
+.tools button,.video button{height:45px;font-size:13px;padding:0 4px}
+.video{grid-template-columns:repeat(3,minmax(0,1fr))}
+.video button{height:48px}
+.editor{display:flex;flex-direction:column;gap:5px;border:1px solid #366571;border-radius:16px;
+  background:#082533;padding:8px 10px}
+.editor .hint{color:var(--muted);font-size:12px;font-weight:600}
+.field{display:flex;gap:7px;align-items:stretch}
+input{flex:1;min-width:0;height:46px;padding:10px 12px;color:var(--ink);
+  background:#041822;border:1px solid #427b85;border-radius:11px;font-size:16px}
+.field button{min-height:46px;padding:0 12px;white-space:nowrap}
+#mic{font-size:20px;padding:0 9px}
+.edit-tools{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.edit-tools button{height:43px;min-height:43px;font-size:14px;
+ border:1px solid #497e87;background:#113846;color:#d9fff4}
+.edit-tools button:active{background:#20696d}
+body.video-mode .edit-tools{display:none}
+body.typing-active .editor{border-color:#82efd9;scroll-margin-bottom:16px}
+body.typing-active .track{min-height:65px}
+body.typing-active .dpad{grid-template-rows:repeat(3,32px);max-width:245px}
+body.typing-active .dpad button{min-height:32px}
+footer{text-align:center;color:var(--muted);font-size:11px;line-height:1.25}
+[hidden]{display:none!important}
+#video[hidden],#tools[hidden]{display:none}
+body.video-mode .track{min-height:92px}
+body.video-mode .dpad{grid-template-rows:repeat(3,38px);max-width:285px}
+body.video-mode .dpad button{min-height:38px}
+body.editor-mode .editor{border-color:var(--mint)}
+@media(max-width:360px){.brand b{font-size:20px}.tools button,.video button{font-size:12px}.field button{padding:0 8px}}
+@media(max-height:730px){body{gap:6px}.dpad{grid-template-rows:repeat(3,37px)}.dpad button{min-height:37px}.tools button,.video button{height:39px;min-height:39px}.track{min-height:90px}.brand b{font-size:19px}}
+@media(orientation:landscape) and (max-height:540px){
+ body{min-height:370px;gap:5px;padding:5px 10px}
+ header{min-height:29px}.brand b{font-size:17px}.brand small{font-size:9px}
+ .context,footer{display:none}
+ .track{min-height:75px}
+ .dpad{grid-template-rows:repeat(3,32px);max-width:280px;gap:4px}
+ .dpad button{min-height:32px}
+ .tools button,.video button{min-height:34px;height:34px}
+ .editor{padding:5px}
+ .field input,.field button{min-height:36px;height:36px}
+}
+</style></head>
+<body>
+<header>
+  <span class="brand"><small>GHAR TV · CONNECT</small><b>Phone remote</b></span>
+  <span id="status" class="status" role="status" aria-live="polite">● Connecting</span>
+</header>
+<div class="context"><span id="mode" class="mode">TV GUIDE</span><span id="tip" class="tip">Point, tap or use arrows</span></div>
+<div id="track" class="track" role="application" aria-label="TV trackpad; drag to move pointer, tap to click and two fingers to scroll">
+  <span class="cross">✥</span><span class="instruction">Drag to move · Tap to click · Two fingers to scroll</span>
+</div>
+<div class="dpad" role="group" aria-label="TV directional controls">
+  <button class="up" data-k="19" aria-label="Up">↑</button>
+  <button class="left" data-k="21" aria-label="Left">←</button>
+  <button class="ok primary" data-k="23">OK</button>
+  <button class="right" data-k="22" aria-label="Right">→</button>
+  <button class="down" data-k="20" aria-label="Down">↓</button>
+</div>
+<div id="tools" class="tools" role="group" aria-label="TV navigation">
+  <button data-a="BACK">↶ Back</button>
+  <button data-a="SEARCH">⌕ Search</button>
+  <button data-k="85">⏯ Play</button>
+  <button data-k="3">⌂ Home</button>
+</div>
+<div id="video" class="video" role="group" aria-label="Playback controls" hidden>
+  <button data-a="BACK">↶ Back</button>
+  <button data-a="PLAY" class="primary">▶ Play</button>
+  <button data-a="PAUSE">Ⅱ Pause</button>
+  <button data-a="FULLSCREEN" class="soft">⛶ Fullscreen</button>
+  <button data-a="SOURCES">☷ Sources</button>
+  <button data-a="NEXT">↪ Try next</button>
+</div>
+<div class="editor" id="editor" role="search">
+  <label class="hint" id="input-hint" for="typing">Open FlixMomo Search, or select a website text box.</label>
+  <div class="field">
+    <input id="typing" type="text" enterkeyhint="done" placeholder="Type on the TV" autocomplete="off" autocapitalize="off" spellcheck="false">
+    <button id="mic" aria-label="Speak using phone microphone">🎙</button>
+    <button id="send" class="primary">Search</button>
+    <button id="go" aria-label="Submit website field" hidden>Go</button>
+  </div>
+  <div class="edit-tools" role="group" aria-label="Edit text on the phone and TV">
+    <button id="backspace" type="button" aria-label="Delete last character">⌫ Backspace</button>
+    <button id="clear-text" type="button" aria-label="Clear selected text">Clear text</button>
+  </div>
+</div>
+<footer id="footnote">Private home network only · No passwords, OTPs or payment details</footer>
+<script>
+"use strict";
+const status=document.getElementById("status"),modeEl=document.getElementById("mode"),
+ tip=document.getElementById("tip"),input=document.getElementById("typing"),
+ hint=document.getElementById("input-hint"),track=document.getElementById("track"),
+ editor=document.getElementById("editor");
+const key=new URLSearchParams(location.search).get("k");
+let ws=null,session="",attempts=0,mode="HOME",points=new Map(),
+    dx=0,dy=0,sx=0,sy=0,tapDistance=0,tapTime=0,multi=false,ready=false;
+const sendButton=document.getElementById("send"),
+      goButton=document.getElementById("go"),
+      micButton=document.getElementById("mic");
+let lastSubmission="",submissionPending=false;
+function phoneNotice(message){hint.textContent=message;}
+function focusPhoneInput(){
+  // Chrome on Android may show the keyboard here. iOS Safari requires a
+  // direct viewer gesture; a large tap target remains ready if blocked.
+  try{input.focus({preventScroll:true});}catch(e){input.focus();}
+}
+function setOnline(online,message){
+ ready=online;status.textContent=message;
+ status.classList.toggle("connected",online);
+ input.disabled=!online;
+ document.querySelectorAll("button").forEach(b=>b.disabled=!online);
+}
+function connect(){
+ if(!key&&!session){setOnline(false,"Scan QR again");return;}
+ try{ws=new WebSocket("ws://"+location.host+"/ws?"+(session?
+   "s="+encodeURIComponent(session):"k="+encodeURIComponent(key)));}catch(e){
+   setOnline(false,"Connection unavailable");return;
+ }
+ ws.onopen=()=>{attempts=0;setOnline(true,"● Connected");};
+ ws.onclose=()=>{
+   setOnline(false,"● Disconnected");
+   if(session&&attempts++<40){status.textContent="● Reconnecting";setTimeout(connect,1000);}
+ };
+ ws.onmessage=e=>{
+   const data=String(e.data||"");
+   if(data.startsWith("S "))session=data.slice(2);
+   else if(data.startsWith("V "))setMode(data.slice(2));
+   else if(data.startsWith("R ")){
+     const code=data.slice(2);
+     submissionPending=false;
+     if(code==="SEARCH_SENT"){
+       input.value="";phoneNotice("Search sent to GharTV. Choose a result on the TV.");
+     }else if(code==="WEB_TEXT_SENT"){
+       input.value="";phoneNotice("Text sent to the selected website field.");
+     }else if(code==="INVALID_QUERY")phoneNotice("Please enter a film or series title.");
+     else if(code==="FIELD_BLOCKED")phoneNotice("This field is private. Use the TV remote.");
+     else if(code==="FIELD_REQUIRED")phoneNotice("Select the website's text field first.");
+     else if(code==="SEARCH_UNAVAILABLE")phoneNotice("Open FlixMomo on the TV to search.");
+     else if(code==="EDIT_APPLIED")phoneNotice("Text corrected on the TV.");
+     else if(code==="EDIT_FIELD_REQUIRED")phoneNotice("Tap Search on the phone or select a website text box.");
+   }else if(data==="P")setOnline(true,"● Connected");
+ };
+}
+function send(message){if(ready&&ws&&ws.readyState===1)ws.send(message);}
+function setMode(next){
+ if(!["HOME","BROWSE","SEARCH","EDITOR","STARTING","VIDEO","FULLSCREEN"].includes(next))return;
+ mode=next;
+ const video=next==="VIDEO"||next==="FULLSCREEN"||next==="STARTING";
+ document.body.classList.toggle("video-mode",video);
+ document.body.classList.toggle("editor-mode",next==="EDITOR"||next==="SEARCH");
+ editor.setAttribute("aria-label",next==="SEARCH"?"Search films or series":"Type into selected TV field");
+ const searching=next==="SEARCH";
+ sendButton.textContent=searching?"Search":next==="EDITOR"?"Type":"Type";
+ goButton.hidden=next!=="EDITOR";
+ if(searching&&ready){phoneNotice("Type a title and tap Search — one step.");
+   // Focus after pairing without opening the TV's on-screen keyboard.
+   focusPhoneInput();
+ }
+ document.getElementById("video").hidden=!video;
+ document.getElementById("tools").hidden=video;
+ const labels={HOME:"TV GUIDE",BROWSE:"BROWSER · FLIXMOMO",SEARCH:"SEARCH A FILM OR SERIES",
+  EDITOR:"WEBSITE TEXT BOX",STARTING:"OPENING VIDEO",VIDEO:"PLAYING VIDEO",FULLSCREEN:"FULLSCREEN VIDEO"};
+ modeEl.textContent=labels[next];
+ tip.textContent=next==="EDITOR"?"Type below on your phone":
+   video?"Back · Play · Fullscreen · Sources":"Point, tap or use arrows";
+ hint.textContent=searching?"Type your film or series title here. Tap Search once.":
+   next==="EDITOR"?"Website text field selected. Type or use your phone keyboard microphone.":
+   video?"Video controls above. You may use Try next if a source fails.":
+   "Open FlixMomo and choose Search, or tap a website field.";
+ if(searching)input.placeholder="Film or series name";
+ else if(next==="EDITOR")input.placeholder="Type in selected website field";
+ else input.placeholder="Select a TV text box first";
+}
+connect();
+setOnline(false,"● Connecting");
+setInterval(()=>send("P"),3000);
+function flush(){
+ if(dx||dy){send("M "+Math.round(dx)+" "+Math.round(dy));dx=dy=0;}
+ if(sx||sy){send("S "+Math.round(sx)+" "+Math.round(sy));sx=sy=0;}
+ requestAnimationFrame(flush);
+}
+requestAnimationFrame(flush);
+track.addEventListener("pointerdown",e=>{
+ e.preventDefault();track.setPointerCapture(e.pointerId);
+ points.set(e.pointerId,{x:e.clientX,y:e.clientY});
+ if(points.size===1){tapDistance=0;tapTime=Date.now();multi=false;}
+ else multi=true;
+});
+track.addEventListener("pointermove",e=>{
+ const p=points.get(e.pointerId);if(!p)return;
+ const deltaX=e.clientX-p.x,deltaY=e.clientY-p.y;
+ p.x=e.clientX;p.y=e.clientY;
+ if(points.size>1){
+   multi=true;sx+=Math.max(-80,Math.min(80,deltaX*1.6));
+   sy+=Math.max(-80,Math.min(80,deltaY*2.1));return;
+ }
+ dx+=Math.max(-65,Math.min(65,deltaX*1.35));
+ dy+=Math.max(-65,Math.min(65,deltaY*1.35));
+ tapDistance+=Math.abs(deltaX)+Math.abs(deltaY);
+});
+track.addEventListener("pointerup",e=>{
+ if(points.has(e.pointerId)&&points.size===1&&!multi&&
+   tapDistance<14&&Date.now()-tapTime<480)send("C");
+ points.delete(e.pointerId);
+ if(points.size===0)multi=false;
+});
+track.addEventListener("pointercancel",e=>{points.delete(e.pointerId);multi=true;});
+track.addEventListener("touchmove",e=>e.preventDefault(),{passive:false});
+document.querySelectorAll("[data-k]").forEach(b=>b.addEventListener("click",()=>send("K "+b.dataset.k)));
+document.querySelectorAll("[data-a]").forEach(b=>b.addEventListener("click",()=>send("A "+b.dataset.a)));
+function editBackspace(){
+ if(!ready)return;
+ // When editing the phone's unsent draft, delete locally first. When the
+ // phone field is empty, Backspace edits the currently selected TV field.
+ const a=input.selectionStart,b=input.selectionEnd;
+ if(input.value.length){
+   const start=a==null?input.value.length:a, end=b==null?start:b;
+   let from=Math.min(start,end),to=Math.max(start,end);
+   if(from===to&&from>0){const prefix=input.value.slice(0,from);
+     from-=Array.from(prefix).slice(-1)[0].length;}
+   input.setRangeText("",from,to,"start");
+   phoneNotice("Text corrected. Tap Search to send the title.");
+   return;
+ }
+ if(mode==="SEARCH"||mode==="EDITOR"){
+   send("B");phoneNotice("Deleting from the selected TV text field…");
+ }else phoneNotice("Tap Search or select a website field first.");
+}
+function clearPhoneAndTv(){
+ input.value="";
+ if(!ready)return;
+ if(mode==="SEARCH"||mode==="EDITOR"){
+   send("X");phoneNotice("Clearing the selected TV field…");
+ }else phoneNotice("Phone draft cleared.");
+}
+document.getElementById("backspace").addEventListener("click",editBackspace);
+document.getElementById("clear-text").addEventListener("click",clearPhoneAndTv);
+function sendText(submit){
+ const value=input.value.trim();
+ if(!ready){phoneNotice("Pair the phone before sending text.");return;}
+ if(submissionPending){return;}
+ if(!value){phoneNotice("Type a film name or tap the microphone.");focusPhoneInput();return;}
+ const bounded=value.slice(0,256);
+ if(mode==="SEARCH"){
+   // One atomic search message. The TV owns focus and performs Search.
+   send("Q "+bounded);submissionPending=true;
+   phoneNotice("Searching GharTV…");return;
+ }
+ if(mode==="EDITOR"){
+   send((submit?"E ":"T ")+bounded);
+   if(submit)submissionPending=true;
+   else {input.value="";phoneNotice("Text typed into the selected TV field.");}
+   return;
+ }
+ phoneNotice("Open FlixMomo Search, or select a website text box first.");
+}
+sendButton.addEventListener("click",()=>sendText(false));
+goButton.addEventListener("click",()=>sendText(true));
+input.addEventListener("keydown",e=>{
+ if(e.key==="Enter"){e.preventDefault();sendText(mode==="EDITOR");}
+ else if(e.key==="Backspace"&&input.value===""){
+   e.preventDefault();editBackspace();
+ }
+});
+input.addEventListener("focus",()=>{document.body.classList.add("typing-active");});
+input.addEventListener("blur",()=>{document.body.classList.remove("typing-active");});
+document.getElementById("mic").addEventListener("click",()=>{
+ const Recognizer=window.SpeechRecognition||window.webkitSpeechRecognition;
+ if(!Recognizer){
+   hint.textContent="Use the microphone on your phone's own keyboard to dictate here.";
+   input.focus();return;
+ }
+ try{
+   const rec=new Recognizer();
+   rec.lang=navigator.language||"en-IN";
+   rec.interimResults=false;rec.maxAlternatives=1;
+   hint.textContent="Listening on your phone…";
+   rec.onresult=e=>{
+     const spoken=e.results?.[0]?.[0]?.transcript||"";
+     input.value=spoken.slice(0,256);
+     hint.textContent=mode==="SEARCH"?"Tap Search to find this title on TV.":"Tap Type to send to the selected website field.";
+   };
+   rec.onerror=()=>{
+     hint.textContent="Use the phone keyboard's own microphone to dictate instead.";
+     input.focus();
+   };
+   rec.onend=()=>{
+     if(hint.textContent==="Listening on your phone…")
+       hint.textContent="No speech detected. Tap the phone keyboard microphone.";
+   };
+   rec.start();
+ }catch(e){
+   hint.textContent="Use the phone keyboard microphone instead.";
+   input.focus();
+ }
+});
+</script></body></html>
