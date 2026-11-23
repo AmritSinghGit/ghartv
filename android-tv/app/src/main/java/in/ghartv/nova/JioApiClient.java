@@ -17,13 +17,10 @@ import java.util.Map;
 import java.util.HashSet;
 import java.util.Set;
 import java.util.UUID;
-import java.util.concurrent.TimeUnit;
 
-import okhttp3.ConnectionPool;
 import okhttp3.FormBody;
 import okhttp3.Headers;
 import okhttp3.MediaType;
-import okhttp3.OkHttpClient;
 import okhttp3.Request;
 import okhttp3.RequestBody;
 import okhttp3.Response;
@@ -34,18 +31,64 @@ public final class JioApiClient {
     private static final String PLAYER_USER_AGENT = "plaYtv/7.1.5 (Linux;Android 9) ExoPlayerLib/2.11.7";
 
     private final Context context;
-    private final OkHttpClient client;
-
+    private final okhttp3.Call.Factory client;
+    private final java.util.Set<okhttp3.Call> playbackCalls = java.util.concurrent.ConcurrentHashMap.newKeySet();
+    private static final long PLAYBACK_HANDOFF_MS = 20_000L;
+    private static final java.util.LinkedHashMap<String, CachedPlayback> PLAYBACK_HANDOFFS =
+            new java.util.LinkedHashMap<>(8, .75f, true);
+    private static final class CachedPlayback {
+        final long until;
+        final PlaybackInfo info;
+        CachedPlayback(PlaybackInfo value) {
+            until = android.os.SystemClock.elapsedRealtime() + PLAYBACK_HANDOFF_MS;
+            info = value.copy();
+        }
+    }
     public JioApiClient(Context context) {
-        this.context = context.getApplicationContext();
-        this.client = new OkHttpClient.Builder()
-                .connectTimeout(12, TimeUnit.SECONDS)
-                .readTimeout(18, TimeUnit.SECONDS)
-                .writeTimeout(18, TimeUnit.SECONDS)
-                .callTimeout(25, TimeUnit.SECONDS)
-                .retryOnConnectionFailure(true)
-                .connectionPool(new ConnectionPool(5, 5, TimeUnit.MINUTES))
-                .build();
+        this.context=context.getApplicationContext();
+        this.client=JioNetwork.api(this.context);
+    }
+    public void cancelPlayback() { for(okhttp3.Call c:playbackCalls)c.cancel(); }
+    public static void clearPlaybackHandoffs() { synchronized (PLAYBACK_HANDOFFS) { PLAYBACK_HANDOFFS.clear(); } }
+
+    private static String handoffKey(JioSession session, Channel channel) {
+        String owner = session.uniqueId.isEmpty() ? session.deviceId : session.uniqueId;
+        return Integer.toHexString(owner.hashCode()) + ":" + channel.id;
+    }
+
+    private static PlaybackInfo takePlaybackHandoff(JioSession session, Channel channel) {
+        synchronized (PLAYBACK_HANDOFFS) {
+            long now = android.os.SystemClock.elapsedRealtime();
+            PLAYBACK_HANDOFFS.entrySet().removeIf(entry -> entry.getValue().until <= now);
+            CachedPlayback cached = PLAYBACK_HANDOFFS.remove(handoffKey(session, channel));
+            if (cached == null || cached.until <= now) return null;
+            PlaybackInfo info = cached.info.copy();
+            try { info.licenseHeaders.put("srno", UUID.randomUUID().toString()); }
+            catch (Exception ignored) {}
+            return info;
+        }
+    }
+
+    private static void rememberPlaybackHandoff(JioSession session, Channel channel, PlaybackInfo info) {
+        if (info == null || info.authRequired || info.subscriptionRequired || info.unavailable
+                || info.streamUrl == null || info.streamUrl.isEmpty()) return;
+        synchronized (PLAYBACK_HANDOFFS) {
+            PLAYBACK_HANDOFFS.put(handoffKey(session, channel), new CachedPlayback(info));
+            while (PLAYBACK_HANDOFFS.size() > 8) {
+                PLAYBACK_HANDOFFS.remove(PLAYBACK_HANDOFFS.keySet().iterator().next());
+            }
+        }
+    }
+    private final class TrackedPlayback implements java.io.Closeable {
+        final okhttp3.Call call; final Response response;
+        TrackedPlayback(okhttp3.Call c,Response r){call=c;response=r;}
+        @Override public void close(){try{response.close();}finally{playbackCalls.remove(call);}}
+    }
+    private TrackedPlayback playbackExecute(Request request) throws IOException {
+        if(Thread.currentThread().isInterrupted())throw new java.io.InterruptedIOException("Superseded request");
+        okhttp3.Call call=client.newCall(request);playbackCalls.add(call);
+        try {if(Thread.currentThread().isInterrupted())call.cancel();return new TrackedPlayback(call,call.execute());}
+        catch(IOException | RuntimeException e){playbackCalls.remove(call);throw e;}
     }
 
     public void prewarm() {
@@ -255,13 +298,23 @@ public final class JioApiClient {
         return channels;
     }
 
+    private static final java.util.LinkedHashMap<String,EpgEntry> EPG_CACHE=new java.util.LinkedHashMap<>(32,.75f,true);
+    private static final class EpgEntry {final long until;final List<Program> programs;EpgEntry(List<Program> p){until=android.os.SystemClock.elapsedRealtime()+60000;programs=new ArrayList<>(p);}}
     public List<Program> fetchEpg(String channelId, int offsetDays) throws Exception {
+        String cacheKey=channelId+":"+offsetDays;
+        synchronized(EPG_CACHE){EpgEntry e=EPG_CACHE.get(cacheKey);if(e!=null&&e.until>android.os.SystemClock.elapsedRealtime())return new ArrayList<>(e.programs);}
+
         String url = String.format(AppConfig.EPG, offsetDays, channelId);
         JSONObject payload = fetchJson(url, new Headers.Builder().add("User-Agent", MOBILE_USER_AGENT).build());
         JSONArray epg = payload.optJSONArray("epg");
         List<Program> programs = new ArrayList<>();
         if (epg == null) return programs;
-        for (int i = 0; i < epg.length(); i++) programs.add(Program.fromJson(epg.getJSONObject(i)));
+        for (int i = 0; i < epg.length(); i++) {
+            JSONObject row=epg.optJSONObject(i);if(row==null)continue;
+            Program p=Program.fromJson(row);if(p.startEpochMs>0&&p.endEpochMs>p.startEpochMs)programs.add(p);
+        }
+        programs.sort((a,b)->Long.compare(a.startEpochMs,b.startEpochMs));
+        synchronized(EPG_CACHE){EPG_CACHE.put(cacheKey,new EpgEntry(programs));while(EPG_CACHE.size()>32)EPG_CACHE.remove(EPG_CACHE.keySet().iterator().next());}
         return programs;
     }
 
@@ -271,7 +324,11 @@ public final class JioApiClient {
         if (!session.isPresent()) throw new IOException("Sign in to JioTV first");
         if (!session.isValid()) session = refreshSession(session);
         if (!session.isPresent()) throw new IOException("The JioTV session has expired. Sign in again.");
-        return fetchJioPlayback(channel, session, true);
+        PlaybackInfo cached = takePlaybackHandoff(session, channel);
+        if (cached != null) return cached;
+        PlaybackInfo resolved = fetchJioPlayback(channel, session, true);
+        rememberPlaybackHandoff(session, channel, resolved);
+        return resolved;
     }
 
     private PlaybackInfo fetchJioPlayback(Channel channel, JioSession session, boolean retryAuth) throws Exception {
@@ -281,7 +338,9 @@ public final class JioApiClient {
                 .add("channel_id", channel.id)
                 .build();
         Request request = new Request.Builder().url(AppConfig.PLAYBACK).headers(headers).post(form).build();
-        try (Response response = client.newCall(request).execute()) {
+        try (TrackedPlayback tracked = playbackExecute(request)) {
+            Response response=tracked.response;
+            JioNetwork.reportFallbackIfNew(context);
             int status = response.code();
             String raw = response.body() == null ? "" : response.body().string();
 
@@ -412,6 +471,7 @@ public final class JioApiClient {
         Request request = new Request.Builder().url(url).headers(headers).get().build();
         try (Response response = client.newCall(request).execute()) {
             if (!response.isSuccessful()) throw new IOException("HTTP " + response.code() + " for " + url);
+            JioNetwork.reportFallbackIfNew(context);
             return new JSONObject(response.body() == null ? "{}" : response.body().string());
         }
     }
@@ -563,7 +623,8 @@ public final class JioApiClient {
             if (!value.isEmpty() && !"Host".equalsIgnoreCase(key)) headers.add(key, value);
         }
         Request request = new Request.Builder().url(url).headers(headers.build()).get().build();
-        try (Response response = client.newCall(request).execute()) {
+        try (Response response = JioNetwork.media(context).newCall(request).execute()) {
+            JioNetwork.reportMediaFallbackIfNew(context);
             List<String> setCookies = response.headers("Set-Cookie");
             StringBuilder cookie = new StringBuilder();
             for (String setCookie : setCookies) {
@@ -573,7 +634,10 @@ public final class JioApiClient {
                 cookie.append(pair);
             }
             return cookie.toString();
-        } catch (Exception ignored) {
+        } catch (Exception error) {
+            Telemetry.error(context,"jio_manifest_cookie",error,Telemetry.data(
+                    "failure_kind",NetworkFailure.classify(error),
+                    "media_route",JioNetwork.mediaRecoveryLabel()));
             return "";
         }
     }

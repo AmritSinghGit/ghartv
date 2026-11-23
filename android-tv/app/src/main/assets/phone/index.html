@@ -1,0 +1,78 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<meta name="theme-color" content="#071923"><title>GharTV • Phone remote</title>
+<style>
+:root{color-scheme:dark;--bg:#06131c;--pane:#0b2430;--line:#2a5864;--mint:#63edcf;--ink:#f3fbff;--muted:#9cbdca}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{margin:0;width:100%;height:100%;overflow:hidden}
+body{background:radial-gradient(circle at 90% 0%,#144b4f 0%,transparent 40%),var(--bg);
+font:500 15px/1.4 system-ui,-apple-system,sans-serif;color:var(--ink);
+display:flex;flex-direction:column;gap:12px;padding:max(16px,env(safe-area-inset-top)) 15px max(13px,env(safe-area-inset-bottom))}
+header{display:flex;align-items:center;justify-content:space-between;gap:12px}
+.logo{display:flex;flex-direction:column;gap:1px}
+.kicker{font-size:11px;letter-spacing:.17em;font-weight:800;color:var(--mint)}
+.logo b{font-size:25px;letter-spacing:-.03em}
+#st{font-size:12px;font-weight:700;border-radius:999px;background:#0e3438;
+color:#c9fff2;border:1px solid #2a7775;padding:9px 12px;max-width:44%;text-align:center}
+h1{font-size:15px;margin:0 1px;color:#d9eef5;font-weight:650}
+#pad{flex:1;min-height:150px;border-radius:26px;border:1.5px solid #367786;
+background:radial-gradient(circle at 50% 40%,#173f49,#0b2634 76%);
+box-shadow:inset 0 0 28px #143b4c,0 14px 55px #0005;
+display:grid;place-items:center;touch-action:none;position:relative;overflow:hidden}
+#pad:after{content:"";position:absolute;inset:10px;border:1px solid #ffffff0d;border-radius:21px;pointer-events:none}
+#pad .cross{font-size:42px;color:#a0f9e3;opacity:.58;pointer-events:none;transform:rotate(45deg)}
+#pad .guide{position:absolute;bottom:18px;left:0;right:0;color:#b5ccd8;font-size:12px;text-align:center;pointer-events:none}
+.grid{display:grid;grid-template-columns:repeat(5,1fr);gap:8px}
+button{min-width:0;border:1px solid #31616c;border-radius:15px;color:#edfcff;background:#102e3a;
+height:48px;font-size:15px;font-weight:800;touch-action:manipulation}
+button:active{background:#2f7c77;transform:scale(.98)}
+button.primary{background:#188b86;color:white;border-color:#52d9c1}
+.keyboard{display:flex;gap:9px}
+input{flex:1;min-width:0;color:var(--ink);background:#071d28;border:1px solid #347985;
+border-radius:15px;padding:12px 13px;font-size:16px;outline:none}
+input:focus{border-color:var(--mint)}
+.keyboard button{flex-shrink:0;padding:0 16px;height:50px}
+small{font-size:11px;color:var(--muted);text-align:center;line-height:1.3}
+@media(max-height:580px){header{gap:5px}.logo b{font-size:19px}#pad{min-height:90px}.grid button{height:40px}body{gap:7px;padding:8px}}
+</style></head><body>
+<header><div class="logo"><span class="kicker">GHAR TV · CONNECT</span><b>Phone Remote</b></div><span id="st">Connecting…</span></header>
+<h1>Trackpad · tap to click · two fingers to scroll on TV</h1>
+<div id="pad" role="application" aria-label="TV mouse trackpad"><div class="cross">✧</div><span class="guide">Drag anywhere to move · Tap to select</span></div>
+<div class="grid">
+<button data-k="4">Back</button><button data-k="19">↑</button><button data-k="23" class="primary">OK</button><button data-k="20">↓</button><button data-k="3">Home</button>
+<button data-k="21">←</button><button data-k="22">→</button><button data-k="66">Enter</button><button data-k="67">⌫</button><button data-k="85">Play/Pause</button>
+</div>
+<div class="keyboard"><input id="t" placeholder="Type into GharTV…" autocomplete="off" autocapitalize="off" spellcheck="false"><button id="s" class="primary">Send</button></div>
+<small>One-time pairing · local Wi-Fi only · never type passwords or OTPs</small>
+<script>
+"use strict";
+var k=new URLSearchParams(location.search).get("k"),w,q=0,dx=0,dy=0,sid="",tries=0,st=document.getElementById("st");
+function go(){
+ if(!k&&!sid){st.textContent="Scan QR again";return;}
+ w=new WebSocket("ws://"+location.host+"/ws?"+(sid?"s="+encodeURIComponent(sid):"k="+encodeURIComponent(k)));
+ w.onopen=function(){tries=0;st.textContent="● Connected";};
+ w.onclose=function(){if(sid&&tries++<40){st.textContent="Reconnecting…";setTimeout(go,1000);}else st.textContent="● Disconnected";};
+ w.onmessage=function(e){if(e.data.charAt(0)==="S")sid=e.data.slice(2);else if(e.data==="P")st.textContent="● Connected";};
+}
+function snd(m){if(w&&w.readyState===1)w.send(m);}
+go();
+setInterval(function(){q=performance.now();snd("P");},3000);
+var pad=document.getElementById("pad"),lx,ly,moved,t0,touches=0;
+function flush(){if(dx||dy){snd("M "+dx+" "+dy);dx=dy=0;}requestAnimationFrame(flush);}
+requestAnimationFrame(flush);
+pad.addEventListener("pointerdown",function(e){pad.setPointerCapture(e.pointerId);lx=e.clientX;ly=e.clientY;moved=0;t0=Date.now();});
+pad.addEventListener("pointermove",function(e){
+ if(e.buttons!==1)return;
+ dx+=Math.round((e.clientX-lx)*1.8);dy+=Math.round((e.clientY-ly)*1.8);
+ moved+=Math.abs(e.clientX-lx)+Math.abs(e.clientY-ly);
+ lx=e.clientX;ly=e.clientY;
+});
+pad.addEventListener("pointerup",function(e){if(moved<10&&Date.now()-t0<450)snd("C");});
+pad.addEventListener("touchmove",function(e){e.preventDefault();},{passive:false});
+document.querySelectorAll("[data-k]").forEach(function(b){b.onclick=function(){snd("K "+b.dataset.k);}});
+var text=document.getElementById("t");
+function sendText(){if(text.value){snd("T "+text.value);text.value="";}}
+document.getElementById("s").onclick=sendText;
+text.addEventListener("keydown",function(e){if(e.key==="Enter"){e.preventDefault();sendText();snd("K 66");}});
+</script></body></html>

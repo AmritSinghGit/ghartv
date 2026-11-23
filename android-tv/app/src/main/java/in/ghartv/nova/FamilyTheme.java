@@ -6,6 +6,9 @@ import android.content.Context;
 import android.content.Intent;
 import android.content.SharedPreferences;
 import android.graphics.Color;
+import android.net.Uri;
+import android.os.Build;
+import android.provider.MediaStore;
 import android.view.Gravity;
 import android.view.View;
 import android.widget.LinearLayout;
@@ -29,6 +32,9 @@ public final class FamilyTheme {
     private static final String PREFS = "ghartv_family_theme";
     private static final String KEY_MODE = "mode";
     private static final String KEY_PERSON = "preview_person";
+    private static final String KEY_PENDING_PHOTO = "pending_photo_member";
+    private static final String KEY_PHOTO_PREFIX = "photo_uri_";
+    public static final int PHOTO_REQUEST = 7314;
 
     public static final String MODE_AUTO = "auto";
     public static final String MODE_BIRTHDAY = "birthday";
@@ -39,10 +45,10 @@ public final class FamilyTheme {
         register("mom", "Mom", 1, 4, "With love from everyone at home");
         register("amrit", "Amrit", 3, 7, "A day for the person who built GharTV");
         register("harjas", "Harjas", 7, 1, "A bright day for our second son");
-        register("wifey", "Wifey", 8, 18, "Celebrating the heart of the family");
-        register("sis", "Sis", 8, 22, "A special day for our sister");
+        register("rajvinder", "Rajvinder", 8, 18, "Celebrating the heart of the family");
+        register("manu", "Manu", 8, 22, "A special day for our sister");
         register("dad", "Dad", 9, 12, "A birthday tribute on his favourite television");
-        register("simrat", "Simrat", 10, 4, "A joyful day for our son");
+        register("simrit", "Simrat", 10, 4, "A joyful day for our son");
     }
 
     private FamilyTheme() {}
@@ -79,12 +85,15 @@ public final class FamilyTheme {
     }
 
     public static void setBirthdayPreview(Context context, String key) {
-        String legacy = "sim" + "rath";
-        String requested = legacy.equals(key) ? "simrat" : key;
-        String safe = BIRTHDAYS.containsKey(requested) ? requested : "dad";
+        String requested = migrateLegacyKey(key);
+        List<Birthday> rows = allBirthdays(context);
+        if (rows.isEmpty()) { setMode(context, MODE_AUTO); return; }
+        String safe = rows.get(0).key;
+        for (Birthday row : rows) if (row.key.equals(requested)) { safe = requested; break; }
         prefs(context).edit()
                 .putString(KEY_MODE, MODE_BIRTHDAY)
                 .putString(KEY_PERSON, safe)
+                .putLong("preview_expires_at", System.currentTimeMillis()+5*60_000L)
                 .apply();
         Telemetry.event(context, "theme_mode", Telemetry.data(
                 "mode", MODE_BIRTHDAY,
@@ -94,15 +103,20 @@ public final class FamilyTheme {
 
     public static Birthday activeBirthday(Context context) {
         String mode = mode(context);
+        // A held review preview must never turn into an all-year production birthday.
+        if (MODE_BIRTHDAY.equals(mode) && System.currentTimeMillis() > prefs(context).getLong("preview_expires_at", 0L)) {
+            prefs(context).edit().putString(KEY_MODE, MODE_AUTO).apply(); mode=MODE_AUTO;
+        }
         if (MODE_STANDARD.equals(mode)) return null;
         if (MODE_BIRTHDAY.equals(mode)) {
             String stored = prefs(context).getString(KEY_PERSON, "dad");
-            String legacy = "sim" + "rath";
-            if (legacy.equals(stored)) stored = "simrat";
-            return BIRTHDAYS.getOrDefault(stored, BIRTHDAYS.get("dad"));
+            stored = migrateLegacyKey(stored);
+            for (Birthday row : allBirthdays(context)) if (row.key.equals(stored)) return row;
+            prefs(context).edit().putString(KEY_MODE, MODE_AUTO).apply();
+            return null;
         }
-        MonthDay today = MonthDay.from(LocalDate.now());
-        for (Birthday birthday : BIRTHDAYS.values()) {
+        MonthDay today = MonthDay.from(LocalDate.now(java.time.ZoneId.of("Asia/Kolkata")));
+        for (Birthday birthday : allBirthdays(context)) {
             if (birthday.date.equals(today)) return birthday;
         }
         return null;
@@ -134,15 +148,69 @@ public final class FamilyTheme {
     public static int splashPhotoRes(Context context) {
         Birthday birthday = activeBirthday(context);
         if (birthday == null) return 0;
-        return "dad".equals(birthday.key) || "simrat".equals(birthday.key)
+        return "dad".equals(birthday.key) || "simrit".equals(birthday.key)
                 ? R.drawable.family_dad_simrat_splash : 0;
     }
 
     public static int backdropPhotoRes(Context context) {
         Birthday birthday = activeBirthday(context);
         if (birthday == null) return 0;
-        return "dad".equals(birthday.key) || "simrat".equals(birthday.key)
+        return "dad".equals(birthday.key) || "simrit".equals(birthday.key)
                 ? R.drawable.family_dad_simrat_backdrop : 0;
+    }
+
+    public static Uri activePhotoUri(Context context) {
+        Birthday birthday = activeBirthday(context);
+        return birthday == null ? null : photoUri(context, birthday.key);
+    }
+
+    public static Uri photoUri(Context context, String key) {
+        String value = prefs(context).getString(KEY_PHOTO_PREFIX + key, "");
+        if (value == null || value.isEmpty()) return null;
+        Uri uri = Uri.parse(value);
+        return "content".equals(uri.getScheme()) ? uri : null;
+    }
+
+    public static boolean hasPhoto(Context context, String key) { return photoUri(context, key) != null; }
+
+    public static void choosePhoto(Activity activity, String key) {
+        boolean exists = false;
+        for (Birthday birthday : allBirthdays(activity)) if (birthday.key.equals(key)) exists = true;
+        if (!exists) throw new IllegalArgumentException("Save this person before choosing a photo.");
+        prefs(activity).edit().putString(KEY_PENDING_PHOTO, key).apply();
+        Intent picker;
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            // Google TV images can resolve ACTION_OPEN_DOCUMENT only to a no-UI framework stub.
+            // The platform photo picker is the real, permission-scoped image surface on those TVs.
+            picker = new Intent(MediaStore.ACTION_PICK_IMAGES).setType("image/*");
+        } else {
+            picker = new Intent(Intent.ACTION_GET_CONTENT)
+                    .addCategory(Intent.CATEGORY_OPENABLE)
+                    .setType("image/*");
+        }
+        picker.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION | Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION);
+        activity.startActivityForResult(picker, PHOTO_REQUEST);
+    }
+
+    public static boolean handlePhotoResult(Activity activity, int requestCode, int resultCode, Intent data) {
+        if (requestCode != PHOTO_REQUEST) return false;
+        String key = prefs(activity).getString(KEY_PENDING_PHOTO, "");
+        prefs(activity).edit().remove(KEY_PENDING_PHOTO).apply();
+        if (resultCode != Activity.RESULT_OK || data == null || data.getData() == null || key.isEmpty()) return false;
+        Uri uri = data.getData();
+        if (!"content".equals(uri.getScheme())) return false;
+        try {
+            activity.getContentResolver().takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION);
+            prefs(activity).edit().putString(KEY_PHOTO_PREFIX + key, uri.toString()).apply();
+            return true;
+        } catch (SecurityException error) {
+            android.widget.Toast.makeText(activity, "This photo provider did not grant lasting access. Nothing changed.", android.widget.Toast.LENGTH_LONG).show();
+            return false;
+        }
+    }
+
+    public static void removePhoto(Context context, String key) {
+        prefs(context).edit().remove(KEY_PHOTO_PREFIX + key).apply();
     }
 
     public static int accent(Context context) {
@@ -214,35 +282,87 @@ public final class FamilyTheme {
     }
 
     public static void showPicker(Activity activity) {
-        String[] choices = {
-                "Automatic — use family dates",
-                "Preview a family birthday…",
-                "Preview standard theme"
-        };
-        int checked = MODE_BIRTHDAY.equals(mode(activity)) ? 1 : MODE_STANDARD.equals(mode(activity)) ? 2 : 0;
-        AlertDialog dialog = new AlertDialog.Builder(activity)
-                .setTitle("GharTV appearance")
-                .setSingleChoiceItems(choices, checked, null)
-                .setMessage("Family dates stay only on this TV. Birthday previews are lightweight and do not change the television clock.")
-                .setNegativeButton("Close", null)
-                .create();
-        dialog.setOnShowListener(ignored -> dialog.getListView().setOnItemClickListener((parent, view, position, id) -> {
-            dialog.dismiss();
-            if (position == 0) {
-                setMode(activity, MODE_AUTO);
-                activity.recreate();
-            } else if (position == 1) {
-                showBirthdayPicker(activity);
-            } else {
-                setMode(activity, MODE_STANDARD);
-                activity.recreate();
-            }
-        }));
-        dialog.show();
+        new AlertDialog.Builder(activity).setTitle("Appearance · birthdays use India Standard Time")
+            .setItems(new String[]{"Automatic — use family dates", "Manage family · names and birthdays", "Preview a birthday for 5 minutes", "Standard theme"}, (d,which)->{
+                if(which==1){FamilyDatesEditor.show(activity);return;}
+                if(which==2){showBirthdayPicker(activity);return;}
+                setMode(activity,which==0?MODE_AUTO:MODE_STANDARD);activity.recreate();
+            }).setNegativeButton("Close",null).show();
     }
+    /** Preserve the original keys so existing birthday/date/photo preferences survive renaming. */
+    public static List<Birthday> allBirthdays(Context context) {
+        List<Birthday> list = new ArrayList<>();
+        java.util.Set<String> hidden = prefs(context).getStringSet("hidden_members", java.util.Collections.emptySet());
+        for (Birthday b : BIRTHDAYS.values()) if (!hidden.contains(b.key)) list.add(effective(context, b));
+        try {
+            org.json.JSONArray custom = customMembers(context);
+            for (int i=0; i<custom.length() && list.size()<FamilyMemberRules.MAX_MEMBERS; i++) {
+                org.json.JSONObject row=custom.getJSONObject(i);
+                String key=row.getString("key");
+                if (!key.matches("member_[a-f0-9]{32}")) continue;
+                list.add(effective(context,new Birthday(key,FamilyMemberRules.name(row.getString("name")),
+                    MonthDay.parse(row.getString("date")),"With love from everyone at home")));
+            }
+        } catch (RuntimeException | org.json.JSONException ignored) { /* Keep malformed stored data; never replace it silently. */ }
+        return list;
+    }
+    private static org.json.JSONArray customMembers(Context context) {
+        try { return new org.json.JSONArray(prefs(context).getString("custom_members_v1", "[]")); }
+        catch (org.json.JSONException e) { throw new IllegalStateException("Saved family data could not be read; nothing has been reset."); }
+    }
+    private static Birthday effective(Context context,Birthday birthday) {
+        String name=prefs(context).getString("name_"+birthday.key,birthday.name);
+        try { name=FamilyMemberRules.name(name); } catch(IllegalArgumentException ignored) { name=birthday.name; }
+        MonthDay date=birthday.date;
+        String saved=prefs(context).getString("date_"+birthday.key, "");
+        if(!saved.isEmpty()) try { date=MonthDay.parse(saved); } catch(RuntimeException ignored) {}
+        return new Birthday(birthday.key,name,date,birthday.line);
+    }
+    public static String saveMember(Context context,String key,String name,MonthDay date) {
+        name=FamilyMemberRules.name(name);
+        if(date==null) throw new IllegalArgumentException("Choose a birthday.");
+        if(key!=null) {
+            boolean exists=false; for(Birthday b:allBirthdays(context)) if(b.key.equals(key)) exists=true;
+            if(!exists) throw new IllegalArgumentException("This person is no longer in the family list.");
+            prefs(context).edit().putString("name_"+key,name).putString("date_"+key,date.toString()).apply();
+            return key;
+        }
+        if(allBirthdays(context).size()>=FamilyMemberRules.MAX_MEMBERS)
+            throw new IllegalArgumentException("Up to 32 people can be saved on this TV.");
+        org.json.JSONArray rows=customMembers(context);
+        key="member_"+java.util.UUID.randomUUID().toString().replace("-","");
+        try { rows.put(new org.json.JSONObject().put("key",key).put("name",name).put("date",date.toString())); }
+        catch(org.json.JSONException e) { throw new IllegalArgumentException("Unable to save this person."); }
+        prefs(context).edit().putString("custom_members_v1",rows.toString()).apply();
+        return key;
+    }
+    public static void removeMember(Context context,String key) {
+        SharedPreferences.Editor edit=prefs(context).edit();
+        if(BIRTHDAYS.containsKey(key)) {
+            java.util.Set<String> hidden=new java.util.HashSet<>(prefs(context).getStringSet("hidden_members",java.util.Collections.emptySet()));
+            hidden.add(key); edit.putStringSet("hidden_members",hidden);
+        } else {
+            org.json.JSONArray old=customMembers(context),remaining=new org.json.JSONArray();
+            for(int i=0;i<old.length();i++) {
+                org.json.JSONObject row=old.optJSONObject(i);
+                if(row==null || !key.equals(row.optString("key"))) remaining.put(old.opt(i));
+            }
+            edit.putString("custom_members_v1",remaining.toString()).remove("name_"+key).remove("date_"+key)
+                    .remove(KEY_PHOTO_PREFIX + key);
+        }
+        if(key.equals(migrateLegacyKey(prefs(context).getString(KEY_PERSON,"")))) edit.putString(KEY_MODE,MODE_AUTO).remove("preview_expires_at");
+        edit.apply();
+    }
+    public static void restoreHiddenDefaults(Context context) { prefs(context).edit().remove("hidden_members").apply(); }
+    public static boolean hasHiddenDefaults(Context context) { return !prefs(context).getStringSet("hidden_members",java.util.Collections.emptySet()).isEmpty(); }
+    public static void setDate(Context context,String key,MonthDay date){
+        for(Birthday b:allBirthdays(context)) if(b.key.equals(key)&&date!=null) prefs(context).edit().putString("date_"+key,date.toString()).apply();
+    }
+    public static void resetDate(Context context,String key){prefs(context).edit().remove("date_"+key).apply();}
 
     private static void showBirthdayPicker(Activity activity) {
-        List<Birthday> birthdays = new ArrayList<>(BIRTHDAYS.values());
+        List<Birthday> birthdays = allBirthdays(activity);
+        if (birthdays.isEmpty()) { FamilyDatesEditor.show(activity); return; }
         String[] labels = new String[birthdays.size()];
         for (int i = 0; i < birthdays.size(); i++) {
             Birthday birthday = birthdays.get(i);
@@ -260,6 +380,14 @@ public final class FamilyTheme {
 
     private static SharedPreferences prefs(Context context) {
         return context.getSharedPreferences(PREFS, Context.MODE_PRIVATE);
+    }
+
+    private static String migrateLegacyKey(String key) {
+        if (key == null) return "dad";
+        if ("wifey".equals(key)) return "rajvinder";
+        if ("sis".equals(key)) return "manu";
+        if ("simrat".equals(key) || ("sim" + "rath").equals(key)) return "simrit";
+        return key;
     }
 
     public static final class Birthday {

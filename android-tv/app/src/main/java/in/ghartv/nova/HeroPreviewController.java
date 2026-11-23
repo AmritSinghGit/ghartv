@@ -1,327 +1,212 @@
 package in.ghartv.nova;
 
 import android.app.Activity;
-import android.graphics.Color;
 import android.os.Handler;
 import android.os.Looper;
 import android.view.View;
 import android.widget.ImageView;
 import android.widget.ProgressBar;
 import android.widget.TextView;
-
 import androidx.media3.common.C;
 import androidx.media3.common.MediaItem;
 import androidx.media3.common.MimeTypes;
 import androidx.media3.common.PlaybackException;
 import androidx.media3.common.Player;
 import androidx.media3.common.util.UnstableApi;
-import androidx.media3.datasource.DefaultHttpDataSource;
 import androidx.media3.exoplayer.ExoPlayer;
-import androidx.media3.exoplayer.source.DefaultMediaSourceFactory;
+import androidx.media3.ui.AspectRatioFrameLayout;
 import androidx.media3.ui.PlayerView;
-
 import org.json.JSONObject;
-
 import java.util.HashMap;
 import java.util.Locale;
 import java.util.Map;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
 
-/**
- * Muted, bounded living-room preview. A channel must remain focused briefly
- * before preview starts, so fast guide navigation does not create a stream for
- * every card. Moving focus releases the old decoder; successful preview is
- * capped at 15 seconds. Pressing the preview surface is handled by MainActivity
- * and opens the normal continuous full-screen player.
- */
+/** Automatic muted preview belongs only to the focused channel, never to a toolbar. */
 @UnstableApi
 public final class HeroPreviewController {
-    private static final long AUTO_START_DELAY_MS = 700L;
-    private static final long MAX_PREVIEW_MS = 15_000L;
-
+    interface Resolver { PlaybackInfo fetch(Channel channel) throws Exception; void cancel(); }
     private final Activity activity;
-    private final ChannelRepository repository;
     private final PlayerView playerView;
     private final ImageView poster;
     private final ProgressBar loading;
     private final TextView status;
-    private final Handler main = new Handler(Looper.getMainLooper());
-    private final ExecutorService executor = Executors.newSingleThreadExecutor();
-
-    private ExoPlayer player;
+    private final Handler main=new Handler(Looper.getMainLooper());
+    private final ExecutorService executor=Executors.newSingleThreadExecutor();
+    private final Resolver resolver;
+    private final PreviewGate gate=new PreviewGate();
     private Channel selected;
-    private int generation;
-    private Runnable pendingStart;
-    private Runnable autoStop;
+    private ExoPlayer player;
+    private Future<?> request;
+    private Runnable pendingStart,deadline,autoStop;
+    private long previewStartedAt;
+    private boolean released;
 
-    public HeroPreviewController(Activity activity,
-                                 ChannelRepository repository,
-                                 PlayerView playerView,
-                                 ImageView poster,
-                                 ProgressBar loading,
-                                 TextView status) {
-        this.activity = activity;
-        this.repository = repository;
-        this.playerView = playerView;
-        this.poster = poster;
-        this.loading = loading;
-        this.status = status;
-        playerView.setUseController(false);
-        playerView.setKeepScreenOn(false);
-        playerView.setVisibility(View.GONE);
-        loading.setVisibility(View.GONE);
-        updateIdleCopy();
+    public HeroPreviewController(Activity a,ChannelRepository repository,PlayerView view,
+            ImageView logo,ProgressBar spinner,TextView label){
+        this(a,view,logo,spinner,label,new Resolver(){
+            private final JioApiClient api=new JioApiClient(a);
+            public PlaybackInfo fetch(Channel c)throws Exception{return api.fetchPlayback(c);}
+            public void cancel(){api.cancelPlayback();}
+        });
     }
-
-    public void select(Channel channel) {
-        boolean changed = selected == null || channel == null
-                || selected.number != channel.number
-                || !safe(selected.id).equals(safe(channel.id));
-        selected = channel;
-        if (changed) {
-            stop(false);
-            scheduleAutoStart();
-        } else if (player == null && pendingStart == null) {
-            updateIdleCopy();
-        }
+    // Package-private injection exercises the SAME controller with local media on an Android test device.
+    HeroPreviewController(Activity a,PlayerView view,ImageView logo,ProgressBar spinner,
+            TextView label,Resolver resolver){
+        activity=a;playerView=view;poster=logo;loading=spinner;status=label;this.resolver=resolver;
+        playerView.setUseController(false);playerView.setKeepScreenOn(false);
+        playerView.setFocusable(false);playerView.setFocusableInTouchMode(false);
+        playerView.setDescendantFocusability(android.view.ViewGroup.FOCUS_BLOCK_DESCENDANTS);
+        playerView.setResizeMode(AspectRatioFrameLayout.RESIZE_MODE_FIT);
+        resetVisual();idleCopy();
     }
-
-    private void scheduleAutoStart() {
-        Channel channel = selected;
-        if (channel == null) {
-            updateIdleCopy();
-            return;
-        }
-        if (channel.isSubscriptionChannel() && !channel.isAvailable()) {
-            status.setTextColor(TvUi.AMBER);
-            status.setText("Subscription required  •  press OK to try full-screen television");
-            return;
-        }
-        if (channel.isUnavailable()) {
-            status.setTextColor(TvUi.ERROR);
-            status.setText("Needs attention  •  press OK to retry full-screen television");
-            return;
-        }
-        status.setTextColor(Color.WHITE);
-        status.setText("Auto preview starting…  •  press OK for continuous television");
-        final int scheduledGeneration = generation;
-        pendingStart = () -> {
-            pendingStart = null;
-            if (scheduledGeneration == generation) start();
+    public void select(Channel channel){
+        selected=channel;
+        String key=channel==null?"":safe(channel.id);
+        if(gate.select(key)){cancelWork();resetVisual();}
+        schedule();
+    }
+    public void focused(boolean value){
+        boolean changed=gate.focus(value);
+        changed=gate.enabled(PlaybackComfort.autoPreview(activity))||changed;
+        if(changed){cancelWork();resetVisual();}
+        schedule();
+    }
+    private void schedule(){
+        if(released)return;
+        if(gate.enabled(PlaybackComfort.autoPreview(activity))){cancelWork();resetVisual();}
+        long token=gate.arm();
+        if(token<0){if(gate.phase()==PreviewGate.Phase.IDLE)idleCopy();return;}
+        copy("Preview starts when you pause here",TvUi.MUTED);
+        pendingStart=()->{pendingStart=null;if(gate.begin(token))start(token);};
+        main.postDelayed(pendingStart,PreviewGate.FOCUS_DELAY_MS);
+    }
+    private void start(long token){
+        Channel channel=selected;
+        if(channel==null||activity.isFinishing()||released)return;
+        previewStartedAt=android.os.SystemClock.elapsedRealtime();
+        // Create the video surface UNDER the poster; GONE cannot deliver a first frame.
+        playerView.setVisibility(View.VISIBLE);poster.setVisibility(View.VISIBLE);
+        loading.setVisibility(View.VISIBLE);copy("Starting preview…",TvUi.MUTED);
+        deadline=()->{
+            LocalPerformance.record(activity,"preview_timeout_ms",
+                    android.os.SystemClock.elapsedRealtime()-previewStartedAt);
+            failed(token,new java.net.SocketTimeoutException(
+                    "Preview first picture deadline reached"),"guide_preview_first_frame");
         };
-        main.postDelayed(pendingStart, AUTO_START_DELAY_MS);
-    }
-
-    private void start() {
-        Channel channel = selected;
-        if (channel == null || channel.id == null || channel.id.isEmpty()) return;
-        final int currentGeneration = ++generation;
-        releasePlayer();
-        loading.setVisibility(View.VISIBLE);
-        status.setTextColor(Color.WHITE);
-        status.setText("Starting muted live preview…");
-        Telemetry.event(activity, "guide_preview_request", Telemetry.data(
-                "automatic", true,
-                "language", channel.language,
-                "category", channel.category,
-                "access_state", channel.accessState
-        ));
-
-        executor.execute(() -> {
-            try {
-                PlaybackInfo info = repository.api().fetchPlayback(channel);
-                main.post(() -> {
-                    if (currentGeneration != generation || activity.isFinishing()) return;
-                    loading.setVisibility(View.GONE);
+        main.postDelayed(deadline,PreviewGate.FIRST_FRAME_BUDGET_MS);
+        Telemetry.event(activity,"guide_preview_request",Telemetry.data("automatic",true,
+                "language",channel.language,"category",channel.category));
+        request=executor.submit(()->{
+            try{
+                PlaybackInfo info=resolver.fetch(channel);
+                main.post(()->{
+                    if(!gate.current(token)||released||activity.isFinishing())return;
                     info.normalizeAliases();
-                    if (info.authRequired || info.subscriptionRequired || info.unavailable
-                            || info.streamUrl == null || info.streamUrl.trim().isEmpty()) {
-                        String copy = info.subscriptionRequired
-                                ? "Subscription required  •  press OK to try full screen"
-                                : info.authRequired
-                                ? "Reconnect JioTV before previewing this channel"
-                                : "Preview unavailable  •  press OK to try full screen";
-                        fail(copy, info.subscriptionRequired ? TvUi.AMBER : TvUi.ERROR);
-                        return;
+                    if(info.authRequired||info.subscriptionRequired||info.unavailable||safe(info.streamUrl).isEmpty()){
+                        finish(token,true,info.subscriptionRequired?"Subscription required · OK for details":
+                            info.authRequired?"Reconnect your account to preview":"Preview unavailable · OK still opens live TV");return;
                     }
-                    prepare(info, channel, currentGeneration);
+                    try{prepare(info,token);}
+                    catch(RuntimeException e){failed(token,e,"guide_preview_prepare");}
                 });
-            } catch (Exception error) {
-                main.post(() -> {
-                    if (currentGeneration != generation || activity.isFinishing()) return;
-                    fail("Preview unavailable  •  press OK to try full screen", TvUi.ERROR);
-                    Telemetry.error(activity, "guide_preview", error, Telemetry.data(
-                            "automatic", true,
-                            "language", channel.language,
-                            "category", channel.category
-                    ));
-                });
+            }catch(Exception error){
+                main.post(()->{if(gate.current(token))
+                    failed(token,error,"guide_preview_authorization");});
             }
         });
     }
-
-    private void prepare(PlaybackInfo info, Channel channel, int currentGeneration) {
-        Map<String, String> streamHeaders = jsonMap(info.streamHeaders);
-        DefaultHttpDataSource.Factory dataSourceFactory = new DefaultHttpDataSource.Factory()
-                .setUserAgent(streamHeaders.getOrDefault("User-Agent", "GharTV-Jio-Live/" + BuildConfig.VERSION_NAME))
-                .setAllowCrossProtocolRedirects(true)
-                .setConnectTimeoutMs(12_000)
-                .setReadTimeoutMs(20_000)
-                .setDefaultRequestProperties(streamHeaders);
-        player = new ExoPlayer.Builder(activity)
-                .setMediaSourceFactory(new DefaultMediaSourceFactory(dataSourceFactory))
-                .build();
-        player.setVolume(0f);
-        playerView.setPlayer(player);
-        player.addListener(new Player.Listener() {
-            @Override public void onPlaybackStateChanged(int state) {
-                if (currentGeneration != generation) return;
-                if (state == Player.STATE_READY) {
-                    loading.setVisibility(View.GONE);
-                    poster.setVisibility(View.GONE);
-                    playerView.setVisibility(View.VISIBLE);
-                    status.setTextColor(TvUi.MINT);
-                    status.setText("Muted 15-second preview  •  OK opens continuous television");
-                    Telemetry.event(activity, "guide_preview_ready", Telemetry.data(
-                            "automatic", true,
-                            "protocol", protocol(info),
-                            "drm", info.drm,
-                            "language", channel.language,
-                            "category", channel.category
-                    ));
-                    scheduleStop();
-                } else if (state == Player.STATE_BUFFERING) {
-                    loading.setVisibility(View.VISIBLE);
-                } else if (state == Player.STATE_ENDED) {
-                    finishBoundedPreview();
-                }
+    private void prepare(PlaybackInfo info,long token){
+        Map<String,String> headers=jsonMap(info.streamHeaders);
+        player=new ExoPlayer.Builder(activity)
+            .setMediaSourceFactory(JioMediaDataSource.previewSourceFactory(activity,headers)).build();
+        player.setTrackSelectionParameters(player.getTrackSelectionParameters().buildUpon()
+            .setMaxVideoSize(640,360).setForceLowestBitrate(true).setTrackTypeDisabled(C.TRACK_TYPE_AUDIO,true).build());
+        player.setVolume(0f);playerView.setPlayer(player);
+        player.addListener(new Player.Listener(){
+            @Override public void onRenderedFirstFrame(){
+                if(!gate.firstFrame(token))return;
+                LocalPerformance.record(activity,"preview_first_picture_ms",
+                        android.os.SystemClock.elapsedRealtime()-previewStartedAt);
+                if(deadline!=null)main.removeCallbacks(deadline);deadline=null;
+                poster.setVisibility(View.GONE);loading.setVisibility(View.GONE);
+                copy("Muted preview · OK to watch",TvUi.MINT);
+                JioNetwork.reportMediaFallbackIfNew(activity);
+                Telemetry.event(activity,"guide_preview_ready",Telemetry.data(
+                    "automatic",true,"drm",info.drm,
+                    "media_route",JioNetwork.mediaRecoveryLabel()));
+                autoStop=()->finish(token,false,"OK to watch live");
+                main.postDelayed(autoStop,PreviewGate.VISIBLE_PREVIEW_MS);
             }
-
-            @Override public void onPlayerError(PlaybackException error) {
-                if (currentGeneration != generation) return;
-                fail("Preview stopped  •  press OK to try full screen", TvUi.ERROR);
-                Telemetry.error(activity, "guide_preview_media", error, Telemetry.data(
-                        "automatic", true,
-                        "protocol", protocol(info),
-                        "drm", info.drm
-                ));
+            @Override public void onPlaybackStateChanged(int state){
+                if(!gate.current(token))return;
+                if(state==Player.STATE_ENDED)finish(token,false,"OK to watch live");
+                // READY is not proof of a rendered picture. Buffering never renews the budget.
+            }
+            @Override public void onPlayerError(PlaybackException error){
+                failed(token,error,"guide_preview_media3");
             }
         });
-
-        MediaItem.Builder item = new MediaItem.Builder().setUri(info.streamUrl);
-        String lower = safe(info.streamUrl).toLowerCase(Locale.ROOT);
-        String mime = safe(info.mimeType).toLowerCase(Locale.ROOT);
-        if (mime.contains("dash") || lower.contains(".mpd")) {
-            item.setMimeType(MimeTypes.APPLICATION_MPD);
-        } else if (mime.contains("mpegurl") || lower.contains(".m3u8")) {
-            item.setMimeType(MimeTypes.APPLICATION_M3U8);
+        MediaItem.Builder item=new MediaItem.Builder().setUri(info.streamUrl);
+        String mime=safe(info.mimeType).toLowerCase(Locale.ROOT),uri=safe(info.streamUrl).toLowerCase(Locale.ROOT);
+        if(mime.contains("dash")||uri.contains(".mpd"))item.setMimeType(MimeTypes.APPLICATION_MPD);
+        else if(mime.contains("mpegurl")||uri.contains(".m3u8"))item.setMimeType(MimeTypes.APPLICATION_M3U8);
+        if(info.drm&&!safe(info.licenseUrl).isEmpty())item.setDrmConfiguration(
+            new MediaItem.DrmConfiguration.Builder(C.WIDEVINE_UUID).setLicenseUri(info.licenseUrl)
+                .setLicenseRequestHeaders(jsonMap(info.licenseHeaders)).setMultiSession(false).build());
+        player.setMediaItem(item.build());player.prepare();player.play();
+    }
+    private void failed(long token,Throwable error){
+        failed(token,error,"guide_preview_media");
+    }
+    private void failed(long token,Throwable error,String stage){
+        String code=NetworkFailure.classify(error);
+        JioNetwork.reportMediaFallbackIfNew(activity);
+        Telemetry.event(activity,"guide_preview_failure_context",Telemetry.data(
+            "automatic",true,"stage",stage,"reason",code,
+            "media_route",JioNetwork.mediaRecoveryLabel()));
+        Telemetry.playbackFailure(activity,selected,stage,code,0,error);
+        String cause;
+        switch(code){
+            case "DNS_UNAVAILABLE":cause="Channel DNS failed after recovery";break;
+            case "TLS_FAILED":cause="Secure channel connection failed";break;
+            case "TIMED_OUT":cause="Channel routes timed out";break;
+            case "CONNECTION_FAILED":cause="Channel service could not be reached";break;
+            default:cause="Preview unavailable";
         }
-        if (info.drm && info.licenseUrl != null && !info.licenseUrl.isEmpty()) {
-            item.setDrmConfiguration(new MediaItem.DrmConfiguration.Builder(C.WIDEVINE_UUID)
-                    .setLicenseUri(info.licenseUrl)
-                    .setLicenseRequestHeaders(jsonMap(info.licenseHeaders))
-                    .setMultiSession(false)
-                    .build());
-        }
-        player.setMediaItem(item.build());
-        player.prepare();
-        player.play();
+        finish(token,true,cause+" · OK still opens live TV",code);
     }
-
-    private String protocol(PlaybackInfo info) {
-        String stream = safe(info.streamUrl).toLowerCase(Locale.ROOT);
-        String mime = safe(info.mimeType).toLowerCase(Locale.ROOT);
-        return mime.contains("dash") || stream.contains(".mpd") ? "dash" : "hls";
+    private void finish(long token,boolean error,String message){finish(token,error,message,error?"UNAVAILABLE":"");}
+    private void finish(long token,boolean error,String message,String code){
+        if(!gate.finish(token,error))return;
+        // Existing consent gate/envelope; never include exception messages, URLs,
+        // channel titles, tokens or successful viewing history in this event.
+        if(error)Telemetry.event(activity,"guide_preview_failed",Telemetry.data(
+            "automatic",true,"reason",code,
+            "media_route",JioNetwork.mediaRecoveryLabel()));
+        cancelWork();resetVisual();copy(message,TvUi.MUTED);
     }
-
-    private void scheduleStop() {
-        if (autoStop != null) main.removeCallbacks(autoStop);
-        autoStop = this::finishBoundedPreview;
-        main.postDelayed(autoStop, MAX_PREVIEW_MS);
+    private void cancelWork(){
+        if(pendingStart!=null)main.removeCallbacks(pendingStart);
+        if(deadline!=null)main.removeCallbacks(deadline);
+        if(autoStop!=null)main.removeCallbacks(autoStop);
+        pendingStart=null;deadline=null;autoStop=null;
+        resolver.cancel();if(request!=null){request.cancel(true);request=null;}
+        if(player!=null){playerView.setPlayer(null);player.release();player=null;}
     }
-
-    private void finishBoundedPreview() {
-        generation++;
-        if (autoStop != null) main.removeCallbacks(autoStop);
-        autoStop = null;
-        releasePlayer();
-        loading.setVisibility(View.GONE);
-        playerView.setVisibility(View.GONE);
-        poster.setVisibility(View.VISIBLE);
-        status.setTextColor(TvUi.MUTED);
-        status.setText("Preview ended  •  move channels or press OK for continuous television");
+    private void resetVisual(){loading.setVisibility(View.GONE);playerView.setVisibility(View.GONE);poster.setVisibility(View.VISIBLE);}
+    private void copy(String message,int colour){status.setTextColor(colour);status.setText(message);}
+    private void idleCopy(){copy(selected==null?"Choose a channel":PlaybackComfort.autoPreview(activity)?
+        "Highlight a channel · OK to watch":"Previews off in Playback & comfort · OK to watch",TvUi.MUTED);}
+    public void stop(boolean ownerRequested){gate.focus(false);gate.cancel();cancelWork();resetVisual();idleCopy();}
+    public void release(){released=true;stop(false);executor.shutdownNow();}
+    PreviewGate.Phase phase(){return gate.phase();}
+    boolean muted(){return player==null||(player.getVolume()==0f&&player.getTrackSelectionParameters().disabledTrackTypes.contains(C.TRACK_TYPE_AUDIO));}
+    private static String safe(String s){return s==null?"":s;}
+    private static Map<String,String> jsonMap(JSONObject json){
+        Map<String,String> map=new HashMap<>();if(json==null)return map;
+        java.util.Iterator<String> keys=json.keys();while(keys.hasNext()){String k=keys.next();map.put(k,json.optString(k,""));}return map;
     }
-
-    private void fail(String message, int color) {
-        generation++;
-        if (autoStop != null) main.removeCallbacks(autoStop);
-        autoStop = null;
-        releasePlayer();
-        loading.setVisibility(View.GONE);
-        playerView.setVisibility(View.GONE);
-        poster.setVisibility(View.VISIBLE);
-        status.setTextColor(color);
-        status.setText(message);
-    }
-
-    public void stop(boolean ownerRequested) {
-        generation++;
-        if (pendingStart != null) main.removeCallbacks(pendingStart);
-        if (autoStop != null) main.removeCallbacks(autoStop);
-        pendingStart = null;
-        autoStop = null;
-        releasePlayer();
-        loading.setVisibility(View.GONE);
-        playerView.setVisibility(View.GONE);
-        poster.setVisibility(View.VISIBLE);
-        if (ownerRequested) {
-            status.setTextColor(TvUi.MUTED);
-            status.setText("Preview stopped");
-        } else {
-            updateIdleCopy();
-        }
-    }
-
-    public void release() {
-        stop(false);
-        executor.shutdownNow();
-    }
-
-    private void releasePlayer() {
-        if (player != null) {
-            playerView.setPlayer(null);
-            player.release();
-            player = null;
-        }
-    }
-
-    private void updateIdleCopy() {
-        if (selected == null) {
-            status.setTextColor(TvUi.MUTED);
-            status.setText("Highlight a channel to preview it automatically");
-        } else if (selected.isSubscriptionChannel() && !selected.isAvailable()) {
-            status.setTextColor(TvUi.AMBER);
-            status.setText("Subscription required  •  press OK to try full-screen television");
-        } else if (selected.isUnavailable()) {
-            status.setTextColor(TvUi.ERROR);
-            status.setText("Needs attention  •  press OK to retry full-screen television");
-        } else {
-            status.setTextColor(Color.WHITE);
-            status.setText("Auto preview  •  press OK for continuous television");
-        }
-    }
-
-    private Map<String, String> jsonMap(JSONObject json) {
-        Map<String, String> map = new HashMap<>();
-        if (json == null) return map;
-        java.util.Iterator<String> keys = json.keys();
-        while (keys.hasNext()) {
-            String key = keys.next();
-            map.put(key, json.optString(key, ""));
-        }
-        return map;
-    }
-
-    private static String safe(String value) { return value == null ? "" : value; }
 }
