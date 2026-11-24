@@ -6,7 +6,7 @@ val signingStorePassword = System.getenv("GHARTV_SIGNING_STORE_PASSWORD")
 val signingKeyAlias = System.getenv("GHARTV_SIGNING_KEY_ALIAS")
 val signingKeyPassword = System.getenv("GHARTV_SIGNING_KEY_PASSWORD")
 val hasReleaseSigning = listOf(signingStore, signingStorePassword, signingKeyAlias, signingKeyPassword).all { !it.isNullOrBlank() }
-// Update-path test only (debug copies): -PupdateTestBase=http://10.0.2.2:PORT points the debug app at a test feed on the Mac, and -PtestVersionCode=N sets the test copy's versionCode. Both are ignored unless a debug task is being built and updateTestBase is a valid test address; release builds always use 67 and an empty test address.
+// Update-path test only (debug copies): -PupdateTestBase=http://10.0.2.2:PORT points the debug app at a test feed on the Mac, and -PtestVersionCode=N sets the test copy's versionCode. Both are ignored unless a debug task is being built and updateTestBase is a valid test address; release builds always use the declared version and an empty test address.
 val updateTestBase = (project.findProperty("updateTestBase") as String?)?.takeIf { gradle.startParameter.taskNames.any { t -> t.contains("debug", ignoreCase = true) } && it.matches(Regex("http://10\\.0\\.2\\.2:[0-9]{2,5}")) } ?: ""
 android {
     namespace = "in.ghartv.nova"
@@ -15,8 +15,8 @@ android {
         applicationId = "in.ghartv.nova"
         minSdk = 26
         targetSdk = 35
-        versionCode = if (updateTestBase.isNotEmpty()) ((project.findProperty("testVersionCode") as String?)?.toIntOrNull() ?: 80) else 80
-        versionName = "0.7.6-live-sources-review"
+        versionCode = if (updateTestBase.isNotEmpty()) ((project.findProperty("testVersionCode") as String?)?.toIntOrNull() ?: 81) else 81
+        versionName = "0.7.7-phone-playback-review"
         buildConfigField("String", "UPDATE_TEST_BASE", "\"\"")
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }

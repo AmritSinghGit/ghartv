@@ -166,16 +166,23 @@ public class FlixMomoActivity extends Activity {
     private boolean verifiedImmersive;
     private String verifiedImmersiveUrl="";
     private int immersiveOldLeft,immersiveOldTop,immersiveOldRight,immersiveOldBottom;
-    private void autoVerifiedFullscreen(){
-        if(verifiedImmersive||custom!=null||torWebMode||browser==null||!pointerPage||isFinishing())return;
+    private void autoVerifiedFullscreen(){requestPageFullscreen(false);}
+    private void requestPageFullscreen(boolean viewerRequested){
+        if(verifiedImmersive||custom!=null||torWebMode||browser==null||!pointerPage||isFinishing()){
+            if(viewerRequested)HouseholdPhoneSession.feedback("FULLSCREEN_UNAVAILABLE");
+            return;
+        }
         final WebView current=browser;
         final String url=current.getUrl();
         if(url==null)return;
-        current.evaluateJavascript(FilmPlaybackProbe.fullscreenVerified(),result->{
+        current.evaluateJavascript(viewerRequested?FilmPlaybackProbe.fullscreenRequested():
+            FilmPlaybackProbe.fullscreenVerified(),result->{
             if(current!=browser||isFinishing()||custom!=null||!pointerPage||
                     torWebMode||!java.util.Objects.equals(url,current.getUrl()))return;
             if(result==null||!result.contains("IMMERSIVE_READY")){
-                filmEvent("film_fullscreen_unavailable");return;
+                filmEvent("film_fullscreen_unavailable");
+                if(viewerRequested)HouseholdPhoneSession.feedback("FULLSCREEN_UNAVAILABLE");
+                return;
             }
             verifiedImmersive=true;verifiedImmersiveUrl=url;
             notifyPhoneMode();
@@ -191,6 +198,7 @@ public class FlixMomoActivity extends Activity {
             if(startMonitor!=null)startMonitor.panel.setVisibility(View.GONE);
             inputEpoch++;noteInput("VERIFIED_FULLSCREEN_ENTER");
             filmEvent("film_fullscreen_enter");
+            if(viewerRequested)HouseholdPhoneSession.feedback("FULLSCREEN_REQUESTED");
             browser.requestFocus();
             TvUi.immersive(this);
         });
@@ -345,7 +353,7 @@ public class FlixMomoActivity extends Activity {
         String state=video.isPlaying()?"playing":rawDuration<0?"starting":"paused";
         phoneMediaObservable=true;
         HouseholdPhoneSession.playback("{\"state\":\""+state+
-            "\",\"fullscreen\":true,\"positionMs\":"+position+
+            "\",\"fullscreen\":true,\"canFullscreen\":true,\"positionMs\":"+position+
             ",\"durationMs\":"+duration+",\"seekable\":"+seekable+
             ",\"seekStartMs\":0,\"seekEndMs\":"+(seekable?duration:0)+"}");
         return true;
@@ -381,15 +389,14 @@ public class FlixMomoActivity extends Activity {
                 long duration=Math.max(0,d.optLong("durationMs",0));
                 long start=seekable?Math.max(0,d.optLong("seekStartMs",0)):0;
                 long end=seekable?Math.max(start,d.optLong("seekEndMs",0)):0;
-                boolean fullscreen=custom!=null||verifiedImmersive||
-                    (phoneMediaObservable&&!torWebMode);
+                boolean fullscreen=custom!=null||verifiedImmersive;
+                boolean canFullscreen=fullscreen||(phoneMediaObservable&&!torWebMode);
                 HouseholdPhoneSession.playback("{\"state\":\""+state+"\",\"fullscreen\":"+
-                    fullscreen+",\"positionMs\":"+position+",\"durationMs\":"+duration+
+                    fullscreen+",\"canFullscreen\":"+canFullscreen+
+                    ",\"positionMs\":"+position+",\"durationMs\":"+duration+
                     ",\"seekable\":"+seekable+",\"seekStartMs\":"+start+
                     ",\"seekEndMs\":"+end+"}");
-                if(phoneMediaObservable&&custom==null&&!verifiedImmersive&&
-                   chrome!=null&&chrome.getVisibility()!=View.VISIBLE)
-                    HouseholdPhoneSession.mode("VIDEO");
+                if(phoneMediaObservable)notifyPhoneMode();
             }catch(Exception ignored){
                 phoneMediaObservable=false;
                 HouseholdPhoneSession.playback("{\"state\":\"unknown\",\"fullscreen\":"+
@@ -483,11 +490,8 @@ public class FlixMomoActivity extends Activity {
             case "FULLSCREEN":
                 if(custom!=null){exitFullScreen();return;}
                 if(verifiedImmersive){leaveVerifiedFullscreen();return;}
-                if(startMonitor!=null&&startMonitor.healthy()&&!torWebMode){
-                    autoVerifiedFullscreen();return;
-                }
-                if(pointerPage&&nativeControls!=null)
-                    nativeControls.pageAction("fullscreen");
+                if(pointerPage&&!torWebMode){requestPageFullscreen(true);return;}
+                HouseholdPhoneSession.feedback("FULLSCREEN_UNAVAILABLE");
                 return;
             case "SOURCES":
                 // Open the choice list on the phone; never obscure the TV video.
@@ -851,6 +855,17 @@ public class FlixMomoActivity extends Activity {
         WebSettings settings=browser.getSettings();settings.setJavaScriptEnabled(true);settings.setDomStorageEnabled(true);settings.setAllowFileAccess(false);settings.setAllowContentAccess(false);
         settings.setMixedContentMode(WebSettings.MIXED_CONTENT_NEVER_ALLOW);settings.setMediaPlaybackRequiresUserGesture(true);settings.setSupportMultipleWindows(true);
         settings.setJavaScriptCanOpenWindowsAutomatically(false);settings.setSafeBrowsingEnabled(true);
+        // Document-start script operates in HTTPS player frames, carries ONLY
+        // bounded media state, and exposes no JS-to-native object to websites.
+        // Older WebViews retain top-document and native player support.
+        try{
+            if(androidx.webkit.WebViewFeature.isFeatureSupported(
+                    androidx.webkit.WebViewFeature.DOCUMENT_START_SCRIPT))
+                androidx.webkit.WebViewCompat.addDocumentStartJavaScript(browser,
+                    FilmPhoneFrameBridge.documentStart(),java.util.Collections.singleton("*"));
+        }catch(RuntimeException unsupported){
+            android.util.Log.w("GharTVPhone","WebView frame media bridge unavailable");
+        }
         CookieManager.getInstance().setAcceptThirdPartyCookies(browser,false);
         browser.setDownloadListener((u,a,d,m,n)->status.setText("Downloads are not enabled in this provider view."));
         browser.setOnFocusChangeListener((v,focused)->{

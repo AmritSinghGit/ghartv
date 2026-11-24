@@ -41,25 +41,39 @@ final class FilmPlaybackProbe {
      * Cross-origin iframes and unknown/protected players never get a false success.
      * The page's original inline styles are retained for TV Back.
      */
-    static String fullscreenVerified(){
-        return """
-        (()=>{try{
+    static String fullscreenVerified(){return fullscreen(false);}
+    /** A direct viewer gesture may enlarge one visible provider player even
+     * before playback proof; automatic fullscreen still requires real media. */
+    static String fullscreenRequested(){return fullscreen(true);}
+    private static String fullscreen(boolean viewerRequested){
+        return "(()=>{const viewerRequested="+viewerRequested+";"+"""
+        try{
           if(window.__ghartv_verified_full76)return 'IMMERSIVE_READY';
-          const videos=Array.from(document.querySelectorAll('video')).filter(v=>{
-            const b=v.getBoundingClientRect();
-            const css=getComputedStyle(v);
+          const visible=e=>{
+            const b=e.getBoundingClientRect(),css=getComputedStyle(e);
             return b.width>=160&&b.height>=90&&css.visibility!=='hidden'&&css.display!=='none';
-          });
-          if(videos.length!==1)return 'NO_SINGLE_VIDEO';
-          const v=videos[0];
-          if(v.paused||v.ended||v.readyState<2||!Number.isFinite(v.currentTime)||v.currentTime<=0)return 'NOT_PLAYING';
-          if(v.mediaKeys)return 'PROTECTED_CONTENT';
-          const old={video:v,style:v.getAttribute('style'),
+          };
+          const videos=Array.from(document.querySelectorAll('video')).slice(0,24).filter(visible);
+          const frames=Array.from(document.querySelectorAll('iframe')).slice(0,32).filter(visible);
+          if(videos.length+frames.length!==1)return 'NO_SINGLE_PLAYER';
+          const v=videos.length===1?videos[0]:null;
+          const frame=frames.length===1?frames[0]:null;
+          if(v&&v.mediaKeys)return 'PROTECTED_CONTENT';
+          const report=frame&&window.__ghartvPhoneFrame;
+          const framePlaying=!!(report&&report.source===frame.contentWindow&&
+            Date.now()-report.at<2500&&report.state?.state==='playing');
+          if(!viewerRequested){
+            if(v&&(v.paused||v.ended||v.readyState<2||
+                !Number.isFinite(v.currentTime)||v.currentTime<=0))return 'NOT_PLAYING';
+            if(frame&&!framePlaying)return 'NOT_PLAYING';
+          }
+          const element=v||frame;
+          const old={element,style:element.getAttribute('style'),
             body:document.body.style.overflow,html:document.documentElement.style.overflow};
           window.__ghartv_verified_full76=old;
           document.body.style.overflow='hidden';
           document.documentElement.style.overflow='hidden';
-          v.style.cssText+=';position:fixed!important;left:0!important;top:0!important;right:0!important;bottom:0!important;width:100vw!important;height:100vh!important;max-width:none!important;max-height:none!important;z-index:2147483646!important;object-fit:contain!important;background:black!important;';
+          element.style.cssText+=';position:fixed!important;left:0!important;top:0!important;right:0!important;bottom:0!important;width:100vw!important;height:100vh!important;max-width:none!important;max-height:none!important;z-index:2147483646!important;object-fit:contain!important;background:black!important;';
           return 'IMMERSIVE_READY';
         }catch(e){return 'IMMERSIVE_UNAVAILABLE';}})()
         """;
@@ -69,9 +83,10 @@ final class FilmPlaybackProbe {
         (()=>{try{
           const old=window.__ghartv_verified_full76;
           if(!old)return 'NOT_ACTIVE';
-          if(old.video?.isConnected){
-            if(old.style===null)old.video.removeAttribute('style');
-            else old.video.setAttribute('style',old.style);
+          const target=old.element||old.video;
+          if(target?.isConnected){
+            if(old.style===null)target.removeAttribute('style');
+            else target.setAttribute('style',old.style);
           }
           document.body.style.overflow=old.body;
           document.documentElement.style.overflow=old.html;

@@ -13,12 +13,22 @@ final class FilmPhonePlayback {
           const r=v.getBoundingClientRect(),s=getComputedStyle(v);
           return r.width>=160&&r.height>=90&&s.display!=='none'&&s.visibility!=='hidden';
         });
-        const video=videos.length===1?videos[0]:null;
+        const frames=Array.from(document.querySelectorAll('iframe')).slice(0,32).filter(f=>{
+          const r=f.getBoundingClientRect(),s=getComputedStyle(f);
+          return r.width>=160&&r.height>=90&&s.display!=='none'&&s.visibility!=='hidden';
+        });
+        const video=videos.length===1&&frames.length===0&&
+          !videos[0].mediaKeys?videos[0]:null;
+        const frame=frames.length===1&&videos.length===0?frames[0]:null;
+        const remembered=typeof window!=='undefined'&&window.__ghartvPhoneFrame;
+        const remote=frame&&remembered&&remembered.source===frame.contentWindow&&
+          Date.now()-remembered.at<2500?remembered.state:null;
         """;
 
     static String sample() {
         return "(()=>{try{"+VIDEO+"""
             const v=video;
+            if(!v&&remote)return JSON.stringify(remote);
             if(!v)return JSON.stringify({state:'unknown',observable:false,positionMs:0,
               durationMs:0,seekable:false,seekStartMs:0,seekEndMs:0});
             const finite=n=>Number.isFinite(n)&&n>=0;
@@ -48,7 +58,17 @@ final class FilmPhonePlayback {
         if(positionMs<0||positionMs>86_400_000L)
             throw new IllegalArgumentException("Out-of-range playback position");
         return "(()=>{try{"+VIDEO+"const operation='"+operation+"';const requested="+positionMs+";"+"""
-            if(!video)return JSON.stringify({result:'UNOBSERVABLE'});
+            if(!video){
+              if(!remote)return JSON.stringify({result:'UNOBSERVABLE'});
+              if(operation==='seek'&&!remote.seekable)
+                return JSON.stringify({result:'NOT_SEEKABLE'});
+              if(frame.contentWindow&&typeof frame.contentWindow.postMessage==='function'){
+                frame.contentWindow.postMessage({tag:'ghartv-phone-media-v1',
+                  kind:'command',operation,positionMs:requested},'*');
+                return JSON.stringify({result:'REQUESTED'});
+              }
+              return JSON.stringify({result:'UNOBSERVABLE'});
+            }
             if(operation==='play'){
               if(video.ended&&video.seekable.length)video.currentTime=video.seekable.start(0);
               const promise=video.play();if(promise&&promise.catch)promise.catch(()=>{});

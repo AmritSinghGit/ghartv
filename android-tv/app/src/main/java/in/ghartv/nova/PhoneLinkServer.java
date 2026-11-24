@@ -108,7 +108,9 @@ public final class PhoneLinkServer {
              "EDIT_APPLIED".equals(code)||"EDIT_FIELD_REQUIRED".equals(code)||
              "CONTROL_UNAVAILABLE".equals(code)||"SEEK_UNAVAILABLE".equals(code)||
              "SEEK_REQUESTED".equals(code)||"PLAY_REQUESTED".equals(code)||
-             "PAUSE_REQUESTED".equals(code)))return;
+             "PAUSE_REQUESTED".equals(code)||
+             "FULLSCREEN_UNAVAILABLE".equals(code)||
+             "FULLSCREEN_REQUESTED".equals(code)))return;
         final OutputStream out=activeOutput;
         if(out!=null&&!outbound.isShutdown()){
             try{outbound.execute(()->{

@@ -148,7 +148,7 @@ body.editor-mode .editor{border-color:var(--mint)}
     <button id="sources-refresh" type="button">↻ Refresh list</button>
   </div>
 </section>
-<section id="timeline" class="seekbar" aria-label="TV playback timeline" hidden>
+<section id="timeline" class="seekbar" aria-label="Live TV video position and seek timeline" hidden>
   <span id="played-time">0:00</span>
   <input id="seek-position" type="range" min="0" max="1000" step="1000" value="0"
          aria-label="Seek TV video from phone">
@@ -270,25 +270,37 @@ function setPlayback(d){
  const full=video.querySelector('[data-a="FULLSCREEN"]');
  play.disabled=!ready||!active||playing;
  pause.disabled=!ready||!active||paused;
- full.disabled=!ready||!d.fullscreen;
- full.textContent=mode==="FULLSCREEN"?"⛶ Exit fullscreen":"⛶ Fullscreen";
+ // A fullscreen *entry* button cannot depend on already being fullscreen.
+ // The TV determines whether a player can be enlarged and returns feedback.
+ full.disabled=!ready||!active;
+ full.textContent=d.fullscreen===true?"⛶ Exit fullscreen":"⛶ Fullscreen";
  const start=Number(d.seekStartMs),end=Number(d.seekEndMs),
        pos=Number(d.positionMs);
  const canSeek=ready&&active&&d.seekable===true&&Number.isFinite(start)&&
    Number.isFinite(end)&&Number.isFinite(pos)&&end>start&&start>=0&&end<=86400000;
- timeline.hidden=!canSeek;
+ // A live movie should always show its timeline panel. Streams that do
+ // not expose a seekable range show a disabled slider, never fake seeking.
+ timeline.hidden=!active;
  seekPosition.disabled=!canSeek;
+ seekPosition.setAttribute("aria-label",canSeek?"Seek TV movie from phone":
+   "Movie timeline unavailable for this stream");
  if(canSeek){
    seekPosition.min=String(start);seekPosition.max=String(end);
-   if(!scrubbing&&Date.now()-lastSeekAt>350)
+   seekPosition.step="1000";
+   if(!scrubbing&&Date.now()-lastSeekAt>1550)
      seekPosition.value=String(Math.max(start,Math.min(end,pos)));
    playedTime.textContent=timeLabel(Number(seekPosition.value));
    totalTime.textContent=timeLabel(end);
+ }else{
+   seekPosition.min="0";seekPosition.max="1000";seekPosition.value="0";
+   playedTime.textContent=Number.isFinite(pos)&&pos>0?timeLabel(pos):"--:--";
+   totalTime.textContent=Number.isFinite(Number(d.durationMs))&&
+     Number(d.durationMs)>0?timeLabel(Number(d.durationMs)):"--:--";
  }
  tip.textContent=playing?"TV player playing · timeline follows TV":
    paused?"TV player paused · tap Play to resume":
    d.state==="starting"?"Opening player · playback not yet confirmed":
-   active?"Player not observable · controls may be unavailable":
+   active?"Player position unavailable · try TV controls if buttons do not respond":
    "Point, tap or use arrows";
 }
 function phoneNotice(message){hint.textContent=message;}
@@ -349,6 +361,8 @@ function connect(){
      else if(code==="SEEK_UNAVAILABLE")phoneNotice("This stream does not expose a seekable timeline.");
      else if(code==="PLAY_REQUESTED"||code==="PAUSE_REQUESTED")phoneNotice("Command sent · awaiting confirmed TV state.");
      else if(code==="SEEK_REQUESTED")phoneNotice("Seek sent · awaiting TV position update.");
+    else if(code==="FULLSCREEN_REQUESTED")phoneNotice("Fullscreen applied on the TV. Tap again to exit.");
+    else if(code==="FULLSCREEN_UNAVAILABLE")phoneNotice("Cannot enlarge this player. Open the movie, then try Fullscreen again.");
    }else if(data==="P")setOnline(true,"● Connected");
  };
 }
