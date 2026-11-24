@@ -3,6 +3,19 @@ package in.ghartv.nova;
 /** Owned local regression fixture. No external account, media or TLS bypass. */
 public class Review42HarnessActivity extends FlixMomoActivity {
     @Override protected String initialProviderHome(){return "https://flixmomo.app/";}
+    @Override protected boolean autoOfferPhoneOnEntry(){return false;}
+    @Override protected boolean ownedFixtureForDebug(String url){
+        if(!BuildConfig.DEBUG||url==null)return false;
+        android.net.Uri u=android.net.Uri.parse(url);
+        String path=u.getPath();
+        return "https".equals(u.getScheme())&&
+            ("flixmomo.app".equals(u.getHost())||
+             "flixmomo.bet".equals(u.getHost())||
+             "flixmomo.st".equals(u.getHost()))&&
+            ("/".equals(path)||"/search".equals(path)||
+             "/movie/lantern".equals(path)||"/tv/lantern".equals(path)||
+             "/watch/lantern".equals(path));
+    }
     // Historical parsed-control regressions; Review51PointerHarness tests the production default.
     @Override protected boolean pointerFirstBrowsing(){return false;}
     @Override protected boolean torDefaultForFilms(){return false;}
@@ -17,7 +30,11 @@ public class Review42HarnessActivity extends FlixMomoActivity {
             installed=true;final android.webkit.WebViewClient production=browser.getWebViewClient();browser.getSettings().setBlockNetworkLoads(true);
             browser.setWebViewClient(new android.webkit.WebViewClient(){
                 @Override public boolean shouldOverrideUrlLoading(android.webkit.WebView v,android.webkit.WebResourceRequest r){return production.shouldOverrideUrlLoading(v,r);}
-                @Override public android.webkit.WebResourceResponse shouldInterceptRequest(android.webkit.WebView v,android.webkit.WebResourceRequest r){android.webkit.WebResourceResponse deny=production.shouldInterceptRequest(v,r);if(deny!=null)return deny;byte[] data=pages.get(r.getUrl().toString());return new android.webkit.WebResourceResponse(data==null?"text/plain":"text/html","UTF-8",data==null?404:200,data==null?"No fixture":"OK",java.util.Collections.singletonMap("Cache-Control","no-store"),new java.io.ByteArrayInputStream(data==null?new byte[0]:data));}
+                @Override public android.webkit.WebResourceResponse shouldInterceptRequest(android.webkit.WebView v,android.webkit.WebResourceRequest r){byte[] data="GET".equals(r.getMethod())?pages.get(r.getUrl().toString()):null;
+                    if(data==null){
+                        android.webkit.WebResourceResponse deny=production.shouldInterceptRequest(v,r);
+                        if(deny!=null)return deny;
+                    }return new android.webkit.WebResourceResponse(data==null?"text/plain":"text/html","UTF-8",data==null?404:200,data==null?"No fixture":"OK",java.util.Collections.singletonMap("Cache-Control","no-store"),new java.io.ByteArrayInputStream(data==null?new byte[0]:data));}
                 @Override public void onPageStarted(android.webkit.WebView v,String u,android.graphics.Bitmap b){production.onPageStarted(v,u,b);}
                 @Override public void onPageFinished(android.webkit.WebView v,String u){production.onPageFinished(v,u);}
                 @Override public void doUpdateVisitedHistory(android.webkit.WebView v,String u,boolean reload){production.doUpdateVisitedHistory(v,u,reload);}

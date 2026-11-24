@@ -95,6 +95,25 @@ final class FilmPlaybackProbe {
         }catch(e){return 'RESTORE_UNAVAILABLE';}})()
         """;
     }
+    /** Focuses only the one visible media surface after an actual source
+     * selection. It never clicks, starts playback, navigates, or reads iframe
+     * contents. Giving an iframe focus allows its player keyboard shortcuts.
+     */
+    static String focusVisiblePlayer(){
+        return """
+        (()=>{try{
+          const visible=e=>{const b=e.getBoundingClientRect(),s=getComputedStyle(e);
+            return b.width>=160&&b.height>=90&&s.display!=='none'&&s.visibility!=='hidden';};
+          const elements=Array.from(document.querySelectorAll('video,iframe'))
+            .slice(0,32).filter(visible);
+          if(elements.length!==1)return 'NO_SINGLE_PLAYER';
+          const element=elements[0];
+          if(!element.hasAttribute('tabindex'))element.setAttribute('tabindex','-1');
+          element.focus({preventScroll:true});
+          return document.activeElement===element?'PLAYER_FOCUSED':'PLAYER_FOCUS_UNAVAILABLE';
+        }catch(e){return 'PLAYER_FOCUS_UNAVAILABLE';}})()
+        """;
+    }
     static String reveal(){
         return "(()=>{"+FilmPageSnapshot.CORE+"""
         if(window.__ghartv_verified_full76||document.fullscreenElement)return JSON.stringify({state:'PLAYER_ALREADY_FULLSCREEN'});

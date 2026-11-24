@@ -11,21 +11,36 @@ final class FilmStartBudget {
     long began, sourceBegan, firstFrameMs=-1, proofMs=-1, progressAt=-1;
     double progressPosition=-1;
     int attempt;
-    boolean sawObservable, sawFrame;
+    boolean sawObservable, sawFrame, sawOtherFrames;
     String reason="";
     void begin(long now){state=State.STARTING;began=sourceBegan=now;attempt=1;firstFrameMs=proofMs=-1;resetProgress();reason="Opening player";}
-    private void resetProgress(){progressAt=-1;progressPosition=-1;sawObservable=false;sawFrame=false;}
+    private void resetProgress(){progressAt=-1;progressPosition=-1;sawObservable=sawFrame=sawOtherFrames=false;}
     boolean running(){return state==State.STARTING||state==State.NEXT;}
     void selected(long now){if(!running()){begin(now);return;}state=State.STARTING;sourceBegan=now;firstFrameMs=-1;resetProgress();reason="Starting selected source";}
     void cancel(){state=State.CANCELLED;reason="Cancelled";}
     void paused(){if(running()){state=State.PAUSED;reason="Paused; no automatic retry";}}
     void unavailable(String message){if(running()){state=State.MANUAL;reason=message;}}
     void noNext(){state=State.EXHAUSTED;reason="No untried source remains";}
+    /** Advance only when the current, fully loaded page has exposed *no*
+     * video OR iframe for a sustained window. An opaque iframe is NOT an
+     * empty source: it may be playing, so it never triggers this path.
+     */
+    State confirmedEmptyAfterWait(long now,int emptyObservations,boolean ready){
+        if(state!=State.STARTING||!ready||sawObservable||sawFrame||sawOtherFrames||
+            emptyObservations<8||now-sourceBegan<25000)return state;
+        if(attempt>=MAX_ATTEMPTS){
+            state=State.EXHAUSTED;reason="No more verified source choices";return state;
+        }
+        attempt++;state=State.NEXT;
+        reason="No video or iframe exposed after waiting; trying next source";
+        return state;
+    }
     State sample(long now,boolean observable,boolean hasOtherFrames,boolean frame,
                  boolean playing,boolean paused,double position,int error,boolean protectedMedia){
         if(state!=State.STARTING)return state;
         if(now-began>=TOTAL_TIMEOUT_MS){state=State.EXHAUSTED;reason="Total start budget exhausted";return state;}
         sawObservable|=observable;
+        sawOtherFrames|=hasOtherFrames;
         if(frame){sawFrame=true;if(firstFrameMs<0)firstFrameMs=now-sourceBegan;}
         if(observable&&playing&&Double.isFinite(position)){
             if(progressAt<0||position<progressPosition){progressAt=now;progressPosition=position;}

@@ -19,8 +19,27 @@ public class Review45PlayEvidenceTest {
         h.eval("JSON.stringify((()=>{const v=document.querySelector('video');v.pause();v.currentTime=0;window.coverClicks=0;window.badClicks=0;window.trustedCover=false;v.onclick=null;const box=document.createElement('div');box.style.cssText='position:relative;width:620px;height:350px';v.before(box);box.append(v);const b=document.createElement('button');b.id='play-cover';b.textContent='Play video';b.style.cssText='position:absolute;left:260px;top:140px;width:100px;height:70px;margin:0;padding:0;z-index:3';b.onclick=e=>{window.coverClicks++;window.trustedCover=e.isTrusted;b.remove();v.play()};box.append(b);window.testBox=box;{"+extra+"};return {ok:true}})())");
         SystemClock.sleep(100);
     }
-    void play(){h.ui(()->{FilmNativeControls c=(FilmNativeControls)h.field(h.activity,"nativeControls");c.menu();View v=h.text((View)h.field(c,"tray"),"Play");assertNotNull(v);v.requestFocus();});h.press(KeyEvent.KEYCODE_DPAD_CENTER);}
-    JSONObject state()throws Exception{return h.eval("JSON.stringify({time:document.querySelector('video').currentTime,paused:document.querySelector('video').paused,clicks:window.coverClicks,bad:window.badClicks,trusted:window.trustedCover,reselections:window.reselections})");}
+    void play(){h.ui(()->{FilmNativeControls c=(FilmNativeControls)h.field(h.activity,"nativeControls");c.menu();View v=h.text((View)h.field(c,"tray"),"Play");assertNotNull(v);assertTrue("Active movie must show its native Play tray",v.isShown());
+        assertTrue("Play must accept TV focus",v.requestFocus());});h.press(KeyEvent.KEYCODE_DPAD_CENTER);}
+    JSONObject state()throws Exception{
+        JSONObject out=h.eval("JSON.stringify({time:document.querySelector('video').currentTime,paused:document.querySelector('video').paused,clicks:window.coverClicks,bad:window.badClicks,trusted:window.trustedCover,reselections:window.reselections})");
+        JSONObject geometry=h.eval("JSON.stringify((()=>{const b=document.getElementById('play-cover'),v=document.querySelector('video'),r=b?.getBoundingClientRect(),q=v.getBoundingClientRect();return {button:b?.id,hit:r?document.elementFromPoint(r.left+r.width/2,r.top+r.height/2)?.id:'none',rect:r?{x:r.left,y:r.top,w:r.width,h:r.height}:null,videoRect:{x:q.left,y:q.top,w:q.width,h:q.height},innerWidth,innerHeight,active:document.activeElement?.id,ready:document.readyState}})())");
+        out.put("geometry",geometry);
+        Object attempted=h.field(h.activity,"mediaAttempted");
+        out.put("nativeWidth",h.web.getWidth());
+        out.put("nativeHeight",h.web.getHeight());
+        out.put("mediaAttempted",String.valueOf(attempted));
+        android.widget.TextView notice=(android.widget.TextView)h.field(h.activity,"playNotice");
+        out.put("notice",String.valueOf(notice.getText()));
+        FilmReviewJournal journal=(FilmReviewJournal)h.field(h.activity,"reviewJournal");
+        out.put("journal",journal.summary());
+        FilmNativeControls c=(FilmNativeControls)h.field(h.activity,"nativeControls");
+        for(String name:new String[]{"mediaCandidates","active","blocked","pageBusy","pending","selected"}){
+            Object value=h.field(c,name);
+            out.put(name,value==null?"null":String.valueOf(value));
+        }
+        return out;
+    }
     JSONObject waitPlaying()throws Exception{JSONObject s=new JSONObject();long until=SystemClock.elapsedRealtime()+6000;while(SystemClock.elapsedRealtime()<until){s=state();if(s.optDouble("time")>.35&&!s.optBoolean("paused"))break;SystemClock.sleep(60);}return s;}
     @Test public void nativePlayClicksSemanticOverlayOnceAndStartsVideo()throws Exception{
         cover("");int before=state().getInt("reselections");play();JSONObject s=waitPlaying();assertTrue(s.toString(),s.getDouble("time")>.35);assertFalse(s.getBoolean("paused"));assertTrue(s.getBoolean("trusted"));assertEquals(1,s.getInt("clicks"));assertEquals(before,s.getInt("reselections"));

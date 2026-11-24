@@ -22,9 +22,9 @@ public class PreviewHarnessActivity extends Activity {
     if("timeout".equals(c.id))throw new java.net.SocketTimeoutException("private fixture details must not appear");
     if("connection".equals(c.id))throw new java.net.ConnectException("private fixture details must not appear");
     if("slow".equals(c.id))Thread.sleep(16500);
-    PlaybackInfo i=new PlaybackInfo();i.streamUrl="asset:///preview-fixture.mp4";return i;}
+    PlaybackInfo i=new PlaybackInfo();i.streamUrl="asset:///ghartv-native-check.mp4";return i;}
    public void cancel(){cancels.incrementAndGet();}
-  });
+  },new androidx.media3.datasource.DefaultDataSource.Factory(this));
  }
  public void focus(String id){Channel c=new Channel();c.id=id;c.number=Math.abs(id.hashCode())%1000;c.name="Fixture";c.language="Fixture";c.category="Fixture";controller.select(c);controller.focused(true);}
  @Override public void onDestroy(){controller.release();super.onDestroy();}

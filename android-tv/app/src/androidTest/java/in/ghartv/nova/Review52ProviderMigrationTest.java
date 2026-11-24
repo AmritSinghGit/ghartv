@@ -72,7 +72,9 @@ public class Review52ProviderMigrationTest {
     }
     @Test public void switchingFromPointerModeRestartsTheRealCatalogueReader()throws Exception{
         scene.title();h.ui(()->{assertTrue((Boolean)field("pointerPage"));activity().selectProviderOrigin("https://flixmomo.bet/");});awaitCards("https://flixmomo.bet/");
-        h.ui(()->{assertFalse((Boolean)field("pointerPage"));assertFalse((Boolean)field("mouseActive"));assertFalse((Boolean)field("pageEditor"));assertTrue((Boolean)h.field(field("nativeControls"),"active"));assertTrue(home().isShown());assertFalse(home().isLoadingData());assertEquals(FilmProviderPolicy.CREDIT,((TextView)field("credit")).getText().toString());});
+        h.ui(()->{assertFalse((Boolean)field("pointerPage"));assertFalse((Boolean)field("mouseActive"));assertFalse((Boolean)field("pageEditor"));assertTrue((Boolean)h.field(field("nativeControls"),"active"));assertTrue(home().isShown());assertFalse(home().isLoadingData());assertTrue("Updated provider credit must identify FlixMomo and an explicit Tor route",
+        ((TextView)field("credit")).getText().toString().contains("FlixMomo")&&
+        ((TextView)field("credit")).getText().toString().contains("Tor"));});
     }
     @Test public void selectedOriginRetainsTheTypedQuery()throws Exception{
         scene.title();h.ui(()->{((EditText)field("query")).setText("Paper Lantern");activity().selectProviderOrigin("https://flixmomo.bet/");});awaitCards("https://flixmomo.bet/");

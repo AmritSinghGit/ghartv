@@ -53,7 +53,22 @@ public class RemoteWebCursorTest {
         waitTitle("clicked");assertTrue(touches.get()>=2);assertEquals(MotionEvent.ACTION_UP,lastTouch.get());
     }
     @Test public void pointerMovementMovesClickAwayFromCenter(){
-        key(KeyEvent.ACTION_DOWN,KeyEvent.KEYCODE_DPAD_RIGHT);SystemClock.sleep(800);key(KeyEvent.ACTION_UP,KeyEvent.KEYCODE_DPAD_RIGHT);
+        // The production cursor uses gradual acceleration; an 800ms hold no
+        // longer guarantees moving beyond the wide central test button.
+        // Hold until the pointer actually exits its right-hand boundary.
+        key(KeyEvent.ACTION_DOWN,KeyEvent.KEYCODE_DPAD_RIGHT);
+        long until=SystemClock.elapsedRealtime()+3500;
+        RemoteCursorState position;
+        try{
+            java.lang.reflect.Field field=RemoteWebCursor.class.getDeclaredField("state");
+            field.setAccessible(true);
+            position=(RemoteCursorState)field.get(cursor);
+        }catch(ReflectiveOperationException error){throw new AssertionError(error);}
+        while(SystemClock.elapsedRealtime()<until&&
+            position.x()<=cursor.getWidth()*.68f)SystemClock.sleep(50);
+        key(KeyEvent.ACTION_UP,KeyEvent.KEYCODE_DPAD_RIGHT);
+        assertTrue("Held Right must genuinely move pointer clear of central button",
+            position.x()>cursor.getWidth()*.68f);
         key(KeyEvent.ACTION_DOWN,KeyEvent.KEYCODE_DPAD_CENTER);key(KeyEvent.ACTION_UP,KeyEvent.KEYCODE_DPAD_CENTER);SystemClock.sleep(200);
         assertEquals("ready",title());
     }

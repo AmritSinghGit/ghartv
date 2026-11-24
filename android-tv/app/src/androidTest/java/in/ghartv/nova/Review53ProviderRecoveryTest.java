@@ -35,7 +35,8 @@ public class Review53ProviderRecoveryTest {
     WebResourceResponse unavailable(){return new WebResourceResponse("text/plain","UTF-8",503,"Service Unavailable",Collections.emptyMap(),new ByteArrayInputStream(new byte[0]));}
     void failDns(){((FlixMomoActivity)h.activity).providerRequestFailed(request(true),WebViewClient.ERROR_HOST_LOOKUP);}
     @Test public void mainDnsErrorHasVisibleRecoveryOutsideCatalogue()throws Exception{
-        scene.title();h.ui(()->{failDns();assertTrue(panel().isShown());assertSame(panel(),((View)field("providerRecoveryActions")).getParent());assertTrue(message(),message().contains("DNS"));assertFalse(message().contains("private fixture"));assertTrue(((View)field("retryButton")).hasFocus());assertFalse((Boolean)field("mouseActive"));assertTrue((Boolean)field("pointerPage"));});
+        scene.title();h.ui(()->{failDns();assertTrue(panel().isShown());assertSame(panel(),((View)field("providerRecoveryActions")).getParent());assertTrue("Must fail closed when Tor is not connected: "+message(),
+            message().contains("DNS")||message().contains("Tor connection unavailable"));assertFalse(message().contains("private fixture"));assertTrue(((View)field("retryButton")).hasFocus());assertFalse((Boolean)field("mouseActive"));assertTrue((Boolean)field("pointerPage"));});
     }
     @Test public void pendingPointerLoadHasVisibleStatusInsteadOfBlankScreen()throws Exception{
         scene.title();h.ui(()->{h.web.getWebViewClient().onPageStarted(h.web,"https://flixmomo.app/movie/lantern",null);assertTrue(panel().isShown());assertTrue(message().contains("Opening"));assertEquals(View.GONE,((View)field("providerRecoveryActions")).getVisibility());});

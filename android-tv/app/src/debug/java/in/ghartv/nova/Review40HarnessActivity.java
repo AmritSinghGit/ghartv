@@ -3,6 +3,15 @@ package in.ghartv.nova;
 /** Test-only media and HTML. Inherits the production Activity, callbacks and input handling. */
 public final class Review40HarnessActivity extends FlixMomoActivity {
     @Override protected String initialProviderHome(){return "https://flixmomo.app/";}
+    @Override protected boolean autoOfferPhoneOnEntry(){return false;}
+    @Override protected boolean ownedFixtureForDebug(String url){
+        // Only the three registered local pages in this non-exported debug
+        // harness can bypass its Tor-disabled production navigation gate.
+        return BuildConfig.DEBUG&&url!=null&&(
+            "https://flixmomo.app/".equals(url)||
+            "https://flixmomo.app/movie/owned".equals(url)||
+            "https://flixmomo.app/watch/owned".equals(url));
+    }
     // Historical parsed-control regressions; Review51PointerHarness tests the production default.
     @Override protected boolean pointerFirstBrowsing(){return false;}
     @Override protected boolean torFallbackEnabledForBuild(){return false;}
@@ -24,8 +33,16 @@ public final class Review40HarnessActivity extends FlixMomoActivity {
         browser.setWebViewClient(new android.webkit.WebViewClient(){
             @Override public boolean shouldOverrideUrlLoading(android.webkit.WebView v,android.webkit.WebResourceRequest r){return production.shouldOverrideUrlLoading(v,r);}
             @Override public android.webkit.WebResourceResponse shouldInterceptRequest(android.webkit.WebView v,android.webkit.WebResourceRequest r){
-                android.webkit.WebResourceResponse denied=production.shouldInterceptRequest(v,r);if(denied!=null)return denied;
+                // The production Tor-only interceptor correctly denies network
+                // reads when Tor is disabled in this isolated fixture. Serve
+                // exact, already-registered local HTML bytes FIRST instead of
+                // letting its deny-all response mask our own deterministic page.
+                // Other requests still go through the production guard.
                 byte[] bytes="GET".equals(r.getMethod())?fixturePages.get(r.getUrl().toString()):null;
+                if(bytes==null){
+                    android.webkit.WebResourceResponse denied=production.shouldInterceptRequest(v,r);
+                    if(denied!=null)return denied;
+                }
                 return new android.webkit.WebResourceResponse(bytes==null?"text/plain":"text/html","UTF-8",bytes==null?404:200,bytes==null?"Fixture not found":"OK",java.util.Collections.singletonMap("Cache-Control","no-store"),new java.io.ByteArrayInputStream(bytes==null?new byte[0]:bytes));
             }
             @Override public void onPageStarted(android.webkit.WebView v,String u,android.graphics.Bitmap icon){production.onPageStarted(v,u,icon);}

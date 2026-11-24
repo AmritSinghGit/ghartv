@@ -139,6 +139,7 @@ body.editor-mode .editor{border-color:var(--mint)}
   <button data-a="SOURCES">☷ Sources</button>
   <button data-a="NEXT">↪ Try next</button>
 </div>
+<div id="source-progress" class="source-note" role="status" aria-live="polite" hidden></div>
 <section id="sources-panel" class="sources-panel" aria-label="Choose a film player on your phone" hidden>
   <div class="sources-head"><b>Player choices</b><button id="close-sources" type="button">Close</button></div>
   <div id="sources-note" class="source-note" role="status">Reading source choices from the TV…</div>
@@ -182,9 +183,11 @@ const sendButton=document.getElementById("send"),
       micButton=document.getElementById("mic");
 let lastSubmission="",submissionPending=false,liveTimer=null,composing=false;
 let currentChoices=[],lastPlayback={state:"unknown",fullscreen:false};
+let sourceBatch={batch:0,batchStart:0,batchEnd:0,phase:"idle"};
 const sourcesPanel=document.getElementById("sources-panel"),
  sourcesList=document.getElementById("sources-list"),
- sourcesNote=document.getElementById("sources-note");
+ sourcesNote=document.getElementById("sources-note"),
+ sourceProgress=document.getElementById("source-progress");
 function sendLiveNow(){
  if(liveTimer){clearTimeout(liveTimer);liveTimer=null;}
  if(!ready||composing||(mode!=="SEARCH"&&mode!=="EDITOR")||submissionPending)return;
@@ -208,18 +211,36 @@ function renderSources(){
    b.addEventListener("click",()=>{
      if(!ready)return;
      send("J "+s.number);
+     // Keep the choice list open until a verified state arrives. A rejected
+     // or slow selection must not make all the source buttons disappear.
      sourcesNote.textContent="Selecting "+s.label+" on your TV… Playback not yet verified.";
-     sourcesPanel.hidden=true;document.body.classList.remove("sources-open");
    });
    sourcesList.append(b);
  }
+ const selected=list.find(s=>s.selected);
+ const batchText=sourceBatch.batch>0?
+   "Batch "+sourceBatch.batch+" · players "+sourceBatch.batchStart+"–"+sourceBatch.batchEnd:
+   "";
+ const stateText=sourceBatch.phase==="verified"?"Rendered frame and playing verified":
+   sourceBatch.phase==="time-advancing"?"Movie time moving · picture not verified":
+   sourceBatch.phase==="checking"?"Checking visible player":"Awaiting player selection";
+ const progress=selected?selected.label+" · "+batchText+" · "+stateText:
+   batchText?batchText+" · "+stateText:"";
+ sourceProgress.textContent=progress;
+ sourceProgress.hidden=!progress||!["STARTING","VIDEO","FULLSCREEN"].includes(mode);
  sourcesNote.textContent=list.length?
-   list.length+" provider choices visible on TV · not all are working streams":
+   list.length+" observed choices · "+(progress||"choose a player")+" · not all sources are playable":
    "No readable player choices on this page. Open a film watch page or refresh.";
 }
 function setSources(raw){
  try{
    if(!raw||!Array.isArray(raw.choices))return;
+   sourceBatch={
+     batch:Number.isInteger(raw.batch)&&raw.batch>=0&&raw.batch<=4?raw.batch:0,
+     batchStart:Number.isInteger(raw.batchStart)?raw.batchStart:0,
+     batchEnd:Number.isInteger(raw.batchEnd)?raw.batchEnd:0,
+     phase:["idle","checking","time-advancing","verified"].includes(raw.phase)?raw.phase:"idle"
+   };
    currentChoices=raw.choices.filter(x=>
      Number.isInteger(x.number)&&x.number>=1&&x.number<=12&&
      typeof x.label==="string"&&x.label.length<=36&&
@@ -305,10 +326,17 @@ function setPlayback(d){
 }
 function phoneNotice(message){hint.textContent=message;}
 function focusPhoneInput(){
-  // Chrome on Android may show the keyboard here. iOS Safari requires a
-  // direct viewer gesture; a large tap target remains ready if blocked.
+  // Browsers permit best-effort focus on socket state changes. iOS Safari
+  // usually requires a direct viewer tap to open its native keyboard.
   try{input.focus({preventScroll:true});}catch(e){input.focus();}
+  editor.scrollIntoView({block:"nearest",behavior:"smooth"});
 }
+track.addEventListener("pointerup",()=>{
+  // A TV-search trackpad tap is a genuine phone gesture; it can summon
+  // the mobile keyboard where a socket-triggered focus was denied.
+  if(ready&&(mode==="SEARCH"||mode==="EDITOR")&&
+      document.activeElement!==input)focusPhoneInput();
+});
 function setOnline(online,message){
  ready=online;status.textContent=message;
  status.classList.toggle("connected",online);
@@ -323,7 +351,10 @@ function connect(){
    "s="+encodeURIComponent(session):"k="+encodeURIComponent(key)));}catch(e){
    setOnline(false,"Connection unavailable");return;
  }
- ws.onopen=()=>{attempts=0;setOnline(true,"● Connected");};
+ ws.onopen=()=>{
+   attempts=0;const wasReady=ready;setOnline(true,"● Connected");
+   if(!wasReady&&(mode==="SEARCH"||mode==="EDITOR"))focusPhoneInput();
+ };
  ws.onclose=()=>{
    setOnline(false,"● Disconnected");
    if(session&&attempts++<8){
@@ -377,13 +408,19 @@ function setMode(next){
  const searching=next==="SEARCH";
  sendButton.textContent=searching?"Search":next==="EDITOR"?"Type":"Type";
  goButton.hidden=next!=="EDITOR";
- if(searching&&ready){phoneNotice("Start typing — the TV search updates live. Tap Search to submit.");
-   // Focus after pairing without opening the TV's on-screen keyboard.
+ if((searching||next==="EDITOR")&&ready){
+   phoneNotice(searching?"Start typing — the TV search updates live. Tap Search to submit.":
+     "TV website field selected · type here on your phone.");
+   // Android can show the keyboard; iOS Safari may require a direct tap.
    focusPhoneInput();
  }
  document.getElementById("video").hidden=!video;
  document.getElementById("tools").hidden=video;
- if(next==="HOME"){sourcesPanel.hidden=true;document.body.classList.remove("sources-open");currentChoices=[];}
+ if(next==="HOME"){
+   sourcesPanel.hidden=true;document.body.classList.remove("sources-open");
+   currentChoices=[];sourceBatch={batch:0,batchStart:0,batchEnd:0,phase:"idle"};
+ }
+ sourceProgress.hidden=!video||!sourceProgress.textContent;
  setPlayback(lastPlayback);
  const labels={HOME:"TV GUIDE",BROWSE:"BROWSER · FLIXMOMO",SEARCH:"SEARCH A FILM OR SERIES",
   EDITOR:"WEBSITE TEXT BOX",STARTING:"OPENING VIDEO",VIDEO:"PLAYING VIDEO",FULLSCREEN:"FULLSCREEN VIDEO"};

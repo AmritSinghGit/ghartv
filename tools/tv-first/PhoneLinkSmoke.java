@@ -123,7 +123,19 @@ public final class PhoneLinkSmoke {
             ok(new String(c.getInputStream().readNBytes(12)).startsWith("HTTP/1.1 403"));}
         try(Socket c=new Socket("127.0.0.1",port)){
             c.getOutputStream().write(("GET /ws?s="+sess+" HTTP/1.1\r\nHost: "+hp+"\r\nUpgrade: websocket\r\nSec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\n\r\n").getBytes());
-            ok(new String(c.getInputStream().readNBytes(12)).startsWith("HTTP/1.1 101"));}
+            InputStream response=c.getInputStream();
+            StringBuilder header=new StringBuilder();int boundary=0,ch;
+            while((ch=response.read())>=0){
+                header.append((char)ch);boundary=(boundary<<8)|ch;
+                if(boundary==0x0d0a0d0a)break;
+            }
+            ok(header.toString().startsWith("HTTP/1.1 101"));
+            ok(readFrame(response).startsWith("S "));
+            // The TV changed to SEARCH before reconnect. The new socket must
+            // receive it even though the server's previous mode is unchanged.
+            ok(readFrame(response).equals("V SEARCH"));
+            ok(readFrame(response).startsWith("O "));
+            ok(readFrame(response).startsWith("H "));}
         Thread.sleep(200);
         // other site as Origin, or another Host, is refused
         PhoneLinkServer s2=new PhoneLinkServer(sink,page);int p2=s2.start(InetAddress.getByName("127.0.0.1"),0);String k2=s2.pairingKey();String hp2="127.0.0.1:"+p2;

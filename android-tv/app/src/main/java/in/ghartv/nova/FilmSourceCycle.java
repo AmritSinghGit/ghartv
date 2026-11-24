@@ -20,19 +20,40 @@ final class FilmSourceCycle {
         return number>=1&&number<=12;
     }
 
-    /** Returns a source index, or -1 if no eligible untried choice remains.
-     * Only a manual request wraps back to the first observable source.
-     * Retry bookkeeping changes only when the caller explicitly wraps.
-     */
-    static int next(List<String> observed, Set<String> attempted, boolean manual) {
+    private static int lowestUntried(List<String> observed,Set<String> attempted,int after){
+        int best=-1,number=Integer.MAX_VALUE;
         for(int i=0;i<observed.size();i++){
             String label=observed.get(i);
-            if(eligible(label)&&!attempted.contains(label))return i;
+            if(!eligible(label)||attempted.contains(label))continue;
+            Matcher match=LABEL.matcher(label.trim());
+            if(match.matches()){
+                int next=Integer.parseInt(match.group(1));
+                if(next>after&&next<number){best=i;number=next;}
+            }
         }
+        return best;
+    }
+    /** The provider can reorder its buttons. Prefer numeric 1,2,3,
+     * then 4,5,6..., not incidental DOM order. Manual wrap is explicit.
+     */
+    static int next(List<String> observed,Set<String> attempted,boolean manual){
+        return next(observed,attempted,manual,"");
+    }
+    static int next(List<String> observed,Set<String> attempted,boolean manual,String current){
+        int after=0;
+        if(eligible(current)){
+            Matcher match=LABEL.matcher(current.trim());
+            if(match.matches())after=Integer.parseInt(match.group(1));
+        }
+        int next=lowestUntried(observed,attempted,after);
+        if(next>=0)return next;
+        // A deliberate Next can wrap to another untried source; automatic
+        // retries never wrap/replay an already attempted player.
         if(manual){
+            next=lowestUntried(observed,attempted,0);
+            if(next>=0)return next;
             attempted.clear();
-            for(int i=0;i<observed.size();i++)
-                if(eligible(observed.get(i)))return i;
+            return lowestUntried(observed,attempted,0);
         }
         return -1;
     }

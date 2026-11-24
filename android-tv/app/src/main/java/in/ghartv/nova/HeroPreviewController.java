@@ -36,6 +36,8 @@ public final class HeroPreviewController {
     private final Handler main=new Handler(Looper.getMainLooper());
     private final ExecutorService executor=Executors.newSingleThreadExecutor();
     private final Resolver resolver;
+    // Nonproduction media fixture injection; absent for all real channels.
+    private final androidx.media3.datasource.DataSource.Factory fixtureMedia;
     private final PreviewGate gate=new PreviewGate();
     private Channel selected;
     private ExoPlayer player;
@@ -55,7 +57,15 @@ public final class HeroPreviewController {
     // Package-private injection exercises the SAME controller with local media on an Android test device.
     HeroPreviewController(Activity a,PlayerView view,ImageView logo,ProgressBar spinner,
             TextView label,Resolver resolver){
-        activity=a;playerView=view;poster=logo;loading=spinner;status=label;this.resolver=resolver;
+        this(a,view,logo,spinner,label,resolver,null);
+    }
+    /** Only owned fixture tests use this scoped, non-network data source.
+     * Production always uses the existing Jio recovery-aware HTTP factory. */
+    HeroPreviewController(Activity a,PlayerView view,ImageView logo,ProgressBar spinner,
+            TextView label,Resolver resolver,
+            androidx.media3.datasource.DataSource.Factory fixtureMedia){
+        activity=a;playerView=view;poster=logo;loading=spinner;status=label;
+        this.resolver=resolver;this.fixtureMedia=fixtureMedia;
         playerView.setUseController(false);playerView.setKeepScreenOn(false);
         playerView.setFocusable(false);playerView.setFocusableInTouchMode(false);
         playerView.setDescendantFocusability(android.view.ViewGroup.FOCUS_BLOCK_DESCENDANTS);
@@ -121,7 +131,9 @@ public final class HeroPreviewController {
     private void prepare(PlaybackInfo info,long token){
         Map<String,String> headers=jsonMap(info.streamHeaders);
         player=new ExoPlayer.Builder(activity)
-            .setMediaSourceFactory(JioMediaDataSource.previewSourceFactory(activity,headers)).build();
+            .setMediaSourceFactory(fixtureMedia==null?
+                JioMediaDataSource.previewSourceFactory(activity,headers):
+                new androidx.media3.exoplayer.source.DefaultMediaSourceFactory(fixtureMedia)).build();
         player.setTrackSelectionParameters(player.getTrackSelectionParameters().buildUpon()
             .setMaxVideoSize(640,360).setForceLowestBitrate(true).setTrackTypeDisabled(C.TRACK_TYPE_AUDIO,true).build());
         player.setVolume(0f);playerView.setPlayer(player);

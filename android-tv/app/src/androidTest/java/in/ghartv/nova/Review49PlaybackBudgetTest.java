@@ -21,14 +21,50 @@ public class Review49PlaybackBudgetTest {
     @Test public void firstFrameNeedsOneSecondOfPositionProgress(){FilmStartBudget b=fresh();b.sample(500,true,false,true,true,false,1,0,false);assertEquals(FilmStartBudget.State.STARTING,b.sample(1400,true,false,true,true,false,2,0,false));assertEquals(FilmStartBudget.State.PLAYING,b.sample(1500,true,false,true,true,false,2.1,0,false));}
     @Test public void stationaryPosterClockIsNotPlayback(){FilmStartBudget b=fresh();b.sample(500,true,false,true,true,false,1,0,false);assertEquals(FilmStartBudget.State.STARTING,b.sample(1600,true,false,true,true,false,1,0,false));}
     @Test public void brokenObservableSourceRequestsNext(){FilmStartBudget b=fresh();assertEquals(FilmStartBudget.State.NEXT,b.sample(800,true,false,false,false,true,0,4,false));assertEquals(2,b.attempt);}
-    @Test public void stalledObservableSourceHasBoundedTimeout(){FilmStartBudget b=fresh();assertEquals(FilmStartBudget.State.NEXT,b.sample(12101,true,false,false,false,true,0,0,false));}
-    @Test public void unobservableIframeNeverAutoSwitches(){FilmStartBudget b=fresh();assertEquals(FilmStartBudget.State.MANUAL,b.sample(12101,false,true,false,false,false,0,0,false));}
+    @Test public void stalledObservableSourceHasBoundedTimeout(){FilmStartBudget b=fresh();assertEquals(FilmStartBudget.State.NEXT,b.sample(150200,true,false,false,false,true,0,0,false));}
+    @Test public void unobservableIframeNeverAutoSwitches(){FilmStartBudget b=fresh();assertEquals(FilmStartBudget.State.MANUAL,b.sample(150200,false,true,false,false,false,0,0,false));}
     @Test public void activeVideoWithoutFrameApiIsLeftUndisturbed(){FilmStartBudget b=fresh();b.sample(1000,true,false,false,true,false,2,0,false);assertEquals(FilmStartBudget.State.MANUAL,b.sample(2200,true,false,false,true,false,3.2,0,false));assertEquals(-1,b.proofMs);}
     @Test public void pauseNeverStartsNextSource(){FilmStartBudget b=fresh();assertEquals(FilmStartBudget.State.PAUSED,b.sample(900,true,false,true,false,true,1,0,false));assertEquals(FilmStartBudget.State.PAUSED,b.sample(45000,true,false,true,false,true,1,4,false));}
     @Test public void cancellationIsTerminal(){FilmStartBudget b=fresh();b.cancel();assertEquals(FilmStartBudget.State.CANCELLED,b.sample(50000,true,false,false,false,true,0,4,false));}
-    @Test public void attemptLimitIsThree(){FilmStartBudget b=fresh();b.sample(1000,true,false,false,false,true,0,4,false);b.selected(1001);b.sample(2000,true,false,false,false,true,0,4,false);b.selected(2001);assertEquals(FilmStartBudget.State.EXHAUSTED,b.sample(3000,true,false,false,false,true,0,4,false));assertEquals(3,b.attempt);}
-    @Test public void totalBudgetIncludesSourceTransitions(){FilmStartBudget b=fresh();b.selected(44000);assertEquals(FilmStartBudget.State.EXHAUSTED,b.sample(45100,true,false,false,false,true,0,0,false));}
-    @Test public void protectedPlayerRequiresManualControls(){FilmStartBudget b=fresh();assertEquals(FilmStartBudget.State.MANUAL,b.sample(12200,true,false,false,false,true,0,4,true));}
+    @Test public void attemptLimitCoversTwelveSourcesInFourGroups(){
+        FilmStartBudget b=fresh();
+        for(int i=1;i<FilmStartBudget.MAX_ATTEMPTS;i++){
+            assertEquals(FilmStartBudget.State.NEXT,
+                b.sample(1000*i,true,false,false,false,true,0,4,false));
+            b.selected(1000*i+1);
+        }
+        assertEquals(FilmStartBudget.State.EXHAUSTED,
+            b.sample(1000*FilmStartBudget.MAX_ATTEMPTS,
+                true,false,false,false,true,0,4,false));
+        assertEquals(12,b.attempt);
+    }
+    @Test public void confirmedEmptyPlayerCanAdvanceOnlyAfterStableWait(){
+        FilmStartBudget b=fresh();
+        assertEquals(FilmStartBudget.State.STARTING,
+            b.confirmedEmptyAfterWait(10000,8,true));
+        assertEquals(FilmStartBudget.State.STARTING,
+            b.confirmedEmptyAfterWait(26000,7,true));
+        assertEquals(FilmStartBudget.State.STARTING,
+            b.confirmedEmptyAfterWait(26000,8,false));
+        assertEquals(FilmStartBudget.State.NEXT,
+            b.confirmedEmptyAfterWait(26000,8,true));
+        assertEquals(2,b.attempt);
+    }
+    @Test public void opaqueIframeHistoryBlocksAutomaticEmptyFallback(){
+        FilmStartBudget b=fresh();
+        b.sample(200,false,true,false,false,false,0,0,false);
+        assertEquals(FilmStartBudget.State.STARTING,
+            b.confirmedEmptyAfterWait(26000,8,true));
+        assertEquals(1,b.attempt);
+    }
+    @Test public void healthyVideoDoesNotAutoAdvanceAsEmpty(){
+        FilmStartBudget b=fresh();
+        b.sample(200,true,false,false,true,false,0.1,0,false);
+        assertEquals(FilmStartBudget.State.STARTING,
+            b.confirmedEmptyAfterWait(26000,8,true));
+    }
+    @Test public void totalBudgetIncludesSourceTransitions(){FilmStartBudget b=fresh();b.selected(44000);assertEquals(FilmStartBudget.State.EXHAUSTED,b.sample(1800200,true,false,false,false,true,0,0,false));}
+    @Test public void protectedPlayerRequiresManualControls(){FilmStartBudget b=fresh();assertEquals(FilmStartBudget.State.MANUAL,b.sample(150200,true,false,false,false,true,0,4,true));}
     @Test public void healthyPlaybackIgnoresLateErrors(){FilmStartBudget b=fresh();b.sample(500,true,false,true,true,false,1,0,false);b.sample(1700,true,false,true,true,false,2,0,false);assertEquals(FilmStartBudget.State.PLAYING,b.sample(100000,true,false,false,false,true,2,4,false));}
     @Test public void sourceTransitionResetsFrameProof(){FilmStartBudget b=fresh();b.sample(400,true,false,true,true,false,1,0,false);b.selected(1000);assertEquals(-1,b.firstFrameMs);assertEquals(FilmStartBudget.State.STARTING,b.sample(2500,true,false,false,false,true,0,0,false));}
     @Test public void unavailableStopsAutomation(){FilmStartBudget b=fresh();b.unavailable("Title unavailable");assertEquals(FilmStartBudget.State.MANUAL,b.sample(20000,true,false,false,false,true,0,4,false));}

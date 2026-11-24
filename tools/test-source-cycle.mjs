@@ -34,6 +34,17 @@ public class FilmSourceCycleTest {
     "invalid source choices rejected");
   expect(FilmSourceCycle.next(List.of("Player 1","Player 2"),Set.of("Player 1"),false)==1,
     "auto advances only untried");
+  expect(FilmSourceCycle.next(List.of("Player 7","Player 5","Player 2","Player 6"),
+    Set.of("Player 5"),true,"Player 5")==3,
+    "after 5 manually choose 6 rather than re-opening earlier Player 2");
+  expect(FilmSourceCycle.next(List.of("Player 7","Player 5","Player 2","Player 6"),
+    Set.of("Player 5","Player 6"),false,"Player 6")==0,
+    "auto after 6 chooses 7 and never wraps automatically");
+  expect(FilmSourceCycle.next(List.of("Player 7","Player 5","Player 2","Player 6"),
+    Set.of("Player 5","Player 6","Player 7"),true,"Player 7")==2,
+    "viewer can manually wrap to still-untried 2");
+  expect(FilmSourceCycle.next(List.of("Player 9","Player 3","Player 1","Player 6"),
+    new HashSet<>(),false)==2,"shuffled controls begin at Player 1");
   System.out.print("PASS 12 ordered, no automatic wrap, manual wrap first, invalid rejected");
  }
 }`);

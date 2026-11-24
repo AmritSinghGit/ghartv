@@ -28,6 +28,8 @@ final class FilmNativeControls {
         default void playerSelected(){} default void actionOutcome(String action,String state){} default void pageObserved(JSONObject data){} default void pageAction(String action){} default void verificationRequired(){}
         /** Sanitized observed source labels for the local, paired phone UI. */
         default void sourcesChanged(String json) {}
+        default boolean autoStartSourceOnWatchPage(){return false;}
+        default void phoneSourceOutcome(String code){}
     }
     private final Activity activity;
     private final View chrome;
@@ -58,6 +60,8 @@ final class FilmNativeControls {
     private long lastPosterKey,selectedAt;
     private int generation,probeCount;private long probeBegan=SystemClock.elapsedRealtime();
     private String lastPhoneSources="";
+    private int phoneReadTicket;
+    private int phoneEvidence; // 0 none, 1 clock progress, 2 rendered frame
     private boolean documentReadySeen;
     // Enabled for *observable* top-document media errors only. Opaque iframe
     // playback is never assumed dead or switched without the viewer's choice.
@@ -83,7 +87,7 @@ final class FilmNativeControls {
     void attach(WebView web){documentReadySeen=false;probeBegan=SystemClock.elapsedRealtime();pageActions.clear();posterActions.clear();pageBusy=false;browser=web;generation++;reading=false;posterBusy=false;postersReady=false;}
     private void sendPhoneSources(){
         JSONArray out=new JSONArray();
-        if(browser!=null&&snapshotUrl.equals(browser.getUrl())&&active&&!blocked){
+        if(browser!=null&&snapshotUrl.equals(browser.getUrl())&&!blocked){
             for(int i=0;i<players.length();i++){
                 JSONObject p=players.optJSONObject(i);if(p==null)continue;
                 String label=p.optString("label");
@@ -103,33 +107,118 @@ final class FilmNativeControls {
                         if(!b.isEmpty()){if(shortBadges.length()>0)shortBadges.append(", ");shortBadges.append(b);}
                     }
                     q.put("badges",shortBadges.toString());
-                    q.put("selected",label.equals(selected)||p.optBoolean("selected"));
+                    q.put("selected",selected.isEmpty()?p.optBoolean("selected"):label.equals(selected));
                     q.put("tried",attempted.contains(label));
                 }catch(org.json.JSONException ignored){}
                 out.put(q);
             }
         }
+        // Report source progress in sets of three without creating hidden
+        // media players. Only the one visible player may actually be tried.
+        int current=0;
+        java.util.regex.Matcher chosen=java.util.regex.Pattern.compile(
+            "(?i)^(?:player|server|source)\\s*#?\\s*(\\d{1,2})$").matcher(selected);
+        if(chosen.matches())current=Integer.parseInt(chosen.group(1));
+        // Before an active choice, show the first group as "awaiting
+        // selection"; never misrepresent it as three running streams.
+        int batch=current>0?(current-1)/3+1:players.length()>0?1:0;
+        String stage=phoneEvidence==2?"verified":
+            phoneEvidence==1?"time-advancing":current>0?"checking":"idle";
         // Never send provider URLs, iframe payloads, titles or credentials.
-        String json="{\"choices\":"+out.toString()+",\"observed\":"+players.length()+",\"partial\":"+playerTruncated+"}";
+        String json="{\"choices\":"+out.toString()+",\"observed\":"+players.length()+
+            ",\"partial\":"+playerTruncated+",\"batch\":"+batch+
+            ",\"batchStart\":"+(batch==0?0:3*batch-2)+
+            ",\"batchEnd\":"+(batch==0?0:Math.min(12,3*batch))+
+            ",\"phase\":\""+stage+"\"}";
         if(!json.equals(lastPhoneSources)){lastPhoneSources=json;host.sourcesChanged(json);}
     }
+    /** Phone source discovery is independent of whether the TV's native
+     * menu is visible. Pointer mode deliberately calls pause(), so a phone
+     * request must read the current page once without opening any TV tray,
+     * navigating, playing a stream, or changing keyboard focus.
+     */
     void requestPhoneSources(){
-        if(!active)return;
         sendPhoneSources();
-        probeCount=0;probeBegan=SystemClock.elapsedRealtime();finished();
+        readPhoneSources(null);
     }
-    boolean selectPhoneNumber(int number){
-        if(!active||number<1||number>12||browser==null||blocked||pending||
-           snapshotUrl.isEmpty()||!snapshotUrl.equals(browser.getUrl())||!host.pageIsVisible())return false;
-        for(int i=0;i<players.length();i++){
-            JSONObject p=players.optJSONObject(i);if(p==null)continue;
-            if(p.optString("label").matches("(?i)^(player|server|source)\\s*#?\\s*"+number+"$")){
-                select(i);return true;
-            }
+    private void readPhoneSources(java.util.function.Consumer<Boolean> callback){
+        final WebView page=browser;
+        final String url=page==null?null:page.getUrl();
+        if(page==null||url==null||blocked||
+            !FlixMomoActivity.allowedTop(Uri.parse(url))||!host.pageIsVisible()){
+            if(callback!=null)callback.accept(false);
+            return;
         }
-        return false;
+        final int request=++phoneReadTicket,epoch=generation;
+        page.evaluateJavascript(FilmPageSnapshot.read(),raw->{
+            if(request!=phoneReadTicket||epoch!=generation||page!=browser||
+                !url.equals(page.getUrl())||!host.pageIsVisible()){
+                if(callback!=null)callback.accept(false);
+                return;
+            }
+            try{
+                JSONObject data=decode(raw);
+                if(!"SNAPSHOT".equals(data.optString("state"))||
+                    !url.equals(data.optString("url")))throw new IllegalStateException("Stale sources");
+                JSONArray found=data.optJSONArray("players");
+                if(found==null||found.length()>48)throw new IllegalStateException("Invalid sources");
+                players=found;snapshotUrl=url;
+                detectedPlayers=data.optInt("playerDetectedCount",found.length());
+                playerTruncated=data.optBoolean("playerTruncated");
+                sendPhoneSources();
+                if(callback!=null)callback.accept(true);
+            }catch(Exception unavailable){
+                if(callback!=null)callback.accept(false);
+            }
+        });
     }
-    void started(){documentReadySeen=false;cancelPageTouch();dismissedByViewer=false;expectedWatchLabel="";host.controlsVisibility(false);pageActions.clear();posterActions.clear();postersReady=false;posterBusy=false;playerTrayAnnounced=false;mediaCandidates=0;pageBusy=false;detailFocusApplied=false;generation++;handler.removeCallbacksAndMessages(null);reading=false;pending=false;blocked=false;probeCount=0;probeBegan=SystemClock.elapsedRealtime();players=new JSONArray();snapshotUrl="";playerIdentity="";selectedByViewer=false;selected="";preferredAutoAttempted=false;attempted.clear();choiceView.setVisibility(View.GONE);tray.setVisibility(View.GONE);sendPhoneSources();}
+    /** A phone selection is a positive viewer action even while the TV menu
+     * is paused. It is bounded to a freshly verified source on the same page.
+     */
+    void choosePhoneSource(int number){
+        if(number<1||number>12)return;
+        readPhoneSources(ok->{
+            if(!ok||pending){host.phoneSourceOutcome("SOURCE_UNAVAILABLE");return;}
+            for(int i=0;i<players.length();i++){
+                JSONObject p=players.optJSONObject(i);
+                if(p==null)continue;
+                String label=p.optString("label");
+                if(label.matches("(?i)^(player|server|source)\\s*#?\\s*"+number+"$")){
+                    activatePhoneSource();
+                    select(i);return;
+                }
+            }
+            host.phoneSourceOutcome("SOURCE_UNAVAILABLE");
+        });
+    }
+    void nextPhoneSource(){
+        readPhoneSources(ok->{
+            if(!ok||pending){host.phoneSourceOutcome("SOURCE_UNAVAILABLE");return;}
+            activatePhoneSource();
+            if(!tryNextPlayer(true)){
+                sendPhoneSources();
+                host.phoneSourceOutcome("SOURCE_EXHAUSTED");
+            }
+        });
+    }
+    private void activatePhoneSource(){
+        active=true;
+        dismissedByViewer=true;
+        playerTrayAnnounced=true;
+        choiceView.setVisibility(View.GONE);
+        tray.setVisibility(View.GONE);
+    }
+    void phoneSourceClockProgress(){
+        if(phoneEvidence!=0)return;
+        phoneEvidence=1;
+        sendPhoneSources();
+    }
+    void phoneSourceVerified(){
+        if(phoneEvidence==2)return;
+        phoneEvidence=2;
+        sendPhoneSources();
+    }
+    void started(){phoneReadTicket++;phoneEvidence=0;documentReadySeen=false;cancelPageTouch();dismissedByViewer=false;expectedWatchLabel="";host.controlsVisibility(false);pageActions.clear();posterActions.clear();postersReady=false;posterBusy=false;playerTrayAnnounced=false;mediaCandidates=0;pageBusy=false;detailFocusApplied=false;generation++;handler.removeCallbacksAndMessages(null);reading=false;pending=false;blocked=false;probeCount=0;probeBegan=SystemClock.elapsedRealtime();players=new JSONArray();snapshotUrl="";playerIdentity="";selectedByViewer=false;selected="";preferredAutoAttempted=false;attempted.clear();choiceView.setVisibility(View.GONE);tray.setVisibility(View.GONE);sendPhoneSources();}
     // A slow document load must not spend the observation window before the
     // WebView can expose it. Commit/finish notifications renew it only once per
     // navigation; Menu and ordinary polling still use finished() without renewal.
@@ -140,21 +229,34 @@ final class FilmNativeControls {
     }
     void finished(){if(active&&!blocked){handler.removeCallbacks(probe);handler.post(probe);}}
     void failure(){cancelPageTouch();pageActions.clear();posterActions.clear();pageBusy=false;postersReady=false;posterBusy=false;blocked=true;generation++;reading=false;pending=false;handler.removeCallbacksAndMessages(null);hideAll();chrome.setVisibility(View.VISIBLE);}
-    void pause(){cancelPageTouch();pageActions.clear();posterActions.clear();pageBusy=false;posterBusy=false;active=false;generation++;reading=false;handler.removeCallbacksAndMessages(null);}
+    void pause(){phoneReadTicket++;cancelPageTouch();pageActions.clear();posterActions.clear();pageBusy=false;posterBusy=false;active=false;generation++;reading=false;handler.removeCallbacksAndMessages(null);}
     void resume(){probeBegan=SystemClock.elapsedRealtime();active=true;if(browser!=null&&!blocked){probeCount=0;finished();}}
     void destroy(){pause();browser=null;}
     boolean ownsFocus(){return choiceView.hasFocus()||tray.hasFocus();}
     boolean visible(){return tray.getVisibility()==View.VISIBLE||choiceView.getVisibility()==View.VISIBLE;}
     boolean back(){if(choiceView.getVisibility()==View.VISIBLE){choiceView.setVisibility(View.GONE);showTray(true);return true;}if(tray.getVisibility()==View.VISIBLE){hideTray();return true;}return false;}
     // Internal callers explicitly request a panel. User Menu toggles it below.
-    void menu(){dismissedByViewer=false;if(postersReady){hideAll();host.searchToolbar();}else showTray(true);}
+    void menu(){
+        dismissedByViewer=false;
+        // A stale poster layout must not hijack Menu while the actual movie
+        // has exposed a video or source choices. The viewer asked for player
+        // controls, not to return to Search in the middle of playback.
+        if(postersReady&&mediaCandidates==0&&players.length()==0){
+            hideAll();host.searchToolbar();
+        }else showTray(true);
+    }
     void toggleMenu(){cancelPageTouch();
         // A user's Menu action owns the layer; outstanding page callbacks must not
         // click or reposition after it. Background reads may continue afterwards.
         pageActions.clear();posterActions.clear();pageBusy=posterBusy=pending=reading=false;
         generation++;handler.removeCallbacksAndMessages(null);playerTrayAnnounced=true;
         if(visible()){hideAll();if(browser!=null&&host.pageIsVisible())browser.requestFocus();}
-        else {dismissedByViewer=false;if(postersReady)host.searchToolbar();else showTray(true);}
+        else {
+            dismissedByViewer=false;
+            if(postersReady&&mediaCandidates==0&&players.length()==0)
+                host.searchToolbar();
+            else showTray(true);
+        }
         finished();
     }
     void pageWatch(String label){if(pageBusy){host.actionOutcome("watch","ACTION_PENDING");return;}expectedWatchLabel=label==null?"":label;pageAction("watch");}
@@ -184,6 +286,20 @@ final class FilmNativeControls {
                             }
                         }
                     }
+                }
+                if(!preferredAutoAttempted&&!pending&&!selectedByViewer&&
+                    host.pageIsVisible()&&host.autoStartSourceOnWatchPage()&&
+                    players.length()>0&&data.optInt("mediaCandidates")==0){
+                    // Select the first numbered source in the first group.
+                    // One foreground player is activated at a time; no
+                    // hidden iframes, competing audio or ad windows.
+                    java.util.ArrayList<String> offered=new java.util.ArrayList<>();
+                    for(int i=0;i<players.length();i++){
+                        JSONObject choice=players.optJSONObject(i);
+                        offered.add(choice==null?"":choice.optString("label"));
+                    }
+                    int first=FilmSourceCycle.next(offered,attempted,false);
+                    if(first>=0){preferredAutoAttempted=true;select(first);}
                 }
                 sendPhoneSources();
         if(host.pageIsVisible()&&data.optBoolean("search"))enablePosters(actual);
@@ -263,21 +379,34 @@ final class FilmNativeControls {
         trayButtons.get(at).requestFocus();return true;
     }
     void openSources(){showPlayers();}
+    boolean hasUntriedSourceAfterCurrent(){
+        if(!active||blocked||selected.isEmpty()||players.length()==0)return false;
+        java.util.ArrayList<String> labels=new java.util.ArrayList<>();
+        for(int i=0;i<players.length();i++){
+            JSONObject item=players.optJSONObject(i);
+            labels.add(item==null?"":item.optString("label"));
+        }
+        return FilmSourceCycle.next(labels,attempted,false,selected)>=0;
+    }
     boolean tryNextPlayer(){return tryNextPlayer(true);}
     boolean tryNextPlayer(boolean manual){
         if(!active||blocked||pending||browser==null||players.length()==0)return false;
+        String currentLabel=selected;
         if(selected.isEmpty()){
             JSONObject current=null;
             for(int i=0;i<players.length();i++)if(players.optJSONObject(i)!=null&&players.optJSONObject(i).optBoolean("selected"))current=players.optJSONObject(i);
             if(current==null)current=players.optJSONObject(0);
-            if(current!=null)attempted.add(current.optString("label"));
+            if(current!=null){
+                currentLabel=current.optString("label");
+                attempted.add(currentLabel);
+            }
         }else attempted.add(selected);
         java.util.ArrayList<String> offered=new java.util.ArrayList<>(players.length());
         for(int i=0;i<players.length();i++){
             JSONObject item=players.optJSONObject(i);
             offered.add(item==null?"":item.optString("label"));
         }
-        int next=FilmSourceCycle.next(offered,attempted,manual);
+        int next=FilmSourceCycle.next(offered,attempted,manual,currentLabel);
         if(next<0)return false;
         select(next);return true;
     }
@@ -296,7 +425,7 @@ final class FilmNativeControls {
         source.evaluateJavascript(FilmPageSnapshot.select(snapshotUrl,index,label),raw->{
             if(!active||browser!=source||generation!=token)return;pending=false;
             try{JSONObject result=decode(raw);if(!"SELECTION_REQUESTED".equals(result.optString("state"))){state.setText("Provider choices changed. Reopen Players to refresh.");probeCount=0;finished();showTray(false);return;}
-                host.nativeMode();selected=label;lastProofTitleUrl=snapshotUrl;lastProofPlayer=label;selectedAt=SystemClock.elapsedRealtime();attempted.add(label);selectedByViewer=true;choiceView.setVisibility(View.GONE);chrome.setVisibility(View.GONE);state.setText(label+" selected · Menu opens Sources · playback not verified");hideAll();handler.removeCallbacks(slow);
+                phoneEvidence=0;host.nativeMode();selected=label;lastProofTitleUrl=snapshotUrl;lastProofPlayer=label;selectedAt=SystemClock.elapsedRealtime();attempted.add(label);selectedByViewer=true;choiceView.setVisibility(View.GONE);chrome.setVisibility(View.GONE);state.setText(label+" selected · Menu opens Sources · playback not verified");hideAll();handler.removeCallbacks(slow);
                 // Keep focus on the single visible player, not the sources menu.
                 source.requestFocus();
                 final int chosenGeneration=generation;
@@ -304,6 +433,8 @@ final class FilmNativeControls {
                     if(active&&browser==source&&generation==chosenGeneration&&
                        snapshotUrl.equals(source.getUrl())&&host.pageIsVisible())
                         source.evaluateJavascript(FilmPlaybackProbe.reveal(),null);
+                    if(active&&browser==source&&generation==chosenGeneration)
+                        source.evaluateJavascript(FilmPlaybackProbe.focusVisiblePlayer(),null);
                 },850L);
                 host.playerSelected();probeCount=0;probeBegan=SystemClock.elapsedRealtime();
                 sendPhoneSources();finished();

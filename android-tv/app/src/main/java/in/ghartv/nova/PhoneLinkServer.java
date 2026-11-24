@@ -110,7 +110,9 @@ public final class PhoneLinkServer {
              "SEEK_REQUESTED".equals(code)||"PLAY_REQUESTED".equals(code)||
              "PAUSE_REQUESTED".equals(code)||
              "FULLSCREEN_UNAVAILABLE".equals(code)||
-             "FULLSCREEN_REQUESTED".equals(code)))return;
+             "FULLSCREEN_REQUESTED".equals(code)||
+             "SOURCE_UNAVAILABLE".equals(code)||
+             "SOURCE_EXHAUSTED".equals(code)))return;
         final OutputStream out=activeOutput;
         if(out!=null&&!outbound.isShutdown()){
             try{outbound.execute(()->{
@@ -264,9 +266,16 @@ public final class PhoneLinkServer {
                 out.flush();
                 s.setSoTimeout(0);
                 activeOutput=out;
-                sink.connected(true);
+                // Always send the reconnect identity before notifying the
+                // foreground Activity. That callback can immediately queue a
+                // new mode; otherwise V could race ahead of S on first pair.
                 writeFrame(out, 1, ("S " + sess).getBytes(StandardCharsets.UTF_8));
-                mode(lastMode);
+                sink.connected(true);
+                // The newly paired/reconnected socket MUST receive a full
+                // mode snapshot. mode(lastMode) previously deduplicated itself
+                // and sent nothing, leaving the phone in HOME/BROWSE while
+                // the TV had already focused Search or a player.
+                sendAsync("V "+lastMode);
                 sendAsync("O "+lastSources);
                 sendAsync("H "+lastPlayback);
                 try { frames(in, out); } finally {

@@ -38,7 +38,11 @@ final class FilmPageFocus {
           return pack({state:'TAP',label:label(e),x:x-v.left,y:y-v.top,width:v.width,height:v.height,tag:e.tagName});
         }
 
-        let i=candidates.findIndex(e=>e===active||e.contains(active));if(i<0)i=candidates.findIndex(e=>e.getAttribute('data-ghartv-page-focus')==='true');
+        // The native remote's highlighted DOM target is authoritative while
+        // browsing with arrows. Android WebView may transiently move
+        // document.activeElement to an unrelated link between callbacks.
+        let i=candidates.findIndex(e=>e.getAttribute('data-ghartv-page-focus')==='true');
+        if(i<0)i=candidates.findIndex(e=>e===active||e.contains(active));
         function focus(n,tap=false){
          if(n<0||!candidates[n])return pack({state:'NOT_FOUND'});
          const e=candidates[n];if(!e.isConnected||!visible(e)||!permittedLink(e))return pack({state:'STALE'});
@@ -93,7 +97,13 @@ final class FilmPageFocus {
         if(!candidates.length)return pack({state:'NOT_FOUND'});
         if(i<0){let preferred=candidates.findIndex(watch);i=preferred>=0?preferred:0;if(action!=='activate')return focus(i);}
         if(action==='activate')return focus(i,true);
-        if(action==='focus')return focus(i);
+        if(action==='focus'){
+          // Opening a title should select its Watch control, not Android
+          // WebView's default first nav link (often "Home"). Once focused,
+          // the viewer's arrows remain free to navigate other controls.
+          const preferred=candidates.findIndex(watch);
+          return focus(preferred>=0?preferred:i);
+        }
         const r=candidates[i].getBoundingClientRect(),cx=r.left+r.width/2,cy=r.top+r.height/2;let best=-1,score=Infinity;
         for(let j=0;j<candidates.length;j++){if(i===j)continue;const b=candidates[j].getBoundingClientRect(),dx=b.left+b.width/2-cx,dy=b.top+b.height/2-cy;
          const horizontal=action==='left'||action==='right',forward=action==='left'?-dx:action==='right'?dx:action==='up'?-dy:dy,cross=horizontal?Math.abs(dy):Math.abs(dx);

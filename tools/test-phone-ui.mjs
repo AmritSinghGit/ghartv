@@ -28,7 +28,7 @@ function setup(){
    };
  };
  const ids=['status','mode','tip','typing','track','editor','send','go',
-   'mic','sources-panel','sources-list','sources-note','close-sources',
+   'mic','sources-panel','sources-list','sources-note','source-progress','close-sources',
    'sources-next','sources-refresh','timeline','seek-position',
    'played-time','total-time','video','tools','input-hint','backspace','clear-text'];
  for(const id of ids)elements.set(id,make(id));
@@ -106,6 +106,36 @@ test('unobservable video keeps timeline visible but blocks fake seek',()=>{
  assert.equal(ui.get('total-time').textContent,'--:--');
  ui.click(ui.actions.get('FULLSCREEN'));
  assert.equal(ui.socket.sent.at(-1),'A FULLSCREEN');
+});
+test('late pairing gets immediate SEARCH mode and phone input focus',()=>{
+ const ui=setup();
+ ui.receive('V SEARCH');
+ assert.equal(ui.get('typing').focused,true);
+ assert.equal(ui.get('video').hidden,true);
+ assert.match(ui.get('mode').textContent,/SEARCH/);
+ ui.get('typing').focused=false;
+ ui.receive('V EDITOR');
+ assert.equal(ui.get('typing').focused,true);
+});
+test('source choices remain open until the TV confirms selected source and show batch status',()=>{
+ const ui=setup();ui.receive('V VIDEO');
+ const choices=Array.from({length:12},(_,i)=>({number:i+1,label:'Player '+(i+1),
+   badges:'',selected:false,tried:false}));
+ ui.receive('O '+JSON.stringify({choices,observed:12,batch:1,batchStart:1,
+   batchEnd:3,phase:'checking'}));
+ assert.match(ui.get('source-progress').textContent,/Batch 1/);
+ assert.equal(ui.get('sources-panel').hidden,false);
+ ui.click(ui.actions.get('SOURCES'));
+ const buttons=ui.get('sources-list');
+ assert.ok(buttons.id);
+ // Requesting Sources never triggers a TV-native modal command.
+ assert.equal(ui.socket.sent.at(-1),'A SOURCES');
+ ui.receive('O '+JSON.stringify({choices:choices.map(x=>({...x,
+   selected:x.number===4,tried:x.number===1})),observed:12,
+   batch:2,batchStart:4,batchEnd:6,phase:'verified'}));
+ assert.match(ui.get('source-progress').textContent,/Player 4/);
+ assert.match(ui.get('source-progress').textContent,/Batch 2/);
+ assert.match(ui.get('source-progress').textContent,/verified/);
 });
 test('phone microphone safely suggests native keyboard dictation when browser speech is unsupported',()=>{
  const ui=setup();

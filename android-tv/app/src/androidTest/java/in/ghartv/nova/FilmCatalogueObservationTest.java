@@ -147,8 +147,9 @@ public class FilmCatalogueObservationTest {
                 Field f=NetworkDiagnostics.class.getDeclaredField("HOSTS");f.setAccessible(true);
                 String[][] rows=(String[][])f.get(null);Map<String,String> hosts=new HashMap<>();
                 for(String[] row:rows)assertNull("Service identifiers must be unique",hosts.put(row[0],row[1]));
-                assertEquals(9,hosts.size());
+                assertEquals(10,hosts.size());
                 assertEquals("jiotvapi.media.jio.com",hosts.get("jio_playback"));
+                assertEquals("jiotv.catchup.cdn.jio.com",hosts.get("jio_media_cdn"));
                 assertEquals("jiotvapi.cdn.jio.com",hosts.get("jio_guide"));
                 assertEquals("api.github.com",hosts.get("updates"));
                 assertEquals("ghartv-telemetry.ghartv-47d9a0.workers.dev",hosts.get("collector"));

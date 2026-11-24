@@ -21,6 +21,7 @@ final class FilmPlaybackMonitor {
         void sources();
         void cancelPage();
         void changed(String state);
+        default boolean canSkipEmptySource(){return false;}
     }
     final FilmStartBudget budget=new FilmStartBudget();
     final LinearLayout panel;
@@ -30,7 +31,8 @@ final class FilmPlaybackMonitor {
     private long token, observedAt,readTicket;private boolean reading,releasing,firstReveal;
     private boolean controlsOpen,userDismissed;
     private int supportingErrors;
-    private int observations;private String lastMessage="",lastError="";
+    private int observations,emptyObservations;
+    private String lastMessage="",lastError="";
     private final Runnable pulse=this::read;
     FilmPlaybackMonitor(Activity a,Host h){
         activity=a;host=h;panel=new LinearLayout(a);panel.setOrientation(LinearLayout.VERTICAL);
@@ -51,11 +53,13 @@ final class FilmPlaybackMonitor {
     boolean healthy(){return budget.state==FilmStartBudget.State.PLAYING;}
     void begin(){
         if(budget.running())return;
-        token++;reading=releasing=false;firstReveal=false;userDismissed=false;observations=0;lastError="";supportingErrors=0;budget.begin(SystemClock.elapsedRealtime());
+        token++;reading=releasing=false;firstReveal=false;userDismissed=false;
+        observations=emptyObservations=0;lastError="";supportingErrors=0;budget.begin(SystemClock.elapsedRealtime());
         render();handler.removeCallbacks(pulse);handler.post(pulse);
     }
     void selected(){
         token++;reading=releasing=false;firstReveal=false;userDismissed=false;
+        emptyObservations=0;
         if(!budget.running())budget.begin(SystemClock.elapsedRealtime());else budget.selected(SystemClock.elapsedRealtime());
         render();handler.removeCallbacks(pulse);handler.postDelayed(pulse,250);
     }
@@ -99,9 +103,15 @@ final class FilmPlaybackMonitor {
                 JSONObject d=decode(raw);
                 if(!"MEDIA_OBSERVATION".equals(d.optString("state"))||!java.util.Objects.equals(url,d.optString("url"))||!java.util.Objects.equals(url,page.getUrl())){schedule();return;}
                 observedAt=SystemClock.elapsedRealtime();
+                emptyObservations=!d.optBoolean("observable")&&d.optInt("frames")==0?
+                    Math.min(32,emptyObservations+1):0;
                 if(!firstReveal&&(d.optBoolean("observable")||d.optInt("frames")>0)){firstReveal=true;page.evaluateJavascript(FilmPlaybackProbe.reveal(),null);}
                 FilmStartBudget.State state=budget.sample(observedAt,d.optBoolean("observable"),d.optInt("frames")>0,
                     d.optBoolean("frame"),d.optBoolean("playing"),d.optBoolean("paused"),d.optDouble("position"),d.optInt("error"),d.optBoolean("protected"));
+                if(state==FilmStartBudget.State.STARTING&&emptyObservations>=8&&
+                    host.canSkipEmptySource())
+                    state=budget.confirmedEmptyAfterWait(observedAt,
+                        emptyObservations,true);
                 render();
                 if(state==FilmStartBudget.State.NEXT)releaseAndNext(true);
                 else if(state==FilmStartBudget.State.PLAYING){host.changed("FIRST_FRAME_AND_PROGRESS");}

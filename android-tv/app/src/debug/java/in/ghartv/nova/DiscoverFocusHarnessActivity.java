@@ -4,6 +4,15 @@ package in.ghartv.nova;
  * runs unchanged; only the network navigation is replaced with local fixture HTML. */
 public final class DiscoverFocusHarnessActivity extends FlixMomoActivity {
     @Override protected String initialProviderHome(){return "https://flixmomo.app/";}
+    @Override protected boolean autoOfferPhoneOnEntry(){return false;}
+    @Override protected boolean ownedFixtureForDebug(String url){
+        if(!BuildConfig.DEBUG||url==null)return false;
+        android.net.Uri u=android.net.Uri.parse(url);
+        String path=u.getPath();
+        return "https".equals(u.getScheme())&&"flixmomo.app".equals(u.getHost())&&
+            path!=null&&("/".equals(path)||"/search".equals(path)||
+                path.matches("/movie/fixture-[0-9]{1,2}"));
+    }
     // Historical parsed-control regressions; Review51PointerHarness tests the production default.
     @Override protected boolean pointerFirstBrowsing(){return false;}
     @Override protected boolean torFallbackEnabledForBuild(){return false;}

@@ -33,7 +33,7 @@ public class DiscoverExperienceTest {
     private FilmNativeControls controls;
     private FrameLayout frame;
     private FilmHomeView home;
-    private volatile String opened="";
+    private volatile String opened="",lastPageAction="none";
     private void ui(Runnable r){InstrumentationRegistry.getInstrumentation().runOnMainSync(r);}
     @Before public void setup(){
         Intent intent=new Intent(InstrumentationRegistry.getInstrumentation().getTargetContext(),PreviewHarnessActivity.class).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
@@ -52,9 +52,12 @@ public class DiscoverExperienceTest {
         TextView chrome=new TextView(activity);chrome.setVisibility(View.GONE);frame.addView(chrome);
         controls=new FilmNativeControls(activity,frame,chrome,new FilmNativeControls.Host(){
             public void navigate(String url){opened=url;} public void usePage(){web.requestFocus();} public void searchToolbar(){chrome.setVisibility(View.VISIBLE);} public void nativeMode(){} public void navigationHint(String value){}
+            public void actionOutcome(String action,String state){lastPageAction=action+":"+state;}
         });controls.attach(web);web.requestFocus();
     });}
-    private void awaitTitle(String expected) throws Exception {long deadline=SystemClock.elapsedRealtime()+3500;String title="";while(SystemClock.elapsedRealtime()<deadline){title=eval("JSON.stringify({title:document.title})").getString("title");if(expected.equals(title))return;SystemClock.sleep(40);}assertEquals(expected,title);}
+    private void awaitTitle(String expected) throws Exception {long deadline=SystemClock.elapsedRealtime()+3500;String title="";while(SystemClock.elapsedRealtime()<deadline){title=eval("JSON.stringify({title:document.title})").getString("title");if(expected.equals(title))return;SystemClock.sleep(40);}String detail="";
+        try{detail=eval("JSON.stringify({active:document.activeElement?.id,marked:document.querySelector('[data-ghartv-page-focus=true]')?.id,url:location.href,innerWidth,innerHeight,ready:document.readyState})").toString();}catch(Exception ignored){}
+        assertEquals("Native action "+lastPageAction+" · "+detail,expected,title);}
     private String details(){return "<nav><a href='/'>Home</a><a href='/watchlist'>Watchlist</a></nav><h1>A film title</h1><button id='watch' onclick=\"document.title=event.isTrusted?'WATCH_TRUSTED':'WATCH_UNTRUSTED'\">WATCH NOW</button><button id='save' onclick=\"document.title=event.isTrusted?'SAVE_TRUSTED':'SAVE_UNTRUSTED'\">ADD TO WATCHLIST</button>";}
     @Test public void detailFocusFindsWatchRatherThanUnrelatedHeader() throws Exception {
         page("/movie/one",details());JSONObject result=eval(FilmPageFocus.script("focus"));assertEquals("FOCUSED",result.getString("state"));assertEquals("WATCH NOW",result.getString("label"));assertEquals("watch",eval("JSON.stringify({id:document.activeElement.id})").getString("id"));
