@@ -29,3 +29,25 @@ Release cert SHA256: 40a9d8bf6b1c557b3d6fd02acef075368dd13e28691f207a297202d0d5e
 5. Original household stable update feed remains v80; do not publish to Dad without explicit owner approval.
 
 Unverified until direct evidence: real provider video picture/sound, cross-origin player controls, full Tor web public-site network access and final owner in-place acceptance.
+
+## 25 November — signed blue v87 UAT, recovered network, and AVD cleanup
+
+- On blue v86, Tor Project verification over the app's HTTP proxy returned HTTP 200. The isolated v87 native Tor/WebView test then passed (1/1) after the network recovered.
+- The first uninterrupted v87 instrumentation run passed through 31 complete test classes but stalled/crashed launching Review56SimpleHarnessActivity after 45 seconds, at about 13 minutes; ADB became unresponsive. This is a real emulator/test-harness failure and is NOT a clean single-run result.
+- The SAME canonical TV emulator was cold-booted using the emulator console, without wiping data. The failed Review56 class plus native Tor check then passed 10/10. All six remaining IPTV/Jio/DNS/one-click classes passed 39/39.
+- A deterministic class-by-class audit of the three runs found 394 passing individual tests covering all 38 source test classes. This is COMPLETE TEST COVERAGE ACROSS SEGMENTED RUNS, not a green uninterrupted 394-test run. Audit: owner-review/v87-regression-coverage-20261125.json on the Mac.
+- Additional checks passed: 24/24 phone UI/protocol tests, 54/54 Java socket checks, and actual Chrome mobile-layout smoke tests.
+- Signed original blue versionCode 87, versionName 0.7.13-tor-web-review, installed IN PLACE over v86. Android verified original firstInstallTime 2026-09-13 17:16:16, same signer and package, and retained data. Only temporary orange fixes/test packages were uninstalled.
+- On signed blue v87 FlixMomo opened and reported Tor control plus HTTP proxy ready, but two independent Tor Project HTTPS requests through its signed-app proxy timed out (curl exit 28). Therefore reliable signed-app Tor egress remains UNSOLVED despite the passing isolated native test. Tor-only fail-closed policy must remain.
+- Live signed-app Browser issue: a native EditText exists but was not focused. Its bounds subsequently collapsed to zero height; focus resided with WebView/toggle controls. The fixture test that passed focus beyond seven seconds does not prove the real async navigation path works. Do not mark one-tap Tor address editing repaired.
+- Actual film picture and audio, source switching, phone seeking, fullscreen and Back remain unverified on signed v87. Do not infer real playback from fixtures or Tor startup.
+- Production Dad/family update feed remains versionCode 80. No public release or household update.
+
+### Emulator space cleanup
+
+- Official avdmanager deleted the two obsolete TV devices GharTV_Google_TV_API_36 and GharTV_Google_TV_API36_google_tv, approximately 5.3 GiB combined. Reproducible definitions were saved at ~/Library/Application Support/GharTV/owner-review/avd-cleanup-20261125/; old snapshots and old virtual userdata were not backed up.
+- Preserved the active GharTV_Nova_Manual_google_tv_API36, the recent Nova predecessor, the GharTV phone test emulator and Pixel_9.
+
+### Remaining Dad-release gates
+
+Fix Browser address focus and bar visibility on actual signed WebView under asynchronous provider navigation; stabilize Tor outbound HTTPS without direct-route fallback; address emulator long-run stability and get a clean continuous or formally sharded complete test gate; then observe a real owner-selected movie with picture, sound and all phone playback controls. Private v87 owner review is permitted; family promotion is not.
