@@ -22,8 +22,8 @@ function setup(){
        contains:x=>flags.has(x)},
      addEventListener:(name,fn)=>listeners.set(name,fn),
      setAttribute(k,v){this[k]=v},
-     replaceChildren(){},append(){},scrollIntoView(){},
-     focus(){this.focused=true},getBoundingClientRect(){return {width:900,height:600}},
+     replaceChildren(){},append(){},scrollIntoView(options){this.lastScroll=options},
+     focus(){this.focused=true;document.activeElement=this},getBoundingClientRect(){return {width:900,height:600}},
      querySelector(s){return actions.get(s.match(/data-a="([^"]+)"/)?.[1])},
    };
  };
@@ -52,7 +52,9 @@ function setup(){
    constructor(){socket=this;this.readyState=1;this.sent=[]}
    send(message){this.sent.push(message)}
  }
- const context=createContext({document,window:{},WebSocket:WS,
+ const viewportHandlers=new Map();
+ const mockWindow={visualViewport:{height:83,addEventListener:(event,fn)=>viewportHandlers.set(event,fn),listeners:viewportHandlers}};
+ const context=createContext({document,window:mockWindow,WebSocket:WS,
    location:{search:'?k=review-key',host:'192.168.0.40:1945'},URLSearchParams,
    requestAnimationFrame:()=>{},setInterval:()=>{},setTimeout:()=>0,
    clearTimeout:()=>{},Date,console});
@@ -218,4 +220,21 @@ test('stale player updates cannot replace live Search or editor typing guidance'
  ui.receive('H '+JSON.stringify({state:'paused',fullscreen:false,positionMs:9000,
    seekable:false}));
  assert.match(ui.get('tip').textContent,/Type below on your phone/);
+});
+
+
+test('landscape SwiftKey resize centers the actual Search input rather than editor footer',()=>{
+ const ui=setup();ui.receive('V SEARCH');
+ const field=ui.get('typing');
+ assert.equal(ui.context.document.activeElement,field);
+ const resize=ui.context.window.visualViewport.listeners.get('resize');
+ assert.equal(typeof resize,'function');
+ resize();
+ assert.equal(field.lastScroll?.block,'center',
+   '83px keyboard viewport must show input and adjacent Search, not Backspace');
+ assert.equal(field.lastScroll?.behavior,'instant');
+ field.lastScroll=undefined;
+ ui.receive('V VIDEO');resize();
+ assert.equal(field.lastScroll,undefined,
+   'Stale input must not be scrolled while video controls are displayed');
 });

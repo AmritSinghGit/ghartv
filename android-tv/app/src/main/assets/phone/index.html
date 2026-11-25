@@ -635,7 +635,12 @@ input.addEventListener("keydown",e=>{
  }
 });
 function keepPhoneEditorVisible(){
- if(document.activeElement===input)editor.scrollIntoView({block:"end",behavior:"instant"});
+ // In landscape, SwiftKey can shrink the visual viewport to just ~83 CSS px.
+ // Aligning the editor's bottom hid the actual input and Search button above
+ // the keyboard. Center the input after an IME viewport resize instead.
+ // Never scroll on pointerdown/blur: that previously dropped Search taps.
+ if((mode==="SEARCH"||mode==="EDITOR")&&document.activeElement===input)
+   input.scrollIntoView({block:"center",behavior:"instant"});
 }
 input.addEventListener("focus",()=>{
  document.body.classList.add("typing-active");
