@@ -3,8 +3,8 @@
 ## Lineage and status
 - Continuation of the same GharTV source history on `review-v80-live-sources`. No force-push, reset, new control plane, or duplicate production app.
 - Source version: `81` / `0.7.7-phone-playback-review`; intended eventual Android package `in.ghartv.nova`, original release signing identity.
-- Isolated **debug** emulator package: `in.ghartv.nova.fixes`, installed on `emulator-5554` with independent sandbox. Original signed `in.ghartv.nova` v80 and its data were **not modified**.
-- The production GitHub update channel remains code80. Do **not** put this unsigned debug APK on the family feed; release needs original signer, original-package in-place UAT, verified source/APK hash, and owner review.
+- Historical: isolated orange debug package used for testing; on Nov 25 removed after signed original blue GharTV code81 replaced v80 in place. Original first-install date was preserved, data was not cleared.
+- Household production GitHub update channel remains code80. Canonical blue code81 is installed on the owner emulator only, not published. Physical phone and live-provider review and owner approval are still required.
 - Prior v80 signed artifact and its GitHub release remain unchanged. The previously committed `ab65fd0` and `c4b2264` work is included in this branch's history.
 
 ## What changed
@@ -15,9 +15,9 @@
 - A real, locally bundled 30-second owned video under an HTTPS cross-origin iframe is used for actual Play → clock advance → Fullscreen → Pause → Seek to 15 seconds → fullscreen restore testing.
 
 ## Verified evidence
-- Node deterministic suites: **17/17 passed** — playback Java-generated JavaScript, direct/nested iframe message validation, current play/seek, phone remote UI interactions, voice fallback, seek protocol and 12-source selection.
+- Node deterministic suites: **19/19 passed**, covering phone controls, source selection, search, timeline, speech fallback, and playback. Java phone socket smoke passed 51 checks.
 - Android debug and Android instrumentation APKs: Gradle **BUILD SUCCESSFUL** offline.
-- Isolated installed v81 debug app launched through the emulator to its own login screen; original signed v80 remains installed and unchanged.
+- The original signed blue package was upgraded to v81 by a successful data-preserving install; first-install date unchanged. Orange debug and test packages removed after review tests.
 - Native WebView test `FilmPhoneFrameBridgeTest`: **1/1 passed**, confirms document-start bridge, cross-origin iframe state, Pause request, Fullscreen and restoration.
 - Native real-media test `FilmPhoneRealMediaTest`: **1/1 passed**, confirms a locally owned video actually plays, advances, pauses, seeks and restores fullscreen in a real emulator WebView.
 - Existing `FilmNativeControlsTest`: **13/13 passed**; focused combined instrument suites **14/14 passed**.
@@ -28,15 +28,15 @@
 - An initial full 383-test instrumentation run found 31 failures BEFORE the fixture corrections. Subsequent focused reruns passed: Review49PlaybackBudgetTest 29/29, phone source selection 3/3, Tor controller 16/16, preview 6/6, simplified Search 8/8, provider migration 12/12, and pointer/navigation/native search 44/44. A clean full 383-test rerun has NOT yet been established; no zero-failure claim until then.
 - Real third-party movie players, their cross-origin/DRM restrictions, and physical Android/iOS phone remote UAT have **not** been verified. Opaque/protected media remain uncontrollable by design.
 - Some browser microphones do not grant SpeechRecognition access to an insecure local HTTP page. The current phone remote uses browser speech recognition when supported, otherwise phone keyboard dictation; **no actual voice recording or real iPhone microphone capture has been verified**.
-- Original release signer environment variables were unset on the Mac's coding shell and no original signing keystore located in the inspected checkout paths. Do not substitute debug signer or reinstall original app. Next signed delivery must be release code81 or later, same package and original certificate; confirm APK signature and safe install over code80 before pushing family feed.
+- Original private release signer and config were found and used successfully. Signed code81 certificate matches the actually installed signed v80. No secrets printed; no key regeneration.
 - v80 remains the family update. This v81 is a review candidate only.
 
 ## Owner review checklist
-1. Launch the orange GharTV Slow Review icon in the emulator. Its debug package has a separate login; do not uninstall or migrate the original app.
+1. Review the ORIGINAL blue GharTV Jio Live v81 app now opened on your Mac emulator. Orange debug app was removed, and blue app data retained.
 2. Pair a real phone on same private network and open a real film watch page. Confirm Play/Pause changes TV media; phone current time advances; seeking jumps the film time; Fullscreen toggles and returns without browser navigation.
 3. Test original full-screen custom view as well as normal page and one iframe/nested-frame player. Confirm unsupported player gives unavailable message rather than a false success.
 4. Check typing, phone Backspace/Clear, 12 observed sources, and mobile speech-to-text dictation if the browser supports it.
-5. Verify every affected historical regression, complete a full-suite clean run, run original-signed same-package in-place TV UAT preserving data, and only then consider household promotion.
+5. Android full-suite testing and signed in-place owner upgrade are complete. Owner still needs real provider, physical-phone and live Jio review before any household promotion.
 
 ## Additional fixes and checks — 24 November 2026
 - Phone pairing and reconnect send the exact current TV mode, including SEARCH, even when no mode change has occurred recently. Session identity is sent before asynchronous mode updates. PhoneLinkSmoke verified 51 socket/protocol checks.
@@ -50,6 +50,28 @@
 ## Final targeted checks and release hold (24 Nov)
 - The final isolated Android core regression run passed **55/55**: one iframe media bridge, one actual owned 30-second playing-video test, three phone-source tests, one clock-progress test, twelve historical Review40 title/playback tests, 29 playback-budget tests and eight simplified Search tests.
 - Final Node phone/protocol/source/controls tests passed **19/19**; actual Java socket smoke passed **51 checks**. The targeted pointer, old native Search and focus suite passed **44/44**. APK compilation succeeded offline and both separate emulator app identities were rechecked.
-- Legacy playback-overlay Review45 still fails two cases where an Android WebView reports a valid visible semantic Play button and the native controller records CLICK_SENT_NOT_PLAYBACK_PROOF, but the owned button's trusted click handler is not invoked. This is a real open blocker, NOT a verified click. No synthetic JavaScript .click() fallback has been added because that would not supply a trusted gesture.
-- Historical Review64 one-click tests also still have WebView fixture evaluation timeouts; root cause remains unverified. Both issues are recorded explicitly rather than weakening assertions or claiming a clean historical full-suite rerun.
-- Source review can be committed/pushed safely, but **do not create a household/public v81 APK** until remaining regressions, real phone/TV UAT, identical release signing and in-place data retention are verified.
+- HISTORICAL Nov24 defect RESOLVED Nov25: Android WebView swallowed a Play overlay mouse click into the video beneath it; one verified visible semantic Play button is now activated via a genuine native Enter key gesture. Overlay suite passed 9 of 9; no synthetic JS click or arbitrary advert controls.
+- HISTORICAL Nov24 test race RESOLVED Nov25: wait for expected completed watch document and use native URL state during navigation. One-click suite passed all 6 of 6 and preserves real video playback assertions.
+- Canonical signed blue v81 is installed for PRIVATE OWNER REVIEW, not family release. No household/public v81 release until real phone/TV UAT and owner approval.
+
+## Canonical blue GharTV review update — 25 November 2026
+- The orange package in.ghartv.nova.fixes is only a side-by-side debug build variant of the same source. The canonical normal release is original blue in.ghartv.nova, GharTV · Jio Live, code81 0.7.7-phone-playback-review. Do not create a second app.
+- Play overlay root cause: Android WebView delivered pointerdown and touchstart to the actual Play overlay but redirected mouseup/click to the video underneath. After validation for exactly one visible semantic Play BUTTON, GharTV now uses one native Enter gesture on that verified focused button. No JavaScript button.click() or popup/DRM bypass. Native overlay safety suite passed 9/9, including actual local video progress and refusal of ambiguous/advertisement overlays.
+- One-click root cause: old test fixtures evaluated JavaScript while title/watch documents were navigating, which cancels callbacks and falsely reports playback failure. The test now waits for the expected completed page before checking video. The six controlled one-click regression tests passed 6/6, including poster-to-Watch-to-video, Back non-replay and ambiguous Watch/manual controls.
+- Shared native-player fixture navigation race repaired; initial three failures retested 3 of 3 green. COMPLETE final Android instrumentation run: 384 of 384 passed, zero failures.
+- Existing shared source already contains QR pairing; phone Search/editor focus, reconnect and live typing; Backspace/Clear; 12 Sources and Try Next; numerical groups of 3; one foreground player and safe empty-only automatic fallback; actual media timeline/Seek, Play/Pause/Fullscreen; cross-origin iframe document-start media bridge; truthful playback verification; speech-to-text or keyboard dictation fallback; Tor-only browsing and automatic popup suppression.
+- Original saved signing material securely recovered. Signed original-package code81 owner APK installed on emulator, NOT published: owner-review/candidates/GharTV-code81-blue-review-7a90d9978810-signed.apk; SHA256 26835742d14ec4f57d633d992bf8dd8dd45a56ca407cc30967102fc7dd9df641.
+- Actual installed blue v80 signing certificate was directly read back and matches v81: 40a9d8bf6b1c557b3d6fd02acef075368dd13e28691f207a297202d0d5ec233c. Its installed APK checksum is 678d20735863528f8cb98f64c3c3f61a7d883d85be0c51712ab1a23846785db8, copied unchanged to /tmp/ghartv-blue-installed-v80-original.apk. Never uninstall blue or clear its app data.
+- Household publication remains code80. Do not modify update/latest.json, publish a release or send to Dad until owner approval.
+- Pending owner UAT: real Android/iOS phone pairing, native keyboard/mic permissions, actual third-party player compatibility and picture/sound on TV. Opaque or protected sources are not automatically marked playable; no DRM bypass. Batches of three are sequential visibility-checked source groups, not three concurrently hidden streams.
+
+## Final canonical blue owner delivery, 25 November 2026
+- ONE SOURCE TREE: earlier orange package was a separate debug application ID from the same source, not an independent implementation. User-facing code81 review package in.ghartv.nova, label GharTV Jio Live. Production family feed remains code80.
+- FULL ANDROID EMULATOR REGRESSION: final single unbroken run returned OK (384 tests), ZERO failures. Old 383/384 run had one transient JavaScript evaluation during poster navigation, resolved by reading native WebView URL while the page changes; actual video, trusted click, source safety, and Back assertions retained.
+- FULL PHONE TESTS: Node suites 19/19 pass, actual phone WebSocket smoke 51 checks. Native overlay 9/9, one-click video 6/6, plus 12-source, retry, QR, Search, timeline, fullscreen and Tor tests included in complete suite.
+- ORIGINAL SIGNING: APK was signed using prior private keystore from ~/Library/Application Support/GharTV/signing/. Certificate digest 40a9d8bf6b1c557b3d6fd02acef075368dd13e28691f207a297202d0d5ec233c confirmed against the APK actually installed as v80. No keys/passwords printed.
+- OWNER REVIEW APK: ~/Library/Application Support/GharTV/owner-review/candidates/GharTV-code81-blue-review-7a90d9978810-signed.apk, SHA256 26835742d14ec4f57d633d992bf8dd8dd45a56ca407cc30967102fc7dd9df641. Built from canonical source production build.
+- IN-PLACE RESULT: adb install -r succeeded, now versionCode 81, versionName 0.7.7-phone-playback-review, same firstInstallTime 2026-09-13 17:16:16. Original v80 exact APK recovery copy saved at /tmp/ghartv-blue-installed-v80-original.apk (SHA256 678d20735863528f8cb98f64c3c3f61a7d883d85be0c51712ab1a23846785db8). NO UNINSTALL OR DATA CLEAR OF BLUE.
+- ONLY CANONICAL INSTALLED: after final tests, the orange in.ghartv.nova.fixes and in.ghartv.nova.fixes.test packages were uninstalled. Blue MainActivity is top resumed in Android; qemu-system-aarch64 GUI window brought frontmost on Mac via System Events.
+- REAL-WORLD REVIEW STILL NEEDED: a physical phone/iOS keyboard/mic permission test, real live FlixMomo source opening and TV picture/sound, any opaque/DRM embedded players (do not bypass or falsely claim success), Jio Live login/playback and desired Back/Fullscreen behavior. Sequential groups of 3 are one foreground player at a time, never three speculative concurrent hidden streams.
+- RELEASE HOLD: No v81 GitHub release/tag, no update/latest.json change, no Dad/household update. Production stays v80 pending explicit owner approval.

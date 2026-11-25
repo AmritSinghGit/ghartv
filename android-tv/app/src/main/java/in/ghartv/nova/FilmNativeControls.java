@@ -495,6 +495,20 @@ final class FilmNativeControls {
                                     double w=target.optDouble("width"),h=target.optDouble("height"),x=target.optDouble("x"),y=target.optDouble("y");
                                     if(!Double.isFinite(w)||!Double.isFinite(h)||!Double.isFinite(x)||!Double.isFinite(y)||w<=0||h<=0||x<0||x>w||y<0||y>h){finishPageAction(token);return;}
                                     host.actionOutcome(action,"IFRAME".equals(target.optString("tag"))?"TARGET_FRAME":"VIDEO".equals(target.optString("tag"))?"TARGET_VIDEO":"TARGET_CONTROL");
+                                    // A valid, focused semantic Play <button> uses one native
+                                    // Enter gesture. Chromium's native video surface otherwise
+                                    // steals the synthesized mouse-click after a correct touch.
+                                    // No click() JavaScript or arbitrary page action is used.
+                                    if("media".equals(action)&&"BUTTON".equals(target.optString("tag"))&&
+                                        target.optBoolean("keyboardEligible",false)){
+                                        long when=SystemClock.uptimeMillis();
+                                        source.dispatchKeyEvent(new KeyEvent(when,when,KeyEvent.ACTION_DOWN,
+                                            KeyEvent.KEYCODE_ENTER,0));
+                                        source.dispatchKeyEvent(new KeyEvent(when,when+45,KeyEvent.ACTION_UP,
+                                            KeyEvent.KEYCODE_ENTER,0));
+                                        host.actionOutcome(action,"CLICK_SENT_NOT_PLAYBACK_PROOF");
+                                        finishPageAction(token);return;
+                                    }
                                     float px=(float)(x*source.getWidth()/w),py=(float)(y*source.getHeight()/h);
                                     hideAll();source.requestFocus();long time=SystemClock.uptimeMillis();touchPage=source;touchStarted=time;touchX=px;touchY=py;
                                     android.view.MotionEvent down=android.view.MotionEvent.obtain(time,time,android.view.MotionEvent.ACTION_DOWN,px,py,0);

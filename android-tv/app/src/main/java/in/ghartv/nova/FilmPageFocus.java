@@ -35,7 +35,14 @@ final class FilmPageFocus {
           if(!pending||pending.url!==location.href||!pending.element.isConnected||!visible(pending.element)||!permittedLink(pending.element))return pack({state:'STALE'});
           const e=pending.element,r=e.getBoundingClientRect(),v=viewport(),x=Math.max(v.left+1,Math.min(v.left+v.width-1,r.left+r.width/2)),y=Math.max(v.top+1,Math.min(v.top+v.height-1,r.top+r.height/2));
           const hit=document.elementFromPoint(x,y);if(!(hit===e||e.contains(hit)))return pack({state:'OBSCURED'});
-          return pack({state:'TAP',label:label(e),x:x-v.left,y:y-v.top,width:v.width,height:v.height,tag:e.tagName});
+          // On Android TV, a video surface can steal the final mouse click
+          // from an overlapping semantic Play button. A viewer-initiated
+          // native Enter on this exact verified BUTTON is a genuine trusted
+          // activation without a page-script click or an ad bypass.
+          const keyboardEligible=action==='commit'&&e.tagName==='BUTTON'&&
+            /^(play|play video|start video|start playback|resume video|resume playback|watch now)$/i.test(buttonText(e));
+          if(keyboardEligible)e.focus({preventScroll:true});
+          return pack({state:'TAP',label:label(e),x:x-v.left,y:y-v.top,width:v.width,height:v.height,tag:e.tagName,keyboardEligible});
         }
 
         // The native remote's highlighted DOM target is authoritative while

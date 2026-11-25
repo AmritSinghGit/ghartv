@@ -28,8 +28,20 @@ public class Review64OneClickPlayTest {
     }
     void waitPath(String path)throws Exception{
         long until=SystemClock.elapsedRealtime()+10000;JSONObject s=new JSONObject();
-        while(SystemClock.elapsedRealtime()<until){s=page();if(path.equals(s.optString("p"))&&"complete".equals(s.optString("ready"))){SystemClock.sleep(150);return;}SystemClock.sleep(50);}
-        fail("Expected "+path+" but page is "+s);
+        while(SystemClock.elapsedRealtime()<until){
+            final String[] current={""};final int[] progress={0};
+            h.ui(()->{current[0]=h.web.getUrl();progress[0]=h.web.getProgress();});
+            if(current[0]!=null&&path.equals(android.net.Uri.parse(current[0]).getPath())&&progress[0]>=100){
+                s=page();
+                if(path.equals(s.optString("p"))&&"complete".equals(s.optString("ready"))){
+                    SystemClock.sleep(150);return;
+                }
+            }
+            SystemClock.sleep(70);
+        }
+        fail("Expected "+path+" but WebView URL="+h.web.getUrl()+
+            " progress="+h.web.getProgress()+" requested="+((Review64OneClickHarness)h.activity).requested+
+            " flags:pointer="+flag("pointerPage")+" mouse="+flag("mouseActive")+" browserSearch="+flag("browserSearchSubmitted"));
     }
     JSONObject point(String selector)throws Exception{return h.eval("JSON.stringify((()=>{const e=document.querySelector("+JSONObject.quote(selector)+");e.scrollIntoView({block:'center'});const r=e.getBoundingClientRect();return {x:r.left+r.width/2,y:r.top+r.height/2,w:innerWidth,h:innerHeight}})())");}
     /** The viewer's click: move the pointer onto the element and press OK. */
@@ -43,7 +55,15 @@ public class Review64OneClickPlayTest {
         for(int attempt=0;attempt<3;attempt++){
             click("a");
             long until=SystemClock.elapsedRealtime()+4000;
-            while(SystemClock.elapsedRealtime()<until){if(!"/search".equals(page().optString("p")))return;SystemClock.sleep(100);}
+            while(SystemClock.elapsedRealtime()<until){
+                // WebView cancels evaluateJavascript callbacks while the poster
+                // navigates. URL state is native and safe to poll mid-navigation.
+                final String[] current={""};
+                h.ui(()->current[0]=h.web.getUrl());
+                if(current[0]!=null&&!"/search".equals(
+                    android.net.Uri.parse(current[0]).getPath()))return;
+                SystemClock.sleep(100);
+            }
         }
     }
     /** Search results page (the fixture serves its poster page for any search) with the pointer on. */
@@ -56,6 +76,10 @@ public class Review64OneClickPlayTest {
         h.ui(()->assertTrue("pointer is on the results page",flag("mouseActive")));
     }
     JSONObject waitPlaying()throws Exception{
+        // Wait for the final watch document before querying its live media.
+        // EvaluateJavascript callbacks are legitimately cancelled as the
+        // poster/title/watch navigation swaps documents.
+        waitPath("/watch/lantern");
         long until=SystemClock.elapsedRealtime()+25000;JSONObject s=new JSONObject();
         while(SystemClock.elapsedRealtime()<until){s=page();if("/watch/lantern".equals(s.optString("p"))&&s.optDouble("t")>.35&&!s.optBoolean("paused"))return s;SystemClock.sleep(100);}
         fail("Video did not start after one poster click: "+s);return s;

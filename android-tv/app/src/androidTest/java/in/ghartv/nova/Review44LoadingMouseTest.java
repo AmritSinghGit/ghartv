@@ -43,7 +43,22 @@ public class Review44LoadingMouseTest {
   ui(()->((FilmHomeView)field(activity,"homePanel")).focusRefresh());press(KeyEvent.KEYCODE_DPAD_DOWN);press(KeyEvent.KEYCODE_DPAD_CENTER);
   ready[0]=false;end=SystemClock.elapsedRealtime()+5000;while(SystemClock.elapsedRealtime()<end){ui(()->ready[0]=text((View)field(activity,"detailPanel"),"Watch now").isEnabled());if(ready[0])break;SystemClock.sleep(40);}assertTrue(ready[0]);
   ui(()->text((View)field(activity,"detailPanel"),"Watch now").requestFocus());press(KeyEvent.KEYCODE_DPAD_CENTER);
-  end=SystemClock.elapsedRealtime()+6000;while(SystemClock.elapsedRealtime()<end){if(eval("JSON.stringify({p:location.pathname})").optString("p").equals("/watch/lantern"))break;SystemClock.sleep(40);}assertEquals("/watch/lantern",eval("JSON.stringify({p:location.pathname})").getString("p"));
+  // A navigation can cancel an outstanding WebView evaluateJavascript callback.
+  // Wait for the real final watch document before asserting on its JavaScript.
+  end=SystemClock.elapsedRealtime()+7500;
+  final String[] currentUrl={""};final int[] currentProgress={0};
+  while(SystemClock.elapsedRealtime()<end){
+   ui(()->{currentUrl[0]=web.getUrl();currentProgress[0]=web.getProgress();});
+   if(currentUrl[0]!=null&&"/watch/lantern".equals(android.net.Uri.parse(currentUrl[0]).getPath())
+       &&currentProgress[0]>=100)break;
+   SystemClock.sleep(50);
+  }
+  assertNotNull("Watch document never loaded",currentUrl[0]);
+  assertEquals("Watch navigation did not finish: "+currentUrl[0]+" at "+currentProgress[0]+"%",
+      "/watch/lantern",android.net.Uri.parse(currentUrl[0]).getPath());
+  assertEquals("Watch page load must finish before media reads",100,currentProgress[0]);
+  SystemClock.sleep(130);
+  assertEquals("/watch/lantern",eval("JSON.stringify({p:location.pathname})").getString("p"));
   // Preload may stop the observation budget at PAUSED before the real Play tap.
   // Wait for the one media action and layout observation to settle, plus actual
   // owned-video progress; a stopped monitor is not itself proof of playback.
