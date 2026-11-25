@@ -51,3 +51,13 @@ After the owner manually unlocks the Samsung (no PIN/password ever requested fro
 - **Real keyboard focus:** existing Search/Editor modes and stale-video-status fix must be verified with Samsung SwiftKey on a visible, unlocked real phone. The scripted phone modes and focus tests are passing.
 - **Usage observability:** opt-in counts and recent technical states distinguish command request, inability to control a provider and observed playback progress. No false playback success claims or private search/query logging.
 - **Operational release hygiene:** the orange debug test variant must never be installed as the owner canonical package or interfere with blue app back-stack navigation; a signed same-package v84 owner review exists and all orange packages were removed.
+
+## Verified physical Samsung report loop — 25 November 2026
+
+The owner unlocked the authorized Samsung Chrome session and it reconnected to the signed canonical blue code84 TV app. The real Chrome DevTools protocol dispatched native-like touch events to the phone's **Start this session** button, and the actual paired TV returned a confirmed enabled report. The phone then requested **View report** and displayed the TV-local technical action counts; it sent one harmless D-pad Up command, then pressed **Stop recording**. The TV confirmed opt-in OFF, with the locally retained report still viewable for owner review. These are actual phone-to-TV outcomes, not simulated HTML or Java-only socket checks.
+
+A first physical touch attempt did not receive a timely TV confirmation; retrying with the visible, unlocked Chrome tab and a confirmed paired session passed the full Start/View/D-pad/Stop flow. This illustrates why connection-status/recovery and request-vs-confirmed feedback matter. Do not record a command as successful based solely on sending it.
+
+**Still unverified on physical hardware:** opening SwiftKey consistently on SEARCH/EDITOR transitions, voice dictation/mic permission, actual movie/provider video picture and sound, iframe/DRM restrictions, and real Jio channel playback. The phone later disconnected from USB and the emulator displayed the Android TV home screen. No claim of successful real-world film playback or native keyboard operation is warranted.
+
+Final Android instrumentation on the shipped owner build: OK (391 tests), zero failures. Final signed original-package code84 was installed in place retaining its original 2026-09-13 first-install date. Only original blue in.ghartv.nova remains installed. Household update/latest.json stays code80, with no family push.
