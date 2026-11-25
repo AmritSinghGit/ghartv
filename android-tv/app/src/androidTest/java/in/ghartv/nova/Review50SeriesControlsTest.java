@@ -42,7 +42,19 @@ public class Review50SeriesControlsTest {
     @Test public void changedEpisodeLabelCannotActivateAnOldButton()throws Exception{snapshot(link("Watch episode 2"));assertEquals("WATCH_ACTION_CHANGED",p.eval(FilmPageFocus.script("watch","Watch episode 1")).getString("state"));}
     @Test public void nativeSeriesDetailsShowEpisodeAndOnePressReachesPlayer()throws Exception{
         series();long started=SystemClock.elapsedRealtime();h.ui(()->{Button w=(Button)h.field(h.field(h.activity,"detailPanel"),"watch");assertEquals("Watch episode 1",w.getText().toString());w.requestFocus();});h.press(KeyEvent.KEYCODE_DPAD_CENTER);
-        long end=SystemClock.elapsedRealtime()+6000;JSONObject d=new JSONObject();while(SystemClock.elapsedRealtime()<end){d=h.eval("JSON.stringify({path:location.pathname,video:!!document.querySelector('video')})");if("/watch/lantern".equals(d.optString("path"))&&d.optBoolean("video"))break;SystemClock.sleep(30);}assertEquals("/watch/lantern",d.getString("path"));assertTrue(d.getBoolean("video"));
+        long end=SystemClock.elapsedRealtime()+8000;
+        String[] url={""};int[] progress={0};
+        while(SystemClock.elapsedRealtime()<end){
+            h.ui(()->{url[0]=h.web.getUrl();progress[0]=h.web.getProgress();});
+            if(url[0]!=null&&"/watch/lantern".equals(android.net.Uri.parse(url[0]).getPath())&&progress[0]>=100)break;
+            SystemClock.sleep(35);
+        }
+        assertNotNull("Series watch page URL missing",url[0]);
+        assertEquals("Series watch page never loaded", "/watch/lantern",android.net.Uri.parse(url[0]).getPath());
+        assertEquals("Series player document must finish",100,progress[0]);
+        JSONObject d=h.eval("JSON.stringify({path:location.pathname,ready:document.readyState,video:!!document.querySelector('video')})");
+        assertEquals("/watch/lantern",d.getString("path"));
+        assertEquals("complete",d.getString("ready"));assertTrue(d.getBoolean("video"));
         JSONObject timing=new JSONObject().put("scope","OWNED_SERIES_CLOUD_EMULATOR").put("watch_episode_to_player_document_ms",SystemClock.elapsedRealtime()-started).put("not_first_frame_or_provider_latency",true);
         h.ui(()->{try{java.io.File f=new java.io.File(h.activity.getExternalFilesDir(null),"review50-series-timing.json");try(java.io.FileWriter w=new java.io.FileWriter(f)){w.write(timing.toString());}}catch(Exception e){throw new AssertionError(e);}});
     }

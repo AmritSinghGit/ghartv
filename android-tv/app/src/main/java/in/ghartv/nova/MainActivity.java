@@ -19,6 +19,7 @@ import android.view.WindowManager;
 import android.widget.Button;
 import android.widget.EditText;
 import android.widget.FrameLayout;
+import android.widget.HorizontalScrollView;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.ProgressBar;
@@ -205,7 +206,9 @@ public final class MainActivity extends Activity implements ChannelNavigator.Lis
             HouseholdPhoneSession.markOffered();
             homePairDialog=new TvModal(this,"GHAR TV · OPTIONAL","Connect your phone",
                 "No setup needed. Press OK for the normal TV remote; the phone can connect later.")
-                .add(body).action("Continue with TV",true,android.app.Dialog::dismiss).show();
+                .add(body)
+                .action("Usage report",false,d->{d.dismiss();showUsageReport();})
+                .action("Continue with TV",true,android.app.Dialog::dismiss).show();
             offeredHomePhoneInProcess=true;
         });
     }
@@ -213,10 +216,32 @@ public final class MainActivity extends Activity implements ChannelNavigator.Lis
         if(HouseholdPhoneSession.connected()){
             new TvModal(this,"GHAR TV · PHONE","Phone connected",
                 "Your phone is connected. It controls TV focus here and the pointer in FlixMomo.")
+              .action("Usage report",false,d->{d.dismiss();showUsageReport();})
               .action("Disconnect",false,d->{HouseholdPhoneSession.disconnect();
                   updateHomePhoneBadge();d.dismiss();})
               .action("Continue",true,android.app.Dialog::dismiss).show();
         }else offerHomePhone(true);
+    }
+    private void showUsageReport(){
+        // A seven-day report can contain dozens of lines. Keep it INSIDE
+        // TvModal's bounded scroll area, not in its non-scrollable subtitle.
+        TextView report=TvUi.label(this,HouseholdPhoneSession.usageSummary(this),
+            15,TvUi.TEXT,false);
+        report.setLineSpacing(TvUi.dp(this,3),1.12f);
+        new TvModal(this,"GHAR TV · LOCAL PRIVACY","Usage and troubleshooting",
+            "Opt-in technical outcomes only · stored on this TV · no automatic upload.")
+            .add(report)
+            .action("Delete report",false,d->{d.dismiss();confirmDeleteUsage();})
+            .action("Close",true,android.app.Dialog::dismiss).show();
+    }
+    private void confirmDeleteUsage(){
+        new TvModal(this,"GHAR TV · PRIVACY","Delete usage report?",
+            "Delete the past seven days of opted-in technical counts and troubleshooting steps from this TV. This cannot be undone. No cloud copy exists.")
+            .action("Delete local data",false,d->{
+                HouseholdPhoneSession.clearUsage(this);
+                d.dismiss();showUsageReport();
+            })
+            .action("Cancel",true,android.app.Dialog::dismiss).show();
     }
     private TextView numberOverlay;
     private TextView emptyState;
@@ -419,54 +444,72 @@ public final class MainActivity extends Activity implements ChannelNavigator.Lis
         LinearLayout.LayoutParams liveParams = new LinearLayout.LayoutParams(-2, TvUi.dp(this, 28));
         liveParams.leftMargin = TvUi.dp(this, 14);
         header.addView(live, liveParams);
-        header.addView(new View(this), new LinearLayout.LayoutParams(0, 1, 1f));
+        // Keep the clock OUTSIDE the horizontally overflowing actions row.
+        // A narrow TV / display-scale change may scroll the actions, but may
+        // never crop the current time or push it beyond the screen edge.
+        HorizontalScrollView actionsScroll = new HorizontalScrollView(this);
+        actionsScroll.setHorizontalScrollBarEnabled(false);
+        actionsScroll.setOverScrollMode(View.OVER_SCROLL_NEVER);
+        actionsScroll.setFillViewport(false);
+        actionsScroll.setFocusable(false);
+        LinearLayout actions = new LinearLayout(this);
+        actions.setGravity(Gravity.CENTER_VERTICAL);
+        actionsScroll.addView(actions, new HorizontalScrollView.LayoutParams(-2, -1));
+        header.addView(actionsScroll, new LinearLayout.LayoutParams(0, -1, 1f));
 
         Button search = actionButton("Search / mic");
         search.setContentDescription("Search Jio live channels and films. Type or use the microphone.");
         search.setOnClickListener(view -> showSearch());
-        header.addView(search, headerButtonParams());
+        search.setPadding(TvUi.dp(this, 10), 0, TvUi.dp(this, 10), 0);
+        actions.addView(search, headerButtonParams());
 
         Button refresh = actionButton("Update guide");
         refresh.setOnClickListener(view -> refreshCatalogue(true));
-        header.addView(refresh, headerButtonParams());
+        refresh.setPadding(TvUi.dp(this, 10), 0, TvUi.dp(this, 10), 0);
+        actions.addView(refresh, headerButtonParams());
 
         Button iptv = actionButton("IPTV");
         iptv.setContentDescription("Open the separate public IPTV-org guide. No Jio account is shared.");
         iptv.setOnClickListener(view -> startActivity(new Intent(this, IptvActivity.class)));
-        LinearLayout.LayoutParams iptvParams = new LinearLayout.LayoutParams(TvUi.dp(this, 76), TvUi.dp(this, 40));
+        LinearLayout.LayoutParams iptvParams = new LinearLayout.LayoutParams(TvUi.dp(this, 70), TvUi.dp(this, 40));
         iptvParams.leftMargin = TvUi.dp(this, 6);
-        header.addView(iptv, iptvParams);
+        actions.addView(iptv, iptvParams);
 
         Button films = actionButton("FlixMomo");
         films.setOnClickListener(view -> startActivity(new Intent(this, FlixMomoActivity.class)));
-        LinearLayout.LayoutParams filmParams = new LinearLayout.LayoutParams(TvUi.dp(this, 104), TvUi.dp(this, 40));
+        LinearLayout.LayoutParams filmParams = new LinearLayout.LayoutParams(TvUi.dp(this, 96), TvUi.dp(this, 40));
         filmParams.leftMargin = TvUi.dp(this, 6);
-        header.addView(films, filmParams);
+        films.setPadding(TvUi.dp(this, 10), 0, TvUi.dp(this, 10), 0);
+        actions.addView(films, filmParams);
         homePhoneButton=actionButton("● Phone");homePhoneButton.setTextSize(12);
         homePhoneButton.setOnClickListener(v->showHomePhone());
         LinearLayout.LayoutParams phoneParams=new LinearLayout.LayoutParams(
-            TvUi.dp(this,76),TvUi.dp(this,38));
+            TvUi.dp(this,74),TvUi.dp(this,38));
         phoneParams.leftMargin=TvUi.dp(this,6);
-        header.addView(homePhoneButton,phoneParams);
+        actions.addView(homePhoneButton,phoneParams);
         updateHomePhoneBadge();
 
         accountButton = actionButton("Jio account");
         accountButton.setOnClickListener(view -> showAccountMenu());
-        LinearLayout.LayoutParams accountParams = new LinearLayout.LayoutParams(TvUi.dp(this, 126), TvUi.dp(this, 38));
-        accountParams.leftMargin = TvUi.dp(this, 10);
-        header.addView(accountButton, accountParams);
+        LinearLayout.LayoutParams accountParams = new LinearLayout.LayoutParams(TvUi.dp(this, 116), TvUi.dp(this, 38));
+        accountParams.leftMargin = TvUi.dp(this, 8);
+        accountButton.setPadding(TvUi.dp(this, 10), 0, TvUi.dp(this, 10), 0);
+        actions.addView(accountButton, accountParams);
 
         clock = TvUi.label(this, "", 17, TvUi.TEXT, true);
-        clock.setGravity(Gravity.CENTER | Gravity.END);
-        LinearLayout.LayoutParams clockParams = new LinearLayout.LayoutParams(TvUi.dp(this, 82), -1);
-        clockParams.leftMargin = TvUi.dp(this, 14);
+        clock.setGravity(Gravity.CENTER_VERTICAL | Gravity.END);
+        clock.setSingleLine(true);
+        // Reserve enough room for the longest 12-hour time (12:59 PM)
+        // at 17sp, without truncation or artificial text scaling.
+        LinearLayout.LayoutParams clockParams = new LinearLayout.LayoutParams(TvUi.dp(this, 110), -1);
+        clockParams.leftMargin = TvUi.dp(this, 8);
         header.addView(clock, clockParams);
         return header;
     }
 
     private LinearLayout.LayoutParams headerButtonParams() {
-        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(TvUi.dp(this, 108), TvUi.dp(this, 40));
-        params.leftMargin = TvUi.dp(this, 10);
+        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(TvUi.dp(this, 95), TvUi.dp(this, 40));
+        params.leftMargin = TvUi.dp(this, 7);
         return params;
     }
 

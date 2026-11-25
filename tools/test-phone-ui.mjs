@@ -30,7 +30,8 @@ function setup(){
  const ids=['status','mode','tip','typing','track','editor','send','go',
    'mic','sources-panel','sources-list','sources-note','source-progress','close-sources',
    'sources-next','sources-refresh','timeline','seek-position',
-   'played-time','total-time','video','tools','input-hint','backspace','clear-text'];
+   'played-time','total-time','video','tools','input-hint','backspace','clear-text',
+   'usage','usage-start','usage-stop','usage-view','usage-clear','usage-copy','usage-output'];
  for(const id of ids)elements.set(id,make(id));
  for(const action of ['PLAY','PAUSE','FULLSCREEN','SOURCES','NEXT','BACK']){
    const el=make('button-'+action);el.dataset.a=action;actions.set(action,el);
@@ -142,4 +143,66 @@ test('phone microphone safely suggests native keyboard dictation when browser sp
  ui.click(ui.get('mic'));
  assert.match(ui.get('input-hint').textContent,/phone's own keyboard/);
  assert.equal(ui.get('typing').focused,true);
+});
+
+test('technical usage report is explicit opt-in and can be stopped, viewed and deleted',()=>{
+ const ui=setup();
+ const empty={schema:'ghartv.usage-summary.v1',enabled:false,retention_days:7,
+   uploaded:false,total:0,counts:{},steps:[]};
+ ui.receive('G '+JSON.stringify(empty));
+ assert.equal(ui.get('usage-start').hidden,false,'Recording must begin OFF');
+ assert.equal(ui.get('usage-stop').hidden,true);
+ ui.click(ui.get('usage-start'));
+ assert.equal(ui.socket.sent.at(-1),'A USAGE_ON');
+ const opted={...empty,enabled:true,total:3,
+   counts:{CONSENT_ENABLED:1,SEARCH_SENT:1,SOURCE_UNAVAILABLE:1},
+   steps:[{at_s:0,event:'CONSENT_ENABLED'},{at_s:8,event:'SEARCH_SENT'},
+     {at_s:10,event:'SOURCE_UNAVAILABLE'}]};
+ ui.receive('G '+JSON.stringify(opted));
+ assert.equal(ui.get('usage-start').hidden,true);
+ assert.equal(ui.get('usage-stop').hidden,false);
+ assert.match(ui.get('usage-output').textContent,/source unavailable: 1/i);
+ assert.match(ui.get('usage-output').textContent,/no automatic upload/i);
+ ui.click(ui.get('usage-view'));
+ assert.equal(ui.socket.sent.at(-1),'A USAGE_VIEW');
+ ui.click(ui.get('usage-stop'));
+ assert.equal(ui.socket.sent.at(-1),'A USAGE_OFF');
+ ui.receive('G '+JSON.stringify({...opted,enabled:false}));
+ assert.equal(ui.get('usage-start').hidden,false);
+ ui.click(ui.get('usage-clear'));
+ assert.notEqual(ui.socket.sent.at(-1),'A USAGE_CLEAR',
+   'Deletion must require a second deliberate tap');
+ ui.click(ui.get('usage-clear'));
+ assert.equal(ui.socket.sent.at(-1),'A USAGE_CLEAR');
+ ui.receive('G '+JSON.stringify(empty));
+ assert.match(ui.get('usage-output').textContent,/Technical actions: 0/);
+});
+test('usage report displays only validated event labels and never HTML',()=>{
+ const ui=setup();
+ ui.receive('G '+JSON.stringify({schema:'ghartv.usage-summary.v1',enabled:true,
+   retention_days:7,uploaded:false,total:1,
+   counts:{SEARCH_SENT:1,'<script>evil</script>':999},steps:[
+     {at_s:4,event:'SEARCH_SENT'},{at_s:7,event:'password=secret'}]}));
+ const out=ui.get('usage-output').textContent;
+ assert.match(out,/search sent: 1/);
+ assert.doesNotMatch(out,/script|password|secret/);
+});
+test('stale player updates cannot replace live Search or editor typing guidance',()=>{
+ const ui=setup();
+ ui.receive('V VIDEO');
+ ui.receive('H '+JSON.stringify({state:'playing',fullscreen:false,positionMs:5000,
+   seekable:true,seekStartMs:0,seekEndMs:60000}));
+ assert.match(ui.get('tip').textContent,/TV player playing/);
+ ui.receive('V SEARCH');
+ assert.equal(ui.get('typing').focused,true);
+ assert.match(ui.get('tip').textContent,/updates the TV search live/);
+ ui.receive('H '+JSON.stringify({state:'playing',fullscreen:false,positionMs:9000,
+   seekable:true,seekStartMs:0,seekEndMs:60000}));
+ assert.match(ui.get('tip').textContent,/updates the TV search live/);
+ assert.equal(ui.get('timeline').hidden,true);
+ ui.receive('V EDITOR');
+ assert.match(ui.get('tip').textContent,/Type below on your phone/);
+ ui.receive('H '+JSON.stringify({state:'paused',fullscreen:false,positionMs:9000,
+   seekable:false}));
+ assert.match(ui.get('tip').textContent,/Type below on your phone/);
 });

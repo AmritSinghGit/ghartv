@@ -29,7 +29,27 @@ public class Review51PointerSearchTest {
         long until=SystemClock.elapsedRealtime()+6000;boolean[] ready={false};while(SystemClock.elapsedRealtime()<until){h.ui(()->ready[0]=((FilmHomeView)f("homePanel")).cardCount()>0);if(ready[0])break;SystemClock.sleep(30);}assertTrue(ready[0]);
     }
     void title()throws Exception{start();h.ui(()->((FilmHomeView)f("homePanel")).focusRefresh());h.press(KeyEvent.KEYCODE_DPAD_DOWN);h.press(KeyEvent.KEYCODE_DPAD_CENTER);waitPath("/movie/lantern");}
-    void waitPath(String path)throws Exception{long until=SystemClock.elapsedRealtime()+6000;JSONObject s=new JSONObject();while(SystemClock.elapsedRealtime()<until){s=h.eval("JSON.stringify({p:location.pathname,ready:document.readyState})");if(path.equals(s.optString("p"))&&"complete".equals(s.optString("ready")))break;SystemClock.sleep(50);}assertEquals(path,s.optString("p"));SystemClock.sleep(100);}
+    void waitPath(String path)throws Exception{
+        // A WebView navigation can cancel evaluateJavascript; observe the
+        // real native URL/load state first, then inspect the final document.
+        long until=SystemClock.elapsedRealtime()+8500;
+        String[] current={""};int[] progress={0};
+        while(SystemClock.elapsedRealtime()<until){
+            h.ui(()->{current[0]=h.web.getUrl();progress[0]=h.web.getProgress();});
+            if(current[0]!=null&&path.equals(android.net.Uri.parse(current[0]).getPath())
+                &&progress[0]>=100)break;
+            SystemClock.sleep(50);
+        }
+        assertNotNull("Browser URL missing",current[0]);
+        assertEquals("Wrong/unfinished document "+current[0]+" "+progress[0]+"%",path,
+            android.net.Uri.parse(current[0]).getPath());
+        assertEquals("Target document must finish loading",100,progress[0]);
+        SystemClock.sleep(100);
+        JSONObject stable=h.eval("JSON.stringify({p:location.pathname,ready:document.readyState})");
+        assertEquals(path,stable.optString("p"));
+        assertEquals("complete",stable.optString("ready"));
+        SystemClock.sleep(150);
+    }
     JSONObject point(String selector)throws Exception{return h.eval("JSON.stringify((()=>{const e=document.querySelector("+JSONObject.quote(selector)+");e.scrollIntoView({block:'center'});const r=e.getBoundingClientRect();return {x:r.left+r.width/2,y:r.top+r.height/2,w:innerWidth,h:innerHeight}})())");}
     void click(String selector)throws Exception{JSONObject p=point(selector);SystemClock.sleep(100);h.ui(()->{RemoteCursorState s=(RemoteCursorState)h.field(f("cursor"),"state");s.position((float)(p.optDouble("x")*h.web.getWidth()/p.optDouble("w")),(float)(p.optDouble("y")*h.web.getHeight()/p.optDouble("h")));});h.press(KeyEvent.KEYCODE_DPAD_CENTER);}
     Channel channel(String name,String lang,String now,int number){Channel c=new Channel();c.name=name;c.language=lang;c.nowTitle=now;c.number=number;return c;}

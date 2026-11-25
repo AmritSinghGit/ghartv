@@ -44,6 +44,8 @@ public final class PhoneLinkServer {
         default void chooseSource(int number) {}
         /** Absolute seek position in milliseconds, validated against observed media. */
         default void seek(long positionMs) {}
+        /** Strictly allowlisted technical outcome name; never input text. */
+        default void metric(String event) {}
     }
 
     static final int MAX_FRAME = 4096;
@@ -81,6 +83,12 @@ public final class PhoneLinkServer {
         if(json.equals(lastPlayback))return;
         lastPlayback=json;
         sendAsync("H "+json);
+    }
+    /** TV-local, explicitly opted-in technical summary. No automatic upload. */
+    public void usageReport(String safeJson) {
+        if (safeJson == null || safeJson.length() > 3500 ||
+            !safeJson.startsWith("{\"schema\":\"ghartv.usage-summary.v1\"")) return;
+        sendAsync("G " + safeJson);
     }
     /** Explicit phone Refresh must receive the current list even if unchanged. */
     public void refreshSources(){sendAsync("O "+lastSources);}
@@ -372,8 +380,17 @@ public final class PhoneLinkServer {
                     if(action.equals("PLAY")||action.equals("PAUSE")||action.equals("BACK")||
                        action.equals("FULLSCREEN")||action.equals("NEXT")||
                        action.equals("SEARCH")||action.equals("GO")||
-                       action.equals("SOURCES"))
+                       action.equals("SOURCES")||
+                       action.equals("USAGE_ON")||action.equals("USAGE_OFF")||
+                       action.equals("USAGE_VIEW")||action.equals("USAGE_CLEAR"))
                         sink.action(action);
+                    return true;
+                }
+                case 'I': {
+                    if(m.equals("I PHONE_FOCUS_OK"))sink.metric("PHONE_FOCUS_OK");
+                    else if(m.equals("I PHONE_FOCUS_BLOCKED"))sink.metric("PHONE_FOCUS_BLOCKED");
+                    else if(m.equals("I PHONE_RECONNECTED"))sink.metric("PHONE_RECONNECTED");
+                    else if(m.equals("I PHONE_VOICE_FALLBACK"))sink.metric("PHONE_VOICE_FALLBACK");
                     return true;
                 }
                 case 'P': return false;

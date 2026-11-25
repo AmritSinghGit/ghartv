@@ -22,6 +22,7 @@ public final class PhoneLinkSmoke {
         public void edit(String command){got.add("EDIT "+command);}
         public void liveText(String value){got.add("LIVE "+value);}
         public void chooseSource(int number){got.add("SOURCE "+number);}
+        public void metric(String event){got.add("I "+event);}
         public void connected(boolean c){got.add(c?"on":"off");}};
     static String hp,sess;
     static String http(int port,String target,String extra) throws Exception{
@@ -75,11 +76,18 @@ public final class PhoneLinkSmoke {
             s.feedback("FIELD_REQUIRED");ok(readFrame(in).equals("R FIELD_REQUIRED"));
             s.feedback("EDIT_APPLIED");ok(readFrame(in).equals("R EDIT_APPLIED"));
             s.feedback("EDIT_FIELD_REQUIRED");ok(readFrame(in).equals("R EDIT_FIELD_REQUIRED"));
+            String safeUsage="{\"schema\":\"ghartv.usage-summary.v1\",\"enabled\":true,\"total\":2,\"steps\":[]}";
+            s.usageReport(safeUsage);
+            ok(readFrame(in).equals("G "+safeUsage)); // bounded, local, no sensitive text
             s.feedback("PASSWORD"); // unsupported feedback never sent
             s.mode("PASSWORD");  // unsupported mode ignored, no frame
             frame(o,"S 0 350");frame(o,"S 9000 -9000");frame(o,"A PLAY");
             frame(o,"A NEXT");frame(o,"A FULLSCREEN");frame(o,"A SEARCH");
-            frame(o,"A GO");frame(o,"A MALWARE");frame(o,"A OPEN_URL");
+            frame(o,"A GO");frame(o,"A USAGE_ON");frame(o,"A USAGE_VIEW");
+            frame(o,"A USAGE_OFF");frame(o,"A USAGE_CLEAR");
+            frame(o,"A MALWARE");frame(o,"A OPEN_URL");
+            frame(o,"I PHONE_FOCUS_OK");frame(o,"I PHONE_RECONNECTED");
+            frame(o,"I PASSWORD=forbidden");
             frame(o,"L Avengers");frame(o,"L ");
             frame(o,"J 1");frame(o,"J 12");frame(o,"J 13");frame(o,"J x");
             frame(o,"Q Planet Earth");
@@ -105,6 +113,10 @@ public final class PhoneLinkSmoke {
             ok(got.contains("A PLAY")&&got.contains("A NEXT")&&got.contains("A FULLSCREEN")&&
                got.contains("A SEARCH")&&got.contains("A GO"));
             ok(!got.contains("A MALWARE")&&!got.contains("A OPEN_URL"));
+            ok(got.contains("A USAGE_ON")&&got.contains("A USAGE_VIEW")&&
+               got.contains("A USAGE_OFF")&&got.contains("A USAGE_CLEAR"));
+            ok(got.contains("I PHONE_FOCUS_OK")&&got.contains("I PHONE_RECONNECTED")
+               &&!got.contains("I PASSWORD=forbidden"));
             ok(!got.contains("K junk")&&!got.contains("K 26")&&!got.contains("K 224")&&got.contains("K 4"));   // power/wake refused, back allowed                                             // bad number ignored
             long moves=got.stream().filter(x->x.equals("M 1 1")).count();ok(moves==120);
             ok(lag<20000);                                                           // ping after a stream under 20 ms

@@ -89,6 +89,16 @@ body.typing-active .track{min-height:65px}
 body.typing-active .dpad{grid-template-rows:repeat(3,32px);max-width:245px}
 body.typing-active .dpad button{min-height:32px}
 footer{text-align:center;color:var(--muted);font-size:11px;line-height:1.25}
+.usage{flex-shrink:0;background:#092833;border:1px solid #3f7880;border-radius:14px;
+  padding:8px 11px;color:var(--muted);font-size:12px}
+.usage summary{color:#b6ffeb;cursor:pointer;font-weight:850;list-style-position:inside;
+  padding:5px 2px;touch-action:manipulation}
+.usage p{line-height:1.5;margin:8px 0}
+.usage-actions{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:7px}
+.usage-actions button{min-height:38px;font-size:12px;padding:5px 7px}
+.usage-output{white-space:pre-wrap;overflow-wrap:anywhere;user-select:text;
+  color:#d7f4eb;font:500 11px/1.45 ui-monospace,monospace;margin:9px 0 1px;
+  max-height:185px;overflow:auto}
 [hidden]{display:none!important}
 #video[hidden],#tools[hidden]{display:none}
 body.video-mode .track{min-height:92px}
@@ -169,6 +179,18 @@ body.editor-mode .editor{border-color:var(--mint)}
   </div>
 </div>
 <footer id="footnote">Private home network only · No passwords, OTPs or payment details</footer>
+<details class="usage" id="usage">
+  <summary>Improve GharTV · Usage report</summary>
+  <p>Off by default. Start to record this paired session's technical results only: reconnects, button attempts, playback states and errors. No typed words, movie titles, passwords, pairing codes, device IDs or URLs. Stored on this TV for up to 7 days; never uploaded automatically.</p>
+  <div class="usage-actions">
+    <button id="usage-start" class="primary" type="button">Start this session</button>
+    <button id="usage-stop" type="button" hidden>Stop recording</button>
+    <button id="usage-view" type="button">View report</button>
+    <button id="usage-copy" type="button">Copy summary</button>
+    <button id="usage-clear" type="button">Delete local report</button>
+  </div>
+  <div id="usage-output" class="usage-output" role="status" aria-live="polite">Not recording. Start explicitly to collect technical steps.</div>
+</details>
 <script>
 "use strict";
 const status=document.getElementById("status"),modeEl=document.getElementById("mode"),
@@ -184,6 +206,7 @@ const sendButton=document.getElementById("send"),
 let lastSubmission="",submissionPending=false,liveTimer=null,composing=false;
 let currentChoices=[],lastPlayback={state:"unknown",fullscreen:false};
 let sourceBatch={batch:0,batchStart:0,batchEnd:0,phase:"idle"};
+let lastUsage=null,usageClearArmed=false,usageSummaryText="";
 const sourcesPanel=document.getElementById("sources-panel"),
  sourcesList=document.getElementById("sources-list"),
  sourcesNote=document.getElementById("sources-note"),
@@ -318,11 +341,12 @@ function setPlayback(d){
    totalTime.textContent=Number.isFinite(Number(d.durationMs))&&
      Number(d.durationMs)>0?timeLabel(Number(d.durationMs)):"--:--";
  }
- tip.textContent=playing?"TV player playing · timeline follows TV":
+ // Media reports can arrive after the TV has returned to Search or a
+ // website editor. Never let stale video state mask the live typing hint.
+ if(active)tip.textContent=playing?"TV player playing · timeline follows TV":
    paused?"TV player paused · tap Play to resume":
    d.state==="starting"?"Opening player · playback not yet confirmed":
-   active?"Player position unavailable · try TV controls if buttons do not respond":
-   "Point, tap or use arrows";
+   "Player position unavailable · try TV controls if buttons do not respond";
 }
 function phoneNotice(message){hint.textContent=message;}
 function focusPhoneInput(){
@@ -330,6 +354,12 @@ function focusPhoneInput(){
   // usually requires a direct viewer tap to open its native keyboard.
   try{input.focus({preventScroll:true});}catch(e){input.focus();}
   editor.scrollIntoView({block:"nearest",behavior:"smooth"});
+  // Focus is not the same as the OS keyboard actually opening: report only
+  // verified DOM focus. No keyboard text, field values, or key codes.
+  setTimeout(()=>{
+    if(!ready||(mode!=="SEARCH"&&mode!=="EDITOR"))return;
+    send(document.activeElement===input?"I PHONE_FOCUS_OK":"I PHONE_FOCUS_BLOCKED");
+  },120);
 }
 track.addEventListener("pointerup",()=>{
   // A TV-search trackpad tap is a genuine phone gesture; it can summon
@@ -345,6 +375,33 @@ function setOnline(online,message){
  seekPosition.disabled=!online;
  setPlayback(lastPlayback);
 }
+function setUsage(data){
+ if(!data||data.schema!=="ghartv.usage-summary.v1")return;
+ lastUsage=data;
+ const enabled=data.enabled===true;
+ document.getElementById("usage-start").hidden=enabled;
+ document.getElementById("usage-stop").hidden=!enabled;
+ const output=document.getElementById("usage-output");
+ const counts=data.counts&&typeof data.counts==="object"?data.counts:{};
+ const names=Object.keys(counts).filter(x=>/^[A-Z_]{3,35}$/.test(x)).sort();
+ const lines=[enabled?"Recording only this paired session":"Recording is OFF",
+   "TV-local report · 7-day retention · no automatic upload",
+   "Technical actions: "+Math.max(0,Math.min(100000,Number(data.total)||0))];
+ for(const name of names.slice(0,35)){
+   const value=Math.max(0,Math.min(100000,Number(counts[name])||0));
+   lines.push(name.replaceAll("_"," ").toLowerCase()+": "+value);
+ }
+ if(Array.isArray(data.steps)&&data.steps.length){
+   lines.push("Recent technical sequence (seconds since opt-in):");
+   for(const step of data.steps.slice(-12)){
+     if(!step||!/^[A-Z_]{3,35}$/.test(step.event||""))continue;
+     lines.push("+"+Math.max(0,Math.min(36000,Number(step.at_s)||0))+
+       "s · "+step.event.replaceAll("_"," ").toLowerCase());
+   }
+ }
+ usageSummaryText=lines.join("\n");
+ output.textContent=usageSummaryText;
+}
 function connect(){
  if(!key&&!session){setOnline(false,"Scan QR again");return;}
  try{ws=new WebSocket("ws://"+location.host+"/ws?"+(session?
@@ -352,7 +409,9 @@ function connect(){
    setOnline(false,"Connection unavailable");return;
  }
  ws.onopen=()=>{
+   const reconnect=attempts>0;
    attempts=0;const wasReady=ready;setOnline(true,"● Connected");
+   if(reconnect)send("I PHONE_RECONNECTED");
    if(!wasReady&&(mode==="SEARCH"||mode==="EDITOR"))focusPhoneInput();
  };
  ws.onclose=()=>{
@@ -362,7 +421,7 @@ function connect(){
      setTimeout(connect,1400);
    }else{
      status.textContent="● Offline · scan again";
-     phoneNotice("Connect your phone to the same Wi-Fi as the TV/Mac, then scan a fresh QR. Mobile data cannot reach this private address.");
+     phoneNotice("Connection expired or TV restarted. On blue GharTV, open Phone and scan its NEW QR. An old tab cannot reuse the previous pairing. Keep both devices on the same Wi-Fi.");
    }
  };
  ws.onmessage=e=>{
@@ -373,6 +432,8 @@ function connect(){
      try{setSources(JSON.parse(data.slice(2)));}catch(e){}
    }else if(data.startsWith("H ")){
      try{setPlayback(JSON.parse(data.slice(2)));}catch(e){}
+   }else if(data.startsWith("G ")){
+     try{setUsage(JSON.parse(data.slice(2)));}catch(e){}
    }
    else if(data.startsWith("R ")){
      const code=data.slice(2);
@@ -426,6 +487,7 @@ function setMode(next){
   EDITOR:"WEBSITE TEXT BOX",STARTING:"OPENING VIDEO",VIDEO:"PLAYING VIDEO",FULLSCREEN:"FULLSCREEN VIDEO"};
  modeEl.textContent=labels[next];
  tip.textContent=next==="EDITOR"?"Type below on your phone":
+   searching?"Type here · updates the TV search live":
    video?"Back · Play · Fullscreen · Sources":"Point, tap or use arrows";
  hint.textContent=searching?"Typing updates the TV search live. Tap Search to submit.":
    next==="EDITOR"?"Website text field selected. Type or use your phone keyboard microphone.":
@@ -436,6 +498,39 @@ function setMode(next){
  else input.placeholder="Select a TV text box first";
  setPlayback(lastPlayback);
 }
+document.getElementById("usage-start").addEventListener("click",()=>{
+ if(!ready){document.getElementById("usage-output").textContent="Pair with the TV first.";return;}
+ send("A USAGE_ON");
+ document.getElementById("usage-output").textContent="Opt-in requested · awaiting TV confirmation.";
+});
+document.getElementById("usage-stop").addEventListener("click",()=>{
+ if(ready)send("A USAGE_OFF");
+});
+document.getElementById("usage-view").addEventListener("click",()=>{
+ if(ready)send("A USAGE_VIEW");
+ else document.getElementById("usage-output").textContent="Reconnect to the TV to view the local report.";
+});
+document.getElementById("usage-clear").addEventListener("click",()=>{
+ const b=document.getElementById("usage-clear");
+ if(!usageClearArmed){
+   usageClearArmed=true;b.textContent="Confirm deletion";
+   setTimeout(()=>{usageClearArmed=false;b.textContent="Delete local report";},9000);
+   return;
+ }
+ usageClearArmed=false;b.textContent="Delete local report";
+ if(ready)send("A USAGE_CLEAR");
+});
+document.getElementById("usage-copy").addEventListener("click",async()=>{
+ if(!usageSummaryText){document.getElementById("usage-output").textContent="View report first.";return;}
+ try{
+   if(!navigator.clipboard)throw new Error("clipboard unavailable");
+   await navigator.clipboard.writeText(usageSummaryText);
+   document.getElementById("usage-copy").textContent="Copied";
+ }catch(e){
+   document.getElementById("usage-output").textContent=usageSummaryText+
+     "\n\nSelect the report text above to copy it.";
+ }
+});
 connect();
 setOnline(false,"● Connecting");
 setInterval(()=>send("P"),3000);
@@ -542,6 +637,7 @@ document.getElementById("mic").addEventListener("click",()=>{
  const Recognizer=window.SpeechRecognition||window.webkitSpeechRecognition;
  if(!Recognizer){
    hint.textContent="Use the microphone on your phone's own keyboard to dictate here.";
+   send("I PHONE_VOICE_FALLBACK");
    input.focus();return;
  }
  try{
