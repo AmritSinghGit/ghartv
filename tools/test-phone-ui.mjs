@@ -187,6 +187,19 @@ test('usage report displays only validated event labels and never HTML',()=>{
  assert.match(out,/search sent: 1/);
  assert.doesNotMatch(out,/script|password|secret/);
 });
+test('typing layout must not reflow away from Search during the button touch',()=>{
+ const ui=setup();
+ ui.receive('V SEARCH');
+ const input=ui.get('typing');
+ input.listeners.get('focus')();
+ assert.equal(ui.context.document.body.classList.contains('typing-active'),true);
+ input.listeners.get('blur')();
+ assert.equal(ui.context.document.body.classList.contains('typing-active'),true,
+   'Search mode keeps layout compact through pointerup/click');
+ ui.receive('V VIDEO');
+ assert.equal(ui.context.document.body.classList.contains('typing-active'),false,
+   'The normal trackpad layout returns after the mode changes');
+});
 test('stale player updates cannot replace live Search or editor typing guidance',()=>{
  const ui=setup();
  ui.receive('V VIDEO');

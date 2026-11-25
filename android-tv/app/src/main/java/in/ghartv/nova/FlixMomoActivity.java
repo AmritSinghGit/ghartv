@@ -33,6 +33,9 @@ import java.io.ByteArrayInputStream;
 /** Single provider page with original artwork, remote poster focus and player tray.
  * No result replacement, stream extraction, security weakening or private-log upload. */
 public class FlixMomoActivity extends Activity {
+    /** Narrow owner-phone navigation: open Films and focus the search box. */
+    public static final String EXTRA_PHONE_SEARCH_ON_ENTRY =
+        "in.ghartv.nova.PHONE_SEARCH_ON_ENTRY";
     private static final String HOME=FilmProviderPolicy.HOME;
     static final String PROVIDER_PREFERENCES="ghartv.film-provider-origin";
     static String preferredProviderHome(android.content.Context context){
@@ -865,6 +868,12 @@ public class FlixMomoActivity extends Activity {
                 !browserSearchSubmitted){
             query.requestFocus();phoneSearchWanted=true;notifyPhoneMode();
         }else toolbarAnchor.requestFocus();
+        if(getIntent().getBooleanExtra(EXTRA_PHONE_SEARCH_ON_ENTRY,false)){
+            getIntent().removeExtra(EXTRA_PHONE_SEARCH_ON_ENTRY);
+            // Wait until the Activity/window and the shared phone sink are
+            // ready; never inject a search query or submit provider content.
+            handler.post(this::focusPhoneFilmSearch);
+        }
         // One optional pairing offer when the film screen opens; pressing Back or
         // "Use TV remote" continues normally, no forced phone dependency.
         handler.postDelayed(()->{
@@ -1438,7 +1447,15 @@ public class FlixMomoActivity extends Activity {
     }
     private void voiceSearch(){filmEvent("film_voice_search");hideKeyboard();UnifiedSearch.chooseVoice(this);}
     @Override protected void onActivityResult(int request,int result,Intent data){super.onActivityResult(request,result,data);String text=UnifiedSearch.voiceText(request,result,data);if(!text.isEmpty()){query.setText(text);search();}else if(request==UnifiedSearch.VOICE&&result==RESULT_OK)UnifiedSearch.unavailable(this,"No usable speech result. Type your search or choose another language.");}
-    @Override protected void onNewIntent(Intent intent){super.onNewIntent(intent);setIntent(intent);String text=UnifiedSearch.clean(intent.getStringExtra(UnifiedSearch.QUERY));if(UnifiedSearch.valid(text)){query.setText(text);search();}}
+    @Override protected void onNewIntent(Intent intent){
+        super.onNewIntent(intent);setIntent(intent);
+        if(intent.getBooleanExtra(EXTRA_PHONE_SEARCH_ON_ENTRY,false)){
+            intent.removeExtra(EXTRA_PHONE_SEARCH_ON_ENTRY);
+            handler.post(this::focusPhoneFilmSearch);return;
+        }
+        String text=UnifiedSearch.clean(intent.getStringExtra(UnifiedSearch.QUERY));
+        if(UnifiedSearch.valid(text)){query.setText(text);search();}
+    }
     private void hideKeyboard(){InputMethodManager keyboard=(InputMethodManager)getSystemService(INPUT_METHOD_SERVICE);if(keyboard!=null)keyboard.hideSoftInputFromWindow(query.getWindowToken(),0);query.clearFocus();}
     private void usePage(){if(pointerPage){homeRequested=false;detailRequested=false;homePanel.setVisibility(View.GONE);detailPanel.setVisibility(View.GONE);liveResults.setVisibility(View.GONE);resumePagePointer(false);return;}inputEpoch++;noteInput("USE_PAGE");credit.setVisibility(View.GONE);networkNotice.setVisibility(View.GONE);playNotice.setVisibility(View.GONE);detailRequested=false;if(detailPanel!=null)detailPanel.setVisibility(View.GONE);homeRequested=false;if(homePanel!=null)homePanel.setVisibility(View.GONE);if(nativeControls!=null){nativeControls.hideAll();if(!mouseActive)nativeControls.resume();}hideKeyboard();chrome.setVisibility(View.GONE);if(browser!=null){browser.requestFocus();cursor.enter();nativeControls.enterPosters();}}
     private void toolbar(){

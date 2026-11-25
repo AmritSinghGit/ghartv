@@ -84,8 +84,10 @@ input{flex:1;min-width:0;height:46px;padding:10px 12px;color:var(--ink);
  border:1px solid #497e87;background:#113846;color:#d9fff4}
 .edit-tools button:active{background:#20696d}
 body.video-mode .edit-tools{display:none}
-body.typing-active .editor{border-color:#82efd9;scroll-margin-bottom:16px}
-body.typing-active .track{min-height:65px}
+body.typing-active .editor{border-color:#82efd9;scroll-margin-bottom:24px;flex-shrink:0}
+/* With an Android keyboard open, do not let flex:1 push typing under the IME. */
+body.typing-active .track{flex:0 0 65px;min-height:65px}
+body.typing-active .dpad,body.typing-active .tools{flex-shrink:0}
 body.typing-active .dpad{grid-template-rows:repeat(3,32px);max-width:245px}
 body.typing-active .dpad button{min-height:32px}
 footer{text-align:center;color:var(--muted);font-size:11px;line-height:1.25}
@@ -462,6 +464,7 @@ function send(message){if(ready&&ws&&ws.readyState===1)ws.send(message);}
 function setMode(next){
  if(!["HOME","BROWSE","SEARCH","EDITOR","STARTING","VIDEO","FULLSCREEN"].includes(next))return;
  mode=next;
+ if(next!=="SEARCH"&&next!=="EDITOR")document.body.classList.remove("typing-active");
  const video=next==="VIDEO"||next==="FULLSCREEN"||next==="STARTING";
  document.body.classList.toggle("video-mode",video);
  document.body.classList.toggle("editor-mode",next==="EDITOR"||next==="SEARCH");
@@ -631,8 +634,22 @@ input.addEventListener("keydown",e=>{
    e.preventDefault();editBackspace();
  }
 });
-input.addEventListener("focus",()=>{document.body.classList.add("typing-active");});
-input.addEventListener("blur",()=>{document.body.classList.remove("typing-active");});
+function keepPhoneEditorVisible(){
+ if(document.activeElement===input)editor.scrollIntoView({block:"end",behavior:"instant"});
+}
+input.addEventListener("focus",()=>{
+ document.body.classList.add("typing-active");
+ // Do not schedule a late scroll after focus: it can shift the Search
+ // button during a real touch. Only scroll when the IME resizes the view.
+});
+input.addEventListener("blur",()=>{
+ // The finger may be moving from the field onto Search. Re-expanding the
+ // trackpad on pointerdown shifts Search before pointerup, dropping the tap.
+ // Keep a compact layout until the TV really leaves text-entry mode.
+ if(mode!=="SEARCH"&&mode!=="EDITOR")
+   document.body.classList.remove("typing-active");
+});
+window.visualViewport?.addEventListener("resize",keepPhoneEditorVisible);
 document.getElementById("mic").addEventListener("click",()=>{
  const Recognizer=window.SpeechRecognition||window.webkitSpeechRecognition;
  if(!Recognizer){

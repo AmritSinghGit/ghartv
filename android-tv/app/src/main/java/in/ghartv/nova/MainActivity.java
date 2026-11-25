@@ -93,6 +93,9 @@ public final class MainActivity extends Activity implements ChannelNavigator.Lis
         }
     };
     private long lastPhoneNavigation;
+    // Prevent double-launch when a paired phone taps Search repeatedly while
+    // Android is still bringing the film activity to the front.
+    private boolean phoneFilmSearchOpening;
     private int pendingPhoneX,pendingPhoneY;
     private final PhoneLinkServer.Sink homePhoneSink=new PhoneLinkServer.Sink(){
         @Override public void connected(boolean yes){
@@ -158,7 +161,17 @@ public final class MainActivity extends Activity implements ChannelNavigator.Lis
             HouseholdPhoneSession.feedback("SEARCH_UNAVAILABLE");
         });}
         @Override public void action(String action){runOnUiThread(()->{
-            if("BACK".equals(action))phoneHomeKey(KeyEvent.KEYCODE_BACK);
+            if("SEARCH".equals(action)){
+                // The phone Search control must work from HOME, not only after
+                // someone manually opens Films. Echo SEARCH immediately so the
+                // phone's real keyboard can open while the TV Activity starts.
+                if(phoneFilmSearchOpening||isFinishing()||isDestroyed())return;
+                phoneFilmSearchOpening=true;
+                HouseholdPhoneSession.mode("SEARCH");
+                Intent film=new Intent(MainActivity.this,FlixMomoActivity.class);
+                film.putExtra(FlixMomoActivity.EXTRA_PHONE_SEARCH_ON_ENTRY,true);
+                startActivity(film);
+            }else if("BACK".equals(action))phoneHomeKey(KeyEvent.KEYCODE_BACK);
             else if("PLAY".equals(action)||"PAUSE".equals(action))
                 phoneHomeKey(KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE);
         });}
@@ -319,6 +332,7 @@ public final class MainActivity extends Activity implements ChannelNavigator.Lis
         TvUi.immersive(this);
         if (repository == null) return;
         guideActive=true;
+        phoneFilmSearchOpening=false;
         if (!JioSession.load(this).isPresent()) routeToLogin();
         else if(initialResume)initialResume=false;else loadFromDisk(false);
         mainHandler.post(this::syncPreviewFocus);

@@ -88,6 +88,31 @@ public class Review51PointerSearchTest {
     @Test public void plainTextSearchHasOneCombinedQuery()throws Exception{start();h.ui(()->{((EditText)f("query")).setText("  Paper Lantern  ");invoke("search",new Class[]{});});String url=((Review51PointerHarness)h.activity).requested;assertEquals("https://flixmomo.app/search?q=Paper%20Lantern",url);assertTrue(flag("homeRequested"));}
     @Test public void injectedSpeechResultUsesSameSearchPath()throws Exception{start();Intent data=new Intent().putStringArrayListExtra(RecognizerIntent.EXTRA_RESULTS,new ArrayList<>(Arrays.asList("Paper Lantern")));h.ui(()->invoke("onActivityResult",new Class[]{int.class,int.class,Intent.class},UnifiedSearch.VOICE,Activity.RESULT_OK,data));assertEquals("https://flixmomo.app/search?q=Paper%20Lantern",((Review51PointerHarness)h.activity).requested);}
     @Test public void repeatedSearchIntentUpdatesExistingFilmActivity()throws Exception{title();Intent in=new Intent().putExtra(UnifiedSearch.QUERY,"Paper Lantern");h.ui(()->invoke("onNewIntent",new Class[]{Intent.class},in));assertEquals("Paper Lantern",((EditText)f("query")).getText().toString());assertFalse(flag("pointerPage"));}
+    @Test public void phoneSearchEntryIntentFocusesTypingWithoutSubmitting()throws Exception{
+        start();
+        final EditText box=(EditText)f("query");
+        h.ui(()->{
+            ((View)f("toolbarAnchor")).requestFocus();
+            assertFalse("Setup must move focus off query",box.hasFocus());
+        });
+        final Intent phone=new Intent().putExtra(
+            FlixMomoActivity.EXTRA_PHONE_SEARCH_ON_ENTRY,true);
+        h.ui(()->invoke("onNewIntent",new Class[]{Intent.class},phone));
+        boolean[] focused={false};
+        long end=SystemClock.elapsedRealtime()+3000;
+        while(SystemClock.elapsedRealtime()<end){
+            h.ui(()->focused[0]=box.hasFocus());
+            if(focused[0])break;
+            SystemClock.sleep(40);
+        }
+        assertTrue("Phone Search should focus film typing without a second TV tap",focused[0]);
+        h.ui(()->{
+            assertTrue("Phone Search state retained",flag("phoneSearchWanted"));
+            assertFalse("No automatic provider search",flag("browserSearchSubmitted"));
+            assertFalse("One-shot entry flag consumed",h.activity.getIntent().hasExtra(
+                FlixMomoActivity.EXTRA_PHONE_SEARCH_ON_ENTRY));
+        });
+    }
     @Test public void cancelledSpeechResultDoesNotNavigate()throws Exception{start();String previous=((Review51PointerHarness)h.activity).requested;h.ui(()->invoke("onActivityResult",new Class[]{int.class,int.class,Intent.class},UnifiedSearch.VOICE,Activity.RESULT_CANCELED,null));assertEquals(previous,((Review51PointerHarness)h.activity).requested);}
     @Test public void unrelatedMovieTextDoesNotReturnGenericLiveChannels(){assertTrue(UnifiedSearch.channels(Arrays.asList(channel("PTC News","Punjabi","Live news",1)),"stranger things").isEmpty());}
     @Test public void liveMatchRequiresAllQueryWords(){Channel a=channel("PTC News","Punjabi","Live news",1),b=channel("PTC Music","Punjabi","Music",2);assertEquals(Arrays.asList(a),UnifiedSearch.channels(Arrays.asList(a,b),"ptc news"));}
