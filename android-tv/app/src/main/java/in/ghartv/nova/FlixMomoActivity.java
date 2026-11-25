@@ -476,12 +476,14 @@ public class FlixMomoActivity extends Activity {
     }
     private void notifyPhoneMode(){
         if(custom!=null||verifiedImmersive)HouseholdPhoneSession.mode("FULLSCREEN");
+        // Explicit Tor Web address entry outranks a stale film-search request.
+        // Otherwise the paired phone can stay in SEARCH despite Browser opening.
+        else if(torWebMode&&browserBar!=null&&browserBar.showing()&&
+                browserBar.address().hasFocus())HouseholdPhoneSession.mode("EDITOR");
         else if(chrome!=null&&chrome.isShown()&&query!=null&&
                 (query.hasFocus()||phoneSearchWanted&&!browserSearchSubmitted))
             HouseholdPhoneSession.mode("SEARCH");
-        else if(pointerPage&&(pageEditor||
-                 (torWebMode&&browserBar!=null&&browserBar.showing()&&
-                  browserBar.address().hasFocus())))HouseholdPhoneSession.mode("EDITOR");
+        else if(pointerPage&&pageEditor)HouseholdPhoneSession.mode("EDITOR");
         else if(phoneMediaObservable||startMonitor!=null&&startMonitor.healthy())
             HouseholdPhoneSession.mode("VIDEO");
         else if(startMonitor!=null&&startMonitor.running())HouseholdPhoneSession.mode("STARTING");
@@ -993,6 +995,8 @@ public class FlixMomoActivity extends Activity {
                 keepSubmittedSearchBrowserOnly();pageReady=allowedBrowserPage(Uri.parse(url));
                 if(pageReady&&(ownedFixtureForDebug(url)||
                         torController!=null&&torController.active())){
+                    // WebView document completion is NOT evidence of playable video.
+                    if(torWebMode)noteInput("TOR_DOCUMENT_FINISHED");
                     if(torController!=null)torController.documentLoaded(url);
                     hideProviderStatus();
                     if(credit!=null&&chrome.getVisibility()==View.VISIBLE)
@@ -1062,6 +1066,7 @@ public class FlixMomoActivity extends Activity {
             filmFailure("film_resource","WEBVIEW_ERROR_"+errorCode);if(catalogueResourceFailure(request.getUrl(),kind,"network error "+errorCode))return;return;
         }
         filmFailure("film_navigation","WEBVIEW_ERROR_"+errorCode);
+        if(errorCode==WebViewClient.ERROR_TIMEOUT)noteInput("TOR_PAGE_TIMEOUT");
         if(torController!=null&&torController.retryPageThroughTor(request.getUrl().toString(),kind)){
             mainFrameError=true;pageReady=false;loading=false;handler.removeCallbacks(slowLoad);return;
         }
@@ -1255,10 +1260,15 @@ public class FlixMomoActivity extends Activity {
         public boolean foreground(){return !isFinishing()&&!isDestroyed();}
         public boolean mediaPlaying(){return custom!=null||(startMonitor!=null&&startMonitor.healthy());}
         public void requestConsent(long ticket,FilmTorController.ConsentResult callback){showTorConsent(callback);}
-        public void status(String message){showTorStatus(message);}
+        public void status(String message){
+            // Store event categories only. Never persist Tor relay details or URLs.
+            if(message.startsWith("Connecting privately through Tor"))noteInput("TOR_START");
+            else if(message.startsWith("Tor connected · opening page"))noteInput("TOR_PROXY_READY");
+            showTorStatus(message);
+        }
         public void reload(String url){reloadForTorRoute(url);}
         public void routeChanged(boolean tor){credit.setText(FilmProviderPolicy.CREDIT+torRouteSuffix());}
-        public void failure(String message){showTorFailure(message);}
+        public void failure(String message){noteInput("TOR_FAILED");showTorFailure(message);}
     });}
     private String torRouteSuffix(){return torController==null?" · Tor unavailable":torController.active()?" · Tor":" · Tor connecting";}
     private void showTorConsent(FilmTorController.ConsentResult callback){
@@ -1286,7 +1296,13 @@ public class FlixMomoActivity extends Activity {
         torWebMode=true;endOneClick();
         if(browserBar==null)return;
         String current=browser==null?null:browser.getUrl();
-        browserBar.showBar(TorWebUrlPolicy.allowed(current)?current:"https://",false);
+        // The explicit Browser action is a request to ENTER an address. Do not
+        // silently auto-hide the toolbar before the viewer can type (the
+        // historical false-positive "Tor did not open" experience). Focusing
+        // the address also puts the paired phone into live EDITOR mode.
+        browserBar.showBar(TorWebUrlPolicy.allowed(current)?current:"https://",true);
+        noteInput("TOR_BROWSER_OPEN");
+        notifyPhoneMode();
     }
     // Verified HTML5 playback enters immersive viewing automatically.
     // Unobservable cross-origin iframe players retain their own controls.

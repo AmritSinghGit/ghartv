@@ -79,6 +79,25 @@ public class Review48InputStabilityTest {
         for(int n=0;n<180;n++)j.record("BACK","POINTER",true,false);JSONObject s=j.snapshot();assertEquals(128,s.getJSONArray("events").length());assertTrue(s.getBoolean("truncated"));assertFalse(s.getBoolean("network_upload"));assertFalse(s.toString().contains("private.example"));
         s.getJSONArray("events").getJSONObject(0).put("event","MUTATED");assertFalse(j.snapshot().toString().contains("MUTATED"));
     }
+    @Test public void torTechnicalMilestonesRetainMillisecondsWithoutWebsiteDetails(){
+        FilmReviewJournal journal=new FilmReviewJournal();
+        for(String event:new String[]{"TOR_BROWSER_OPEN","TOR_START","TOR_PROXY_READY",
+                "TOR_DOCUMENT_FINISHED","TOR_PAGE_TIMEOUT","TOR_FAILED"})
+            journal.record(event,"TOOLBAR",false,false);
+        JSONObject receipt=journal.snapshot();
+        assertEquals(6,receipt.optJSONArray("events").length());
+        assertFalse(receipt.toString().contains("flixmomo.bet"));
+        assertFalse(receipt.toString().contains("http://"));
+        assertFalse(receipt.optBoolean("network_upload",true));
+        long previous=-1;
+        for(int i=0;i<6;i++){
+            JSONObject entry=receipt.optJSONArray("events").optJSONObject(i);
+            assertTrue(entry.optLong("elapsed_ms")>=previous);
+            previous=entry.optLong("elapsed_ms");
+        }
+        journal.record("TOR_BROWSER_OPEN https://private.example/title","TOOLBAR",false,false);
+        assertEquals(6,journal.snapshot().optJSONArray("events").length());
+    }
     @Test public void journalContainsActualMenuBackLayersNotMovieNames()throws Exception{
         full(new AtomicInteger());press(KeyEvent.KEYCODE_MENU);press(KeyEvent.KEYCODE_BACK);JSONObject s=((FilmReviewJournal)f("reviewJournal")).snapshot();String text=s.toString();assertTrue(text.contains("FULLSCREEN_MENU"));assertTrue(text.contains("FULLSCREEN_EXIT"));assertFalse(text.contains("flixmomo.app"));assertFalse(text.contains("lantern"));
     }

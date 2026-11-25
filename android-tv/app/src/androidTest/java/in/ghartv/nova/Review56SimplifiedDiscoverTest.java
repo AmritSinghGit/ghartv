@@ -30,4 +30,22 @@ public class Review56SimplifiedDiscoverTest {
     @Test public void menuOffersSearchAndBackToGuideInsteadOfProviderButtons()throws Exception{search("Paper Lantern");h.press(KeyEvent.KEYCODE_MENU);h.ui(()->{AlertDialog d=(AlertDialog)f("optionsDialog");assertTrue(d.isShowing());View root=d.getWindow().getDecorView();assertNotNull(h.text(root,"Search films or series"));assertNotNull(h.text(root,"Back to TV guide"));assertNull(h.text(root,"Open provider page"));});}
     @Test public void backAtSearchResultsReturnsToTheSearchToolbarBeforeLeaving()throws Exception{search("Paper Lantern");h.press(KeyEvent.KEYCODE_BACK);h.ui(()->{assertFalse(h.activity.isFinishing());assertEquals(View.VISIBLE,((View)f("chrome")).getVisibility());assertTrue(((EditText)f("query")).hasFocus());});}
     @Test public void searchDoesNotRenderNativeCardsOrCachedLiveMatches()throws Exception{search("Paper Lantern");h.ui(()->{assertEquals(0,((FilmHomeView)f("homePanel")).cardCount());assertEquals(View.GONE,((View)f("homePanel")).getVisibility());assertEquals(View.GONE,((View)f("liveResults")).getVisibility());});}
+    @Test public void explicitBrowserOpensEditableTorAddressAndDoesNotAutoHide()throws Exception{
+        start();
+        h.ui(()->{
+            View button=h.text((View)f("screen"),"Browser");
+            assertNotNull("Original blue Browser control",button);
+            button.performClick();
+            TorBrowserChrome bar=(TorBrowserChrome)f("browserBar");
+            assertTrue("Tor address bar must be visible",bar.showing());
+            assertTrue("Browser action must focus the address for phone typing",bar.address().hasFocus());
+            assertTrue("Browser stays Tor-only",flag("torWebMode"));
+        });
+        SystemClock.sleep(6700);
+        h.ui(()->{
+            TorBrowserChrome bar=(TorBrowserChrome)f("browserBar");
+            assertTrue("Explicit Browser must not disappear before user types",bar.showing());
+            assertTrue("Address remains active",bar.address().hasFocus());
+        });
+    }
 }

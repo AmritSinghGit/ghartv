@@ -39,9 +39,31 @@ public class FilmTorNativeSmokeTest {
         assertTrue("Tor circuit and HTTP tunnel",port>0);
         proxy=new FilmTorProxy(activity);assertTrue("production proxy supported",proxy.supported());
         CountDownLatch applied=new CountDownLatch(1);boolean[] accepted={false};proxy.apply(port,ok->{accepted[0]=ok;applied.countDown();});assertTrue("proxy acknowledgement",applied.await(10,TimeUnit.SECONDS));assertTrue("production proxy applied",accepted[0]);
-        CountDownLatch page=new CountDownLatch(1),body=new CountDownLatch(1);String[] raw={null};
-        InstrumentationRegistry.getInstrumentation().runOnMainSync(()->{web=new WebView(activity);web.getSettings().setJavaScriptEnabled(true);web.setWebViewClient(new WebViewClient(){@Override public void onPageFinished(WebView v,String url){page.countDown();v.evaluateJavascript("document.body.innerText",value->{raw[0]=value;body.countDown();});}});activity.setContentView(web);web.loadUrl("https://check.torproject.org/api/ip");});
-        assertTrue("Tor check page",page.await(45,TimeUnit.SECONDS));assertTrue("Tor check body",body.await(10,TimeUnit.SECONDS));
-        Object decoded=new JSONTokener(raw[0]).nextValue();assertTrue(decoded instanceof String);JSONObject result=new JSONObject((String)decoded);assertTrue("Tor route attested",result.optBoolean("IsTor"));
+        CountDownLatch page=new CountDownLatch(1),body=new CountDownLatch(1);
+        String[] raw={null};
+        int[] webError={0};
+        InstrumentationRegistry.getInstrumentation().runOnMainSync(()->{
+            web=new WebView(activity);web.getSettings().setJavaScriptEnabled(true);
+            web.setWebViewClient(new WebViewClient(){
+                @Override public void onReceivedError(WebView v,WebResourceRequest request,WebResourceError error){
+                    if(request.isForMainFrame())webError[0]=error.getErrorCode();
+                }
+                @Override public void onPageFinished(WebView v,String url){
+                    // A new WebView can finish initial about:blank. Counting that
+                    // as the Tor check page yielded null text and a false failure.
+                    if(url==null||!url.startsWith("https://check.torproject.org/api/ip"))return;
+                    page.countDown();
+                    v.evaluateJavascript("document.body.innerText",value->{raw[0]=value;body.countDown();});
+                }
+            });
+            activity.setContentView(web);web.loadUrl("https://check.torproject.org/api/ip");
+        });
+        assertTrue("Tor check main page did not complete; error_code="+webError[0],page.await(45,TimeUnit.SECONDS));
+        assertTrue("Tor check page text was not available; error_code="+webError[0],body.await(10,TimeUnit.SECONDS));
+        Object decoded=new JSONTokener(raw[0]).nextValue();
+        assertTrue("Tor check returned no readable page body; error_code="+webError[0],
+            decoded instanceof String);
+        JSONObject result=new JSONObject((String)decoded);
+        assertTrue("Tor route attested",result.optBoolean("IsTor"));
     }
 }
