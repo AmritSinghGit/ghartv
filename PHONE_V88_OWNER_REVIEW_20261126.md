@@ -20,7 +20,9 @@ Canonical app: `in.ghartv.nova`, original blue release certificate, existing `re
 - The signed private owner APK is `~/Library/Application Support/GharTV/owner-review/candidates/GharTV-code88-blue-clean-loading-owner-review-signed.apk`.
 - Signed SHA256: `4cbb4f0d5940724ae09655371d0ebfd9573fee502ab8747a9a76d39b86467eb8`.
 - Original release certificate SHA256: `40a9d8bf6b1c557b3d6fd02acef075368dd13e28691f207a297202d0d5ec233c`, verified against actual installed blue v87.
-- Full remaining **364 Android tests are being verified in five memory-safe instrumented groups**. Installation is gated on results; do not claim all tests passed until log confirms each group.
+- **All 396/396 Android instrumented tests passed, zero failures**: the 32 targeted tests plus five independent groups (80, 90, 39, 90, 65). Native Tor/WebView verification, Play-overlay, source selection, playback, pointer, fullscreen, Jio and one-click regressions all passed.
+- Owner signed blue **v88 installed in place over v87** at 26 November 2026, 06:23:51 IST using an ADB in-place install. Original firstInstallTime **2026-09-13 17:16:16** and package in.ghartv.nova preserved; Android reports versionCode=88, versionName=0.7.14-clean-load-owner-review. Only canonical blue app remains; isolated orange test/debug packages were uninstalled.
+- Real Samsung S23 Ultra ADB remains authorized and its private QR was opened in Chrome without ever displaying/saving its key. TV UI confirmed **Paired**. This establishes pairing, **not** a live movie picture/sound result.
 
 ## Owner acceptance before family rollout
 
@@ -33,7 +35,7 @@ Canonical app: `in.ghartv.nova`, original blue release certificate, existing `re
 ## Storage/operational status
 
 - Two unused older Google TV AVDs were removed after saving their reproducible configurations; approximately **5.4 GB** of guest data recovered. Preserve active `GharTV_Nova_Manual_google_tv_API36`, recently used `GharTV_Nova_Google_TV_API36_google_tv`, separate phone emulator and `Pixel_9`.
-- The AVD needed a headless/software-rendering test boot due Mac GPU/memory pressure. Restore the **visible** original blue emulator window for owner review; never wipe the original app data.
+- The AVD needed a headless/software-rendering test boot due Mac GPU/memory pressure. After the complete tests, the same AVD was rebooted **with its visible GUI** and software graphics. Original blue v88 was launched and its app data preserved.
 - Production family feed remains v80; Dad/household publishing requires explicit approval and a diagnostics-off release build.
 
 ## Not yet independently proven
