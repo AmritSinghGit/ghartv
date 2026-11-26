@@ -149,6 +149,10 @@ public class FlixMomoActivity extends Activity {
     private boolean backHeld,menuHeld,fullscreenKeyHeld,escapeHeld;
     private long keyEventSerial;
     private final FilmReviewJournal reviewJournal=new FilmReviewJournal();
+    private final Runnable ownerReviewAutosave=()->{
+        if(BuildConfig.OWNER_REVIEW_DIAGNOSTICS)
+            reviewJournal.save(this,performanceEvidence());
+    };
     private void noteInput(String event){
         if("POINTER_CLICK".equals(event)){
             lastPointerClick=android.os.SystemClock.elapsedRealtime();
@@ -159,12 +163,47 @@ public class FlixMomoActivity extends Activity {
             chrome!=null&&chrome.getVisibility()==View.VISIBLE&&chrome.hasFocus()?"TOOLBAR":
             nativeControls!=null&&nativeControls.visible()?"CONTROLS":"PAGE";
         reviewJournal.record(event,layer,cursor!=null&&cursor.enabled(),cursor!=null&&cursor.isShown());
+        // For the private owner-review APK only: no Record button, no upload.
+        // Coalesce writes to avoid slowing playback; preserve the newest ring
+        // automatically so owner can inspect it later over authorized ADB.
+        if(BuildConfig.OWNER_REVIEW_DIAGNOSTICS){
+            handler.removeCallbacks(ownerReviewAutosave);
+            handler.postDelayed(ownerReviewAutosave,1400L);
+        }
     }
     // Retain the experimental engine in source/tests, not normal viewing in47.
     private static final boolean NATIVE_PLAYER_EXPERIMENT=false;
     private FrameLayout stage;
+    // Above WebView, below the cursor/cards: prevents the Android green-robot
+    // built-in error document flashing during Tor retry/first navigation.
+    private LinearLayout pageLoadCover;
+    private TextView pageLoadMessage;
+    private long pageVisualTicket;
+    private int phoneProgressJournalEpoch=-1;
     private View custom;
     private WebChromeClient.CustomViewCallback customCallback;
+    private void showPageLoadCover(String message){
+        if(pageLoadCover==null||!pointerPage||homeRequested||detailRequested||custom!=null)return;
+        pageLoadMessage.setText(message);
+        pageLoadCover.setVisibility(View.VISIBLE);
+    }
+    private void hidePageLoadCover(){
+        if(pageLoadCover!=null)pageLoadCover.setVisibility(View.GONE);
+    }
+    private void revealPageAfterPaint(WebView page,String url){
+        if(page==null||pageLoadCover==null)return;
+        // onPageFinished alone may precede painting. Reveal only a successful
+        // committed/painted page, never the WebView's temporary error robot.
+        final long requested=++pageVisualTicket;
+        page.postVisualStateCallback(requested,new WebView.VisualStateCallback(){
+            @Override public void onComplete(long id){
+                if(page!=browser||mainFrameError||!pageReady||loading||
+                    !java.util.Objects.equals(url,page.getUrl()))return;
+                hidePageLoadCover();
+                noteInput("PAGE_VISUALLY_READY");
+            }
+        });
+    }
     private boolean mainFrameError,pageReady,loading,mouseActive,browserSearchSubmitted,torWebMode;
     private boolean fullscreenProofPrompted;
     private boolean verifiedImmersive;
@@ -235,6 +274,7 @@ public class FlixMomoActivity extends Activity {
             if(phoneCursorReady())cursor.moveRelative(x,y);
         });}
         @Override public void click(){runOnUiThread(()->{
+            noteInput("PHONE_TOUCH");
             if(torWebMode&&browserBar!=null&&browserBar.showing()){
                 browserBar.phoneClick();return;
             }
@@ -257,6 +297,10 @@ public class FlixMomoActivity extends Activity {
             if(pointerPage&&custom==null)handler.postDelayed(FlixMomoActivity.this::checkPageEditor,120);
         });}
         @Override public void key(int code){runOnUiThread(()->{
+            if(code==KeyEvent.KEYCODE_DPAD_CENTER)noteInput("PHONE_CONFIRM");
+            else if(code==KeyEvent.KEYCODE_DPAD_UP||code==KeyEvent.KEYCODE_DPAD_DOWN||
+                    code==KeyEvent.KEYCODE_DPAD_LEFT||code==KeyEvent.KEYCODE_DPAD_RIGHT)
+                noteInput("PHONE_DIRECTION");
             // On a website, paired-phone vertical arrows scroll, unlike the
             // physical D-pad, which continues to move the on-screen cursor.
             if((code==KeyEvent.KEYCODE_DPAD_UP||code==KeyEvent.KEYCODE_DPAD_DOWN)&&
@@ -267,19 +311,39 @@ public class FlixMomoActivity extends Activity {
             dispatchKeyEvent(new KeyEvent(t,t,KeyEvent.ACTION_DOWN,code,0));
             dispatchKeyEvent(new KeyEvent(t,t+65,KeyEvent.ACTION_UP,code,0));
         });}
-        @Override public void scroll(int dx,int dy){runOnUiThread(()->phoneScroll(dx,dy));}
-        @Override public void action(String action){runOnUiThread(()->phoneAction(action));}
+        @Override public void scroll(int dx,int dy){runOnUiThread(()->{
+            noteInput("PHONE_SCROLL");phoneScroll(dx,dy);
+        });}
+        @Override public void action(String action){runOnUiThread(()->{
+            switch(action){
+                case "SEARCH":noteInput("PHONE_SEARCH_REQUEST");break;
+                case "SOURCES":noteInput("PHONE_SOURCE_LIST");break;
+                case "NEXT":noteInput("PHONE_TRY_NEXT");break;
+                case "PLAY":noteInput("PHONE_PLAY");break;
+                case "PAUSE":noteInput("PHONE_PAUSE");break;
+                case "FULLSCREEN":noteInput("PHONE_FULLSCREEN");break;
+                default:break;
+            }
+            phoneAction(action);
+        });}
         @Override public void text(String value){runOnUiThread(()->phoneText(value,false));}
-        @Override public void search(String term){runOnUiThread(()->phoneSubmitFilmQuery(term));}
+        @Override public void search(String term){runOnUiThread(()->{
+            noteInput("PHONE_SEARCH_REQUEST");phoneSubmitFilmQuery(term);
+        });}
         @Override public void submitPageText(String term){runOnUiThread(()->phoneText(term,true));}
         @Override public void edit(String command){runOnUiThread(()->phoneEdit(command));}
         @Override public void liveText(String value){runOnUiThread(()->phoneLiveText(value));}
-        @Override public void chooseSource(int number){runOnUiThread(()->phoneChooseSource(number));}
-        @Override public void seek(long positionMs){runOnUiThread(()->phoneSeek(positionMs));}
+        @Override public void chooseSource(int number){runOnUiThread(()->{
+            noteInput("PHONE_SOURCE_SELECT");phoneChooseSource(number);
+        });}
+        @Override public void seek(long positionMs){runOnUiThread(()->{
+            noteInput("PHONE_SEEK");phoneSeek(positionMs);
+        });}
         @Override public void connected(boolean yes){runOnUiThread(()->{
             if(isFinishing()||isDestroyed())return;
             if(phoneConnected!=yes){
                 phoneConnected=yes;updatePhoneBadge();
+                noteInput(yes?"PHONE_CONNECTED":"PHONE_DISCONNECTED");
                 phonePairEvent(yes?"connected":"disconnected");
             }
             if(yes&&pairingDialog!=null&&pairingDialog.isShowing()){
@@ -394,8 +458,13 @@ public class FlixMomoActivity extends Activity {
                 long position=Math.max(0,d.optLong("positionMs",0));
                 if(nativeControls!=null&&phoneProgress.sample(epoch,
                         android.os.SystemClock.elapsedRealtime(),position,
-                        phoneMediaObservable&&"playing".equals(state)))
+                        phoneMediaObservable&&"playing".equals(state))){
                     nativeControls.phoneSourceClockProgress();
+                    if(phoneProgressJournalEpoch!=epoch){
+                        phoneProgressJournalEpoch=epoch;
+                        noteInput("PHONE_PROGRESS_CONFIRMED");
+                    }
+                }
                 long duration=Math.max(0,d.optLong("durationMs",0));
                 long start=seekable?Math.max(0,d.optLong("seekStartMs",0)):0;
                 long end=seekable?Math.max(start,d.optLong("seekEndMs",0)):0;
@@ -896,7 +965,24 @@ public class FlixMomoActivity extends Activity {
     private boolean createBrowser(){
         if(browser!=null)return true;
         try{browser=new WebView(this);}catch(RuntimeException e){fail("Android System WebView is unavailable. Update that system component; live TV is unchanged.");return false;}
-        browser.setBackgroundColor(TvUi.BG);stage.addView(browser,0,new FrameLayout.LayoutParams(-1,-1));cursor.target(browser);nativeControls.attach(browser);homePanel.bindUnderlyingPage(browser);detailPanel.bindUnderlyingPage(browser);
+        browser.setBackgroundColor(TvUi.BG);stage.addView(browser,0,new FrameLayout.LayoutParams(-1,-1));
+        if(pageLoadCover==null){
+            pageLoadCover=new LinearLayout(this);
+            pageLoadCover.setOrientation(LinearLayout.VERTICAL);
+            pageLoadCover.setGravity(android.view.Gravity.CENTER);
+            pageLoadCover.setBackgroundColor(TvUi.BG);
+            pageLoadCover.setClickable(true);
+            pageLoadMessage=TvUi.label(this,"Opening securely through Tor…",19,TvUi.TEXT,true);
+            pageLoadMessage.setGravity(android.view.Gravity.CENTER);
+            pageLoadCover.addView(pageLoadMessage,new LinearLayout.LayoutParams(-1,TvUi.dp(this,55)));
+            TextView subtitle=TvUi.label(this,"Preparing the page · TV and phone controls remain available",13,TvUi.MUTED,false);
+            subtitle.setGravity(android.view.Gravity.CENTER);
+            pageLoadCover.addView(subtitle,new LinearLayout.LayoutParams(-1,TvUi.dp(this,34)));
+            pageLoadCover.setVisibility(View.GONE);
+            // WebView is index 0, overlay is index 1, then cursor and cards.
+            stage.addView(pageLoadCover,1,new FrameLayout.LayoutParams(-1,-1));
+        }
+        cursor.target(browser);nativeControls.attach(browser);homePanel.bindUnderlyingPage(browser);detailPanel.bindUnderlyingPage(browser);
         WebSettings settings=browser.getSettings();settings.setJavaScriptEnabled(true);settings.setDomStorageEnabled(true);settings.setAllowFileAccess(false);settings.setAllowContentAccess(false);
         settings.setMixedContentMode(WebSettings.MIXED_CONTENT_NEVER_ALLOW);settings.setMediaPlaybackRequiresUserGesture(true);settings.setSupportMultipleWindows(true);
         settings.setJavaScriptCanOpenWindowsAutomatically(false);settings.setSafeBrowsingEnabled(true);
@@ -985,6 +1071,7 @@ public class FlixMomoActivity extends Activity {
                 connection.started(url);
                 if(detailRequested&&FilmProviderPolicy.detail(Uri.parse(url)))detailPanel.followNavigation(url);
                 else if(detailRequested&&allowedBrowserPage(Uri.parse(url))&&!FilmProviderPolicy.detail(Uri.parse(url)))usePage();mainFrameError=false;pageReady=false;loading=true;if(allowedBrowserPage(Uri.parse(url)))lastRequested=url;
+                showPageLoadCover("Opening securely through Tor…");
                 status.setText("Opening FlixMomo…");if(pointerPage){if(!simplifiedDiscoverExperience()||chrome.getVisibility()!=View.VISIBLE)providerStatus("Opening the registered provider page… Menu and Back remain available.",false);nativeControls.pause();playNotice.setVisibility(View.GONE);networkNotice.setVisibility(View.GONE);}handler.removeCallbacks(slowLoad);handler.postDelayed(slowLoad,20000);
             }
             @Override public void onPageFinished(WebView view,String url){
@@ -998,6 +1085,7 @@ public class FlixMomoActivity extends Activity {
                     // WebView document completion is NOT evidence of playable video.
                     if(torWebMode)noteInput("TOR_DOCUMENT_FINISHED");
                     if(torController!=null)torController.documentLoaded(url);
+                    revealPageAfterPaint(view,url);
                     hideProviderStatus();
                     if(credit!=null&&chrome.getVisibility()==View.VISIBLE)
                         credit.setText(torWebMode?"GharTV · Tor Web · Connected":
@@ -1188,6 +1276,7 @@ public class FlixMomoActivity extends Activity {
     }
     private void fail(String message){
         if(playUntil>0){playUntil=0;playMessage(message);}if(nativeControls!=null)nativeControls.failure();keepSubmittedSearchBrowserOnly();mainFrameError=true;pageReady=false;loading=false;handler.removeCallbacks(slowLoad);status.setText(message);
+        showPageLoadCover("Page unavailable · use Retry or choose another source");
         if(homeRequested&&homePanel!=null)homePanel.unavailable(message);
         else if(detailRequested&&detailPanel!=null)detailPanel.unavailable(message);
         else if(pointerPage){networkNotice.setVisibility(View.GONE);providerStatus(message,true);}
@@ -1213,6 +1302,7 @@ public class FlixMomoActivity extends Activity {
         detailRequested=true;nativeControls.hideAll();cursor.enable(false);chrome.setVisibility(View.GONE);detailPanel.begin(url,card);org.json.JSONObject cached=visitCache.get(url);detailPanel.preview(cached);if(cached!=null)detailPreviewMs=android.os.SystemClock.elapsedRealtime()-detailBegan;navigate(url,false);
     }
     private void returnToCards(){
+        hidePageLoadCover();
         if(simplifiedDiscoverExperience()){showBrowserSearch(false);return;}
         resumeCatalogueMode();if(startMonitor!=null)startMonitor.leave();handler.removeCallbacks(detailWait);detailRequested=false;detailPanel.setVisibility(View.GONE);homeRequested=true;homePanel.setVisibility(View.VISIBLE);homePanel.bringToFront();chrome.setVisibility(View.VISIBLE);homePanel.focusRefresh();
         // Already-observed cards remain usable on Back, without another provider-page load.
@@ -1234,6 +1324,7 @@ public class FlixMomoActivity extends Activity {
             return;
         }
         hideKeyboard();lastRequested=url;
+        showPageLoadCover("Opening securely through Tor…");
         // Fail closed: never call loadUrl() before the app-local Tor proxy
         // has acknowledged readiness. No direct/clearnet route is offered.
         boolean deferred=!ownedFixtureForDebug(url)&&
@@ -2016,7 +2107,12 @@ public class FlixMomoActivity extends Activity {
         else if(mouseActive&&(custom==null||fullMenu==null||fullMenu.getVisibility()!=View.VISIBLE))cursor.enter();
     }
     @Override protected void onSaveInstanceState(Bundle state){state.putBoolean("home",homeRequested);state.putString("query",query.getText().toString());state.putString("url",lastRequested);super.onSaveInstanceState(state);}
-    @Override protected void onPause(){handler.removeCallbacks(phonePlaybackPulse);HouseholdPhoneSession.detach(filmPhoneSink);endOneClick();if(startMonitor!=null)startMonitor.pause();handler.removeCallbacks(detailWait);EngagementTracker.stop(this);handler.removeCallbacks(playDeadline);playUntil=0;if(nativeControls!=null)nativeControls.pause();if(cursor!=null)cursor.cancel();handler.removeCallbacks(slowLoad);if(browser!=null)browser.onPause();super.onPause();}
+    @Override protected void onPause(){
+        if(BuildConfig.OWNER_REVIEW_DIAGNOSTICS){
+            handler.removeCallbacks(ownerReviewAutosave);
+            reviewJournal.save(this,performanceEvidence());
+        }
+        handler.removeCallbacks(phonePlaybackPulse);HouseholdPhoneSession.detach(filmPhoneSink);endOneClick();if(startMonitor!=null)startMonitor.pause();handler.removeCallbacks(detailWait);EngagementTracker.stop(this);handler.removeCallbacks(playDeadline);playUntil=0;if(nativeControls!=null)nativeControls.pause();if(cursor!=null)cursor.cancel();handler.removeCallbacks(slowLoad);if(browser!=null)browser.onPause();super.onPause();}
     @Override protected void onResume(){super.onResume();
         HouseholdPhoneSession.attach(filmPhoneSink);
         phoneConnected=HouseholdPhoneSession.connected();updatePhoneBadge();

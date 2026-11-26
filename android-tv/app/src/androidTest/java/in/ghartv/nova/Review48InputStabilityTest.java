@@ -79,6 +79,28 @@ public class Review48InputStabilityTest {
         for(int n=0;n<180;n++)j.record("BACK","POINTER",true,false);JSONObject s=j.snapshot();assertEquals(128,s.getJSONArray("events").length());assertTrue(s.getBoolean("truncated"));assertFalse(s.getBoolean("network_upload"));assertFalse(s.toString().contains("private.example"));
         s.getJSONArray("events").getJSONObject(0).put("event","MUTATED");assertFalse(j.snapshot().toString().contains("MUTATED"));
     }
+    @Test public void ownerReviewAutoSavesApprovedActionsWithoutPrivateText()throws Exception{
+        h.player();
+        if(!BuildConfig.OWNER_REVIEW_DIAGNOSTICS)return; // family build defaults OFF
+        h.ui(()->{
+            try{
+                java.lang.reflect.Method note=FlixMomoActivity.class.getDeclaredMethod("noteInput",String.class);
+                note.setAccessible(true);
+                note.invoke(h.activity,"PHONE_SOURCE_SELECT");
+                note.invoke(h.activity,"https://private.example/secret-film"); // rejected
+            }catch(Exception e){throw new AssertionError(e);}
+        });
+        SystemClock.sleep(1850);
+        java.io.File saved=new java.io.File(h.activity.getExternalFilesDir(null),
+            "ghartv-review-interactions.json");
+        assertTrue("Owner review must save without pressing Record",saved.isFile());
+        String receipt=new String(java.nio.file.Files.readAllBytes(saved.toPath()),
+            java.nio.charset.StandardCharsets.UTF_8);
+        assertTrue(receipt.contains("PHONE_SOURCE_SELECT"));
+        assertFalse(receipt.contains("private.example"));
+        assertFalse(receipt.contains("secret-film"));
+        assertTrue(receipt.contains("\"network_upload\": false")||receipt.contains("\"network_upload\":false"));
+    }
     @Test public void torTechnicalMilestonesRetainMillisecondsWithoutWebsiteDetails(){
         FilmReviewJournal journal=new FilmReviewJournal();
         for(String event:new String[]{"TOR_BROWSER_OPEN","TOR_START","TOR_PROXY_READY",

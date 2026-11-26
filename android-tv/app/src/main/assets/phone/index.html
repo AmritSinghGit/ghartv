@@ -91,16 +91,6 @@ body.typing-active .dpad,body.typing-active .tools{flex-shrink:0}
 body.typing-active .dpad{grid-template-rows:repeat(3,32px);max-width:245px}
 body.typing-active .dpad button{min-height:32px}
 footer{text-align:center;color:var(--muted);font-size:11px;line-height:1.25}
-.usage{flex-shrink:0;background:#092833;border:1px solid #3f7880;border-radius:14px;
-  padding:8px 11px;color:var(--muted);font-size:12px}
-.usage summary{color:#b6ffeb;cursor:pointer;font-weight:850;list-style-position:inside;
-  padding:5px 2px;touch-action:manipulation}
-.usage p{line-height:1.5;margin:8px 0}
-.usage-actions{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:7px}
-.usage-actions button{min-height:38px;font-size:12px;padding:5px 7px}
-.usage-output{white-space:pre-wrap;overflow-wrap:anywhere;user-select:text;
-  color:#d7f4eb;font:500 11px/1.45 ui-monospace,monospace;margin:9px 0 1px;
-  max-height:185px;overflow:auto}
 [hidden]{display:none!important}
 #video[hidden],#tools[hidden]{display:none}
 body.video-mode .track{min-height:92px}
@@ -152,6 +142,7 @@ body.editor-mode .editor{border-color:var(--mint)}
   <button data-a="NEXT">↪ Try next</button>
 </div>
 <div id="source-progress" class="source-note" role="status" aria-live="polite" hidden></div>
+<div id="playback-state" class="source-note" role="status" aria-live="polite" hidden></div>
 <section id="sources-panel" class="sources-panel" aria-label="Choose a film player on your phone" hidden>
   <div class="sources-head"><b>Player choices</b><button id="close-sources" type="button">Close</button></div>
   <div id="sources-note" class="source-note" role="status">Reading source choices from the TV…</div>
@@ -181,18 +172,6 @@ body.editor-mode .editor{border-color:var(--mint)}
   </div>
 </div>
 <footer id="footnote">Private home network only · No passwords, OTPs or payment details</footer>
-<details class="usage" id="usage">
-  <summary>Improve GharTV · Usage report</summary>
-  <p>Off by default. Start to record this paired session's technical results only: reconnects, button attempts, playback states and errors. No typed words, movie titles, passwords, pairing codes, device IDs or URLs. Stored on this TV for up to 7 days; never uploaded automatically.</p>
-  <div class="usage-actions">
-    <button id="usage-start" class="primary" type="button">Start this session</button>
-    <button id="usage-stop" type="button" hidden>Stop recording</button>
-    <button id="usage-view" type="button">View report</button>
-    <button id="usage-copy" type="button">Copy summary</button>
-    <button id="usage-clear" type="button">Delete local report</button>
-  </div>
-  <div id="usage-output" class="usage-output" role="status" aria-live="polite">Not recording. Start explicitly to collect technical steps.</div>
-</details>
 <script>
 "use strict";
 const status=document.getElementById("status"),modeEl=document.getElementById("mode"),
@@ -208,7 +187,6 @@ const sendButton=document.getElementById("send"),
 let lastSubmission="",submissionPending=false,liveTimer=null,composing=false;
 let currentChoices=[],lastPlayback={state:"unknown",fullscreen:false};
 let sourceBatch={batch:0,batchStart:0,batchEnd:0,phase:"idle"};
-let lastUsage=null,usageClearArmed=false,usageSummaryText="";
 const sourcesPanel=document.getElementById("sources-panel"),
  sourcesList=document.getElementById("sources-list"),
  sourcesNote=document.getElementById("sources-note"),
@@ -322,11 +300,22 @@ function setPlayback(d){
  full.textContent=d.fullscreen===true?"⛶ Exit fullscreen":"⛶ Fullscreen";
  const start=Number(d.seekStartMs),end=Number(d.seekEndMs),
        pos=Number(d.positionMs);
+ const confirmed=playing||paused;
+ const playbackState=document.getElementById("playback-state");
  const canSeek=ready&&active&&d.seekable===true&&Number.isFinite(start)&&
    Number.isFinite(end)&&Number.isFinite(pos)&&end>start&&start>=0&&end<=86400000;
- // A live movie should always show its timeline panel. Streams that do
- // not expose a seekable range show a disabled slider, never fake seeking.
- timeline.hidden=!active;
+ // --:-- before a player exists is NOT a timeline. Show discovery state
+ // instead, and keep real unseekable/live media controls explicit.
+ timeline.hidden=!active||(!confirmed&&!canSeek);
+ playbackState.hidden=!active||(confirmed&&canSeek);
+ if(active){
+   playbackState.textContent=!confirmed?
+     (mode==="STARTING"||d.state==="starting"?
+       "Finding a playable player · no video confirmed yet":
+       "Waiting for video confirmation · no timeline yet"):
+     "Video reported "+(playing?"playing":"paused")+
+       " · this source does not expose seeking";
+ }
  seekPosition.disabled=!canSeek;
  seekPosition.setAttribute("aria-label",canSeek?"Seek TV movie from phone":
    "Movie timeline unavailable for this stream");
@@ -339,16 +328,16 @@ function setPlayback(d){
    totalTime.textContent=timeLabel(end);
  }else{
    seekPosition.min="0";seekPosition.max="1000";seekPosition.value="0";
-   playedTime.textContent=Number.isFinite(pos)&&pos>0?timeLabel(pos):"--:--";
+   playedTime.textContent=confirmed&&Number.isFinite(pos)&&pos>0?timeLabel(pos):"LIVE";
    totalTime.textContent=Number.isFinite(Number(d.durationMs))&&
-     Number(d.durationMs)>0?timeLabel(Number(d.durationMs)):"--:--";
+     Number(d.durationMs)>0?timeLabel(Number(d.durationMs)):"—";
  }
  // Media reports can arrive after the TV has returned to Search or a
  // website editor. Never let stale video state mask the live typing hint.
  if(active)tip.textContent=playing?"TV player playing · timeline follows TV":
    paused?"TV player paused · tap Play to resume":
    d.state==="starting"?"Opening player · playback not yet confirmed":
-   "Player position unavailable · try TV controls if buttons do not respond";
+   "Finding playable video · controls become available only when supported";
 }
 function phoneNotice(message){hint.textContent=message;}
 function focusPhoneInput(){
@@ -376,33 +365,6 @@ function setOnline(online,message){
  document.querySelectorAll("button").forEach(b=>b.disabled=!online);
  seekPosition.disabled=!online;
  setPlayback(lastPlayback);
-}
-function setUsage(data){
- if(!data||data.schema!=="ghartv.usage-summary.v1")return;
- lastUsage=data;
- const enabled=data.enabled===true;
- document.getElementById("usage-start").hidden=enabled;
- document.getElementById("usage-stop").hidden=!enabled;
- const output=document.getElementById("usage-output");
- const counts=data.counts&&typeof data.counts==="object"?data.counts:{};
- const names=Object.keys(counts).filter(x=>/^[A-Z_]{3,35}$/.test(x)).sort();
- const lines=[enabled?"Recording only this paired session":"Recording is OFF",
-   "TV-local report · 7-day retention · no automatic upload",
-   "Technical actions: "+Math.max(0,Math.min(100000,Number(data.total)||0))];
- for(const name of names.slice(0,35)){
-   const value=Math.max(0,Math.min(100000,Number(counts[name])||0));
-   lines.push(name.replaceAll("_"," ").toLowerCase()+": "+value);
- }
- if(Array.isArray(data.steps)&&data.steps.length){
-   lines.push("Recent technical sequence (seconds since opt-in):");
-   for(const step of data.steps.slice(-12)){
-     if(!step||!/^[A-Z_]{3,35}$/.test(step.event||""))continue;
-     lines.push("+"+Math.max(0,Math.min(36000,Number(step.at_s)||0))+
-       "s · "+step.event.replaceAll("_"," ").toLowerCase());
-   }
- }
- usageSummaryText=lines.join("\n");
- output.textContent=usageSummaryText;
 }
 function connect(){
  if(!key&&!session){setOnline(false,"Scan QR again");return;}
@@ -435,7 +397,8 @@ function connect(){
    }else if(data.startsWith("H ")){
      try{setPlayback(JSON.parse(data.slice(2)));}catch(e){}
    }else if(data.startsWith("G ")){
-     try{setUsage(JSON.parse(data.slice(2)));}catch(e){}
+     // Legacy TV usage summary is intentionally not displayed in the compact
+     // phone remote. Owner-only technical evidence stays TV-local.
    }
    else if(data.startsWith("R ")){
      const code=data.slice(2);
@@ -501,39 +464,6 @@ function setMode(next){
  else input.placeholder="Select a TV text box first";
  setPlayback(lastPlayback);
 }
-document.getElementById("usage-start").addEventListener("click",()=>{
- if(!ready){document.getElementById("usage-output").textContent="Pair with the TV first.";return;}
- send("A USAGE_ON");
- document.getElementById("usage-output").textContent="Opt-in requested · awaiting TV confirmation.";
-});
-document.getElementById("usage-stop").addEventListener("click",()=>{
- if(ready)send("A USAGE_OFF");
-});
-document.getElementById("usage-view").addEventListener("click",()=>{
- if(ready)send("A USAGE_VIEW");
- else document.getElementById("usage-output").textContent="Reconnect to the TV to view the local report.";
-});
-document.getElementById("usage-clear").addEventListener("click",()=>{
- const b=document.getElementById("usage-clear");
- if(!usageClearArmed){
-   usageClearArmed=true;b.textContent="Confirm deletion";
-   setTimeout(()=>{usageClearArmed=false;b.textContent="Delete local report";},9000);
-   return;
- }
- usageClearArmed=false;b.textContent="Delete local report";
- if(ready)send("A USAGE_CLEAR");
-});
-document.getElementById("usage-copy").addEventListener("click",async()=>{
- if(!usageSummaryText){document.getElementById("usage-output").textContent="View report first.";return;}
- try{
-   if(!navigator.clipboard)throw new Error("clipboard unavailable");
-   await navigator.clipboard.writeText(usageSummaryText);
-   document.getElementById("usage-copy").textContent="Copied";
- }catch(e){
-   document.getElementById("usage-output").textContent=usageSummaryText+
-     "\n\nSelect the report text above to copy it.";
- }
-});
 connect();
 setOnline(false,"● Connecting");
 setInterval(()=>send("P"),3000);

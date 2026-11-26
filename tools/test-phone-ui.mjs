@@ -29,9 +29,9 @@ function setup(){
  };
  const ids=['status','mode','tip','typing','track','editor','send','go',
    'mic','sources-panel','sources-list','sources-note','source-progress','close-sources',
-   'sources-next','sources-refresh','timeline','seek-position',
+   'sources-next','sources-refresh','timeline','seek-position','playback-state',
    'played-time','total-time','video','tools','input-hint','backspace','clear-text',
-   'usage','usage-start','usage-stop','usage-view','usage-clear','usage-copy','usage-output'];
+   ];
  for(const id of ids)elements.set(id,make(id));
  for(const action of ['PLAY','PAUSE','FULLSCREEN','SOURCES','NEXT','BACK']){
    const el=make('button-'+action);el.dataset.a=action;actions.set(action,el);
@@ -99,14 +99,15 @@ test('scrubbing sends millisecond position and follows observed progress',()=>{
  seek.listeners.get('change')();
  assert.equal(ui.socket.sent.at(-1),'Z 85000');
 });
-test('unobservable video keeps timeline visible but blocks fake seek',()=>{
+test('unobservable fullscreen keeps controls without pretending to have a seek range',()=>{
  const ui=setup();ui.receive('V FULLSCREEN');
  ui.receive('H '+JSON.stringify({state:'unknown',fullscreen:true,
    seekable:false,positionMs:0,durationMs:0}));
- assert.equal(ui.get('timeline').hidden,false);
+ assert.equal(ui.get('timeline').hidden,true);
+ assert.equal(ui.get('playback-state').hidden,false);
  assert.equal(ui.get('seek-position').disabled,true);
  assert.equal(ui.actions.get('FULLSCREEN').disabled,false);
- assert.equal(ui.get('total-time').textContent,'--:--');
+ assert.match(ui.get('playback-state').textContent,/no timeline yet/i);
  ui.click(ui.actions.get('FULLSCREEN'));
  assert.equal(ui.socket.sent.at(-1),'A FULLSCREEN');
 });
@@ -147,47 +148,29 @@ test('phone microphone safely suggests native keyboard dictation when browser sp
  assert.equal(ui.get('typing').focused,true);
 });
 
-test('technical usage report is explicit opt-in and can be stopped, viewed and deleted',()=>{
+test('phone remote has no owner diagnostics panel or recording buttons',()=>{
+ assert.doesNotMatch(html,/id="usage"|id="usage-start"|id="usage-stop"|Usage report/);
  const ui=setup();
- const empty={schema:'ghartv.usage-summary.v1',enabled:false,retention_days:7,
-   uploaded:false,total:0,counts:{},steps:[]};
- ui.receive('G '+JSON.stringify(empty));
- assert.equal(ui.get('usage-start').hidden,false,'Recording must begin OFF');
- assert.equal(ui.get('usage-stop').hidden,true);
- ui.click(ui.get('usage-start'));
- assert.equal(ui.socket.sent.at(-1),'A USAGE_ON');
- const opted={...empty,enabled:true,total:3,
-   counts:{CONSENT_ENABLED:1,SEARCH_SENT:1,SOURCE_UNAVAILABLE:1},
-   steps:[{at_s:0,event:'CONSENT_ENABLED'},{at_s:8,event:'SEARCH_SENT'},
-     {at_s:10,event:'SOURCE_UNAVAILABLE'}]};
- ui.receive('G '+JSON.stringify(opted));
- assert.equal(ui.get('usage-start').hidden,true);
- assert.equal(ui.get('usage-stop').hidden,false);
- assert.match(ui.get('usage-output').textContent,/source unavailable: 1/i);
- assert.match(ui.get('usage-output').textContent,/no automatic upload/i);
- ui.click(ui.get('usage-view'));
- assert.equal(ui.socket.sent.at(-1),'A USAGE_VIEW');
- ui.click(ui.get('usage-stop'));
- assert.equal(ui.socket.sent.at(-1),'A USAGE_OFF');
- ui.receive('G '+JSON.stringify({...opted,enabled:false}));
- assert.equal(ui.get('usage-start').hidden,false);
- ui.click(ui.get('usage-clear'));
- assert.notEqual(ui.socket.sent.at(-1),'A USAGE_CLEAR',
-   'Deletion must require a second deliberate tap');
- ui.click(ui.get('usage-clear'));
- assert.equal(ui.socket.sent.at(-1),'A USAGE_CLEAR');
- ui.receive('G '+JSON.stringify(empty));
- assert.match(ui.get('usage-output').textContent,/Technical actions: 0/);
-});
-test('usage report displays only validated event labels and never HTML',()=>{
- const ui=setup();
+ const before=ui.socket.sent.length;
  ui.receive('G '+JSON.stringify({schema:'ghartv.usage-summary.v1',enabled:true,
-   retention_days:7,uploaded:false,total:1,
-   counts:{SEARCH_SENT:1,'<script>evil</script>':999},steps:[
-     {at_s:4,event:'SEARCH_SENT'},{at_s:7,event:'password=secret'}]}));
- const out=ui.get('usage-output').textContent;
- assert.match(out,/search sent: 1/);
- assert.doesNotMatch(out,/script|password|secret/);
+   total:2,counts:{SEARCH_SENT:2}}));
+ assert.equal(ui.socket.sent.length,before);
+ assert.ok(!ui.socket.sent.some(x=>x.startsWith('A USAGE_')));
+});
+test('player discovery does not show fake timeline before actual media',()=>{
+ const ui=setup();
+ ui.receive('V STARTING');
+ ui.receive('H '+JSON.stringify({state:'unknown',positionMs:0,durationMs:0,seekable:false}));
+ assert.equal(ui.get('timeline').hidden,true);
+ assert.equal(ui.get('playback-state').hidden,false);
+ assert.match(ui.get('playback-state').textContent,/no video confirmed/i);
+ ui.receive('V VIDEO');
+ ui.receive('H '+JSON.stringify({state:'playing',seekable:false,positionMs:5000,durationMs:0}));
+ assert.equal(ui.get('timeline').hidden,false);
+ assert.equal(ui.get('seek-position').disabled,true);
+ assert.equal(ui.get('played-time').textContent,'0:05');
+ assert.equal(ui.get('total-time').textContent,'—');
+ assert.match(ui.get('playback-state').textContent,/does not expose seeking/);
 });
 test('typing layout must not reflow away from Search during the button touch',()=>{
  const ui=setup();

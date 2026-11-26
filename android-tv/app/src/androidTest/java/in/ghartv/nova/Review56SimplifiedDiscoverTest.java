@@ -30,6 +30,23 @@ public class Review56SimplifiedDiscoverTest {
     @Test public void menuOffersSearchAndBackToGuideInsteadOfProviderButtons()throws Exception{search("Paper Lantern");h.press(KeyEvent.KEYCODE_MENU);h.ui(()->{AlertDialog d=(AlertDialog)f("optionsDialog");assertTrue(d.isShowing());View root=d.getWindow().getDecorView();assertNotNull(h.text(root,"Search films or series"));assertNotNull(h.text(root,"Back to TV guide"));assertNull(h.text(root,"Open provider page"));});}
     @Test public void backAtSearchResultsReturnsToTheSearchToolbarBeforeLeaving()throws Exception{search("Paper Lantern");h.press(KeyEvent.KEYCODE_BACK);h.ui(()->{assertFalse(h.activity.isFinishing());assertEquals(View.VISIBLE,((View)f("chrome")).getVisibility());assertTrue(((EditText)f("query")).hasFocus());});}
     @Test public void searchDoesNotRenderNativeCardsOrCachedLiveMatches()throws Exception{search("Paper Lantern");h.ui(()->{assertEquals(0,((FilmHomeView)f("homePanel")).cardCount());assertEquals(View.GONE,((View)f("homePanel")).getVisibility());assertEquals(View.GONE,((View)f("liveResults")).getVisibility());});}
+    @Test public void torRetryShieldsAndroidErrorRobotWithBrandedLoadingScreen()throws Exception{
+        start();
+        h.ui(()->{
+            View cover=(View)f("pageLoadCover");
+            assertNotNull("WebView must have a branded cover",cover);
+            try{
+                java.lang.reflect.Method show=FlixMomoActivity.class.getDeclaredMethod("showPageLoadCover",String.class);
+                java.lang.reflect.Method hide=FlixMomoActivity.class.getDeclaredMethod("hidePageLoadCover");
+                show.setAccessible(true);hide.setAccessible(true);
+                show.invoke(h.activity,"Opening securely through Tor…");
+                assertEquals(View.VISIBLE,cover.getVisibility());
+                assertTrue(((android.widget.TextView)f("pageLoadMessage")).getText().toString().contains("Tor"));
+                hide.invoke(h.activity);
+                assertEquals(View.GONE,cover.getVisibility());
+            }catch(Exception e){throw new AssertionError(e);}
+        });
+    }
     @Test public void explicitBrowserOpensEditableTorAddressAndDoesNotAutoHide()throws Exception{
         start();
         h.ui(()->{
