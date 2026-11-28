@@ -98,7 +98,7 @@ final class FilmTorTransport implements FilmTorController.Transport {
         finish(ticket,false,0);
     }
     private void finish(long ticket,boolean ready,int port){main.post(()->{if(ticket!=generation||pending==null)return;FilmTorController.TransportResult callback=pending;pending=null;callback.ready(ready,port);});}
-    @Override public int currentHttpPort(){TorService current=service;if(current==null)return 0;try{if(current.getTorControlConnection()==null)return 0;int port=current.getHttpTunnelPort();return port>0&&port<=65535?port:0;}catch(RuntimeException ignored){return 0;}}
+    @Override public int currentHttpPort(){TorService current=service;if(current==null)return 0;try{if(current.getTorControlConnection()==null||!"1".equals(current.getInfo("status/circuit-established")))return 0;int port=current.getHttpTunnelPort();return port>0&&port<=65535?port:0;}catch(RuntimeException ignored){return 0;}}
     @Override public void cancel(){generation++;pending=null;if(bound)try{app.unbindService(connection);}catch(RuntimeException ignored){}bound=false;service=null;}
     @Override public void close(){cancel();io.shutdownNow();if(started){try{app.stopService(new Intent(app,TorService.class));}catch(RuntimeException ignored){}started=false;}}
 }

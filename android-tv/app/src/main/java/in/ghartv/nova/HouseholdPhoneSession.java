@@ -19,7 +19,7 @@ import java.util.function.Consumer;
 /**
  * One process-local, home-network-only phone remote shared across GharTV screens.
  * No cloud, no global input injection, no credentials or URLs in status messages.
- * When the app process dies or its 10-minute idle window closes, it disappears.
+ * When the app process dies or the bounded idle window closes, it disappears.
  */
 final class HouseholdPhoneSession {
     static final class Link {

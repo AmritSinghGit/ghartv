@@ -18,8 +18,8 @@ android {
         applicationId = "in.ghartv.nova"
         minSdk = 26
         targetSdk = 35
-        versionCode = if (updateTestBase.isNotEmpty()) ((project.findProperty("testVersionCode") as String?)?.toIntOrNull() ?: 89) else 89
-        versionName = "0.7.15-low-ram-media-review"
+        versionCode = if (updateTestBase.isNotEmpty()) ((project.findProperty("testVersionCode") as String?)?.toIntOrNull() ?: 91) else 91
+        versionName = "0.7.17-remote-state-review"
         buildConfigField("String", "UPDATE_TEST_BASE", "\"\"")
         buildConfigField("boolean", "OWNER_REVIEW_DIAGNOSTICS", if (ownerReviewDiagnostics) "true" else "false")
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"

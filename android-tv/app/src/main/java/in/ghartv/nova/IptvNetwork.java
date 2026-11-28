@@ -58,7 +58,6 @@ final class IptvNetwork {
                 || NetworkRouteState.usedRecently("iptv", NetworkRouteState.TOR);
     }
     static String routeLabel() {
-        return NetworkRouteState.usedRecently("iptv", NetworkRouteState.TOR) ? "Tor recovery"
-                : recoveredRecently() ? "secure DNS recovery" : "direct";
+        return NetworkRouteState.usedRecently("iptv", NetworkRouteState.TOR) ? "Tor" : "Tor required";
     }
 }

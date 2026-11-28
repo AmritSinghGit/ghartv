@@ -21,7 +21,7 @@ header{display:flex;align-items:center;justify-content:space-between;gap:8px;min
 .context{display:flex;gap:8px;align-items:center;justify-content:space-between;min-height:25px}
 .mode{color:var(--mint);font-size:12px;font-weight:850;letter-spacing:.04em}
 .tip{color:var(--muted);font-size:12px;text-align:right;max-width:65%}
-.track{flex:1;min-height:120px;border-radius:25px;border:1.5px solid #498a94;
+.track{flex:1 0 180px;min-height:180px;border-radius:25px;border:1.5px solid #498a94;
   box-shadow:inset 0 0 35px #0e3645,0 8px 26px #0004;
   background:radial-gradient(ellipse at 50% 45%,#194b57,#0b2937 70%);
   position:relative;touch-action:none;display:grid;place-items:center;overflow:hidden}
@@ -59,7 +59,7 @@ button.soft{background:#0b3b46;color:var(--mint)}
 .source-note{font-size:12px;color:#bcd2da}
 .sources-actions{display:grid;grid-template-columns:1fr 1fr;gap:8px}
 .sources-actions button{min-height:40px}
-body.sources-open .track{min-height:65px}
+body.sources-open .track{flex:0 0 90px;min-height:90px}
 body.sources-open .dpad{display:none}
 
 .tools button,.video button{height:45px;font-size:13px;padding:0 4px}
@@ -93,17 +93,17 @@ body.typing-active .dpad button{min-height:32px}
 footer{text-align:center;color:var(--muted);font-size:11px;line-height:1.25}
 [hidden]{display:none!important}
 #video[hidden],#tools[hidden]{display:none}
-body.video-mode .track{min-height:92px}
+body.video-mode .track{flex-basis:140px;min-height:140px}
 body.video-mode .dpad{grid-template-rows:repeat(3,38px);max-width:285px}
 body.video-mode .dpad button{min-height:38px}
 body.editor-mode .editor{border-color:var(--mint)}
 @media(max-width:360px){.brand b{font-size:20px}.tools button,.video button{font-size:12px}.field button{padding:0 8px}}
-@media(max-height:730px){body{gap:6px}.dpad{grid-template-rows:repeat(3,37px)}.dpad button{min-height:37px}.tools button,.video button{height:39px;min-height:39px}.track{min-height:90px}.brand b{font-size:19px}}
+@media(max-height:730px){body{gap:6px}.dpad{grid-template-rows:repeat(3,37px)}.dpad button{min-height:37px}.tools button,.video button{height:39px;min-height:39px}.track{min-height:150px;flex-basis:150px}.brand b{font-size:19px}}
 @media(orientation:landscape) and (max-height:540px){
  body{min-height:370px;gap:5px;padding:5px 10px}
  header{min-height:29px}.brand b{font-size:17px}.brand small{font-size:9px}
  .context,footer{display:none}
- .track{min-height:75px}
+ .track{min-height:100px;flex-basis:100px}
  .dpad{grid-template-rows:repeat(3,32px);max-width:280px;gap:4px}
  .dpad button{min-height:32px}
  .tools button,.video button{min-height:34px;height:34px}
@@ -130,8 +130,8 @@ body.editor-mode .editor{border-color:var(--mint)}
 <div id="tools" class="tools" role="group" aria-label="TV navigation">
   <button data-a="BACK">↶ Back</button>
   <button data-a="SEARCH">⌕ Search</button>
-  <button data-k="85">⏯ Play</button>
-  <button data-a="SOURCES">☷ Sources</button>
+  <button data-k="25" aria-label="Volume down">Vol −</button>
+  <button data-k="24" aria-label="Volume up">Vol +</button>
 </div>
 <div id="video" class="video" role="group" aria-label="Playback controls" hidden>
   <button data-a="BACK">↶ Back</button>
@@ -140,6 +140,9 @@ body.editor-mode .editor{border-color:var(--mint)}
   <button data-a="FULLSCREEN" class="soft">⛶ Fullscreen</button>
   <button data-a="SOURCES">☷ Sources</button>
   <button data-a="NEXT">↪ Try next</button>
+  <button data-k="25" aria-label="Volume down">Vol −</button>
+  <button data-k="24" aria-label="Volume up">Vol +</button>
+  <button data-a="SEARCH">⌕ Search</button>
 </div>
 <div id="source-progress" class="source-note" role="status" aria-live="polite" hidden></div>
 <div id="playback-state" class="source-note" role="status" aria-live="polite" hidden></div>
@@ -179,7 +182,8 @@ const status=document.getElementById("status"),modeEl=document.getElementById("m
  hint=document.getElementById("input-hint"),track=document.getElementById("track"),
  editor=document.getElementById("editor");
 const key=new URLSearchParams(location.search).get("k");
-let ws=null,session="",attempts=0,mode="HOME",points=new Map(),
+let remembered="";try{if(!key)remembered=sessionStorage.getItem("ghartv-remote-session")||"";}catch(e){}
+let ws=null,session=remembered,attempts=0,retryTimer=null,offlineSince=0,lastReply=0,mode="HOME",points=new Map(),
     dx=0,dy=0,sx=0,sy=0,tapDistance=0,tapTime=0,multi=false,ready=false;
 const sendButton=document.getElementById("send"),
       goButton=document.getElementById("go"),
@@ -252,6 +256,7 @@ function setSources(raw){
  }catch(e){sourcesNote.textContent="Source list is unavailable.";}
 }
 function openSources(){
+ if(!["STARTING","VIDEO","FULLSCREEN"].includes(mode)){phoneNotice("Open a film player first.");return;}
  sourcesPanel.hidden=false;document.body.classList.add("sources-open");
  renderSources();send("A SOURCES");
  sourcesPanel.scrollIntoView({block:"nearest",behavior:"smooth"});
@@ -293,7 +298,7 @@ function setPlayback(d){
  const pause=video.querySelector('[data-a="PAUSE"]');
  const full=video.querySelector('[data-a="FULLSCREEN"]');
  play.disabled=!ready||!active||playing;
- pause.disabled=!ready||!active||paused;
+ pause.disabled=!ready||!active||!playing;
  // A fullscreen *entry* button cannot depend on already being fullscreen.
  // The TV determines whether a player can be enlarged and returns feedback.
  full.disabled=!ready||!active;
@@ -344,7 +349,7 @@ function focusPhoneInput(){
   // Browsers permit best-effort focus on socket state changes. iOS Safari
   // usually requires a direct viewer tap to open its native keyboard.
   try{input.focus({preventScroll:true});}catch(e){input.focus();}
-  editor.scrollIntoView({block:"nearest",behavior:"smooth"});
+  updateKeyboardLayout(false);
   // Focus is not the same as the OS keyboard actually opening: report only
   // verified DOM focus. No keyboard text, field values, or key codes.
   setTimeout(()=>{
@@ -352,12 +357,7 @@ function focusPhoneInput(){
     send(document.activeElement===input?"I PHONE_FOCUS_OK":"I PHONE_FOCUS_BLOCKED");
   },120);
 }
-track.addEventListener("pointerup",()=>{
-  // A TV-search trackpad tap is a genuine phone gesture; it can summon
-  // the mobile keyboard where a socket-triggered focus was denied.
-  if(ready&&(mode==="SEARCH"||mode==="EDITOR")&&
-      document.activeElement!==input)focusPhoneInput();
-});
+// Trackpad gestures remain pointer gestures. The text field explicitly opens the keyboard.
 function setOnline(online,message){
  ready=online;status.textContent=message;
  status.classList.toggle("connected",online);
@@ -366,31 +366,51 @@ function setOnline(online,message){
  seekPosition.disabled=!online;
  setPlayback(lastPlayback);
 }
+function queueReconnect(){
+ if(retryTimer!==null)clearTimeout(retryTimer);
+ if(!session||Date.now()-offlineSince>2*60*60*1000){
+   status.textContent="● Offline · scan again";
+   phoneNotice("Pair again using Phone in the FlixMomo menu if the TV restarted or pairing expired.");return;
+ }
+ status.textContent="● Reconnecting";
+ retryTimer=setTimeout(()=>{retryTimer=null;connect();},Math.min(12000,1400*Math.max(1,++attempts)));
+}
+function resumeConnection(){
+ if(document.hidden)return;
+ if(ws&&ws.readyState===1){
+   if(lastReply&&Date.now()-lastReply>15000){ws.close();return;}
+   send("P");return;
+ }
+ if(ws&&ws.readyState===0)return;
+ if(session&&(!offlineSince||Date.now()-offlineSince<=2*60*60*1000)){if(retryTimer!==null){clearTimeout(retryTimer);retryTimer=null;}connect();}
+}
 function connect(){
+ if(ws&&(ws.readyState===0||ws.readyState===1))return;
  if(!key&&!session){setOnline(false,"Scan QR again");return;}
  try{ws=new WebSocket("ws://"+location.host+"/ws?"+(session?
    "s="+encodeURIComponent(session):"k="+encodeURIComponent(key)));}catch(e){
-   setOnline(false,"Connection unavailable");return;
+   setOnline(false,"Connection unavailable");if(!offlineSince)offlineSince=Date.now();queueReconnect();return;
  }
- ws.onopen=()=>{
-   const reconnect=attempts>0;
-   attempts=0;const wasReady=ready;setOnline(true,"● Connected");
+ const socket=ws;
+ socket.onopen=()=>{
+   if(ws!==socket)return;
+   const reconnect=attempts>0||!!offlineSince;
+   attempts=0;offlineSince=0;lastReply=Date.now();submissionPending=false;setOnline(true,"● Connected");
    if(reconnect)send("I PHONE_RECONNECTED");
-   if(!wasReady&&(mode==="SEARCH"||mode==="EDITOR"))focusPhoneInput();
+   // The server sends the authoritative current mode; do not refocus stale Search.
  };
- ws.onclose=()=>{
+ socket.onclose=()=>{
+   if(ws!==socket)return;
    setOnline(false,"● Disconnected");
-   if(session&&attempts++<8){
-     status.textContent="● Reconnecting";
-     setTimeout(connect,1400);
-   }else{
-     status.textContent="● Offline · scan again";
-     phoneNotice("Connection expired or TV restarted. On blue GharTV, open Phone and scan its NEW QR. An old tab cannot reuse the previous pairing. Keep both devices on the same Wi-Fi.");
-   }
+   submissionPending=false;if(!offlineSince)offlineSince=Date.now();queueReconnect();
  };
- ws.onmessage=e=>{
-   const data=String(e.data||"");
-   if(data.startsWith("S "))session=data.slice(2);
+ socket.onmessage=e=>{
+   if(ws!==socket)return;
+   lastReply=Date.now();const data=String(e.data||"");
+   if(data.startsWith("S ")){
+     session=data.slice(2);
+     try{sessionStorage.setItem("ghartv-remote-session",session);history.replaceState(null,"","/remote");}catch(e){}
+   }
    else if(data.startsWith("V "))setMode(data.slice(2));
    else if(data.startsWith("O ")){
      try{setSources(JSON.parse(data.slice(2)));}catch(e){}
@@ -405,7 +425,7 @@ function connect(){
      submissionPending=false;
      if(code==="SEARCH_SENT"){
        if(liveTimer){clearTimeout(liveTimer);liveTimer=null;}
-       input.value="";phoneNotice("Search sent to GharTV. Choose a result on the TV.");
+       input.value="";input.blur?.();setMode("BROWSE");phoneNotice("Search sent to GharTV. Choose a result on the TV.");
      }else if(code==="WEB_TEXT_SENT"){
        input.value="";phoneNotice("Text sent to the selected website field.");
      }else if(code==="INVALID_QUERY")phoneNotice("Please enter a film or series title.");
@@ -414,7 +434,10 @@ function connect(){
      else if(code==="SEARCH_UNAVAILABLE")phoneNotice("Open FlixMomo on the TV to search.");
      else if(code==="EDIT_APPLIED")phoneNotice("Text corrected on the TV.");
      else if(code==="EDIT_FIELD_REQUIRED")phoneNotice("Tap Search on the phone or select a website text box.");
-     else if(code==="CONTROL_UNAVAILABLE")phoneNotice("This player is not directly controllable. Use the TV's video controls.");
+     else if(code==="OPEN_PLAYER")phoneNotice("Choose a film and open its player first. The trackpad and arrows are ready.");
+     else if(code==="CONTROL_UNAVAILABLE")phoneNotice("This player does not expose that action. Tap its visible controls with the trackpad.");
+     else if(code==="SOURCE_UNAVAILABLE")phoneNotice("No readable player choice on this page. Select a film or refresh the choices.");
+     else if(code==="SOURCE_EXHAUSTED")phoneNotice("All observed player choices tried. Choose another title or retry a source.");
      else if(code==="SEEK_UNAVAILABLE")phoneNotice("This stream does not expose a seekable timeline.");
      else if(code==="PLAY_REQUESTED"||code==="PAUSE_REQUESTED")phoneNotice("Command sent · awaiting confirmed TV state.");
      else if(code==="SEEK_REQUESTED")phoneNotice("Seek sent · awaiting TV position update.");
@@ -427,7 +450,7 @@ function send(message){if(ready&&ws&&ws.readyState===1)ws.send(message);}
 function setMode(next){
  if(!["HOME","BROWSE","SEARCH","EDITOR","STARTING","VIDEO","FULLSCREEN"].includes(next))return;
  mode=next;
- if(next!=="SEARCH"&&next!=="EDITOR")document.body.classList.remove("typing-active");
+ if(next!=="SEARCH"&&next!=="EDITOR"){input.blur?.();document.body.classList.remove("typing-active");}
  const video=next==="VIDEO"||next==="FULLSCREEN"||next==="STARTING";
  document.body.classList.toggle("video-mode",video);
  document.body.classList.toggle("editor-mode",next==="EDITOR"||next==="SEARCH");
@@ -443,7 +466,8 @@ function setMode(next){
  }
  document.getElementById("video").hidden=!video;
  document.getElementById("tools").hidden=video;
- if(next==="HOME"){
+ if(!video){
+   lastPlayback={state:"unknown",fullscreen:false};
    sourcesPanel.hidden=true;document.body.classList.remove("sources-open");
    currentChoices=[];sourceBatch={batch:0,batchStart:0,batchEnd:0,phase:"idle"};
  }
@@ -466,7 +490,10 @@ function setMode(next){
 }
 connect();
 setOnline(false,"● Connecting");
-setInterval(()=>send("P"),3000);
+setInterval(()=>{if(!document.hidden)resumeConnection();},3000);
+document.addEventListener?.("visibilitychange",resumeConnection);
+window.addEventListener?.("pageshow",resumeConnection);
+window.addEventListener?.("online",resumeConnection);
 function flush(){
  if(dx||dy){send("M "+Math.round(dx)+" "+Math.round(dy));dx=dy=0;}
  if(sx||sy){send("S "+Math.round(sx)+" "+Math.round(sy));sx=sy=0;}
@@ -502,6 +529,7 @@ track.addEventListener("touchmove",e=>e.preventDefault(),{passive:false});
 document.querySelectorAll("[data-k]").forEach(b=>b.addEventListener("click",()=>send("K "+b.dataset.k)));
 document.querySelectorAll("[data-a]").forEach(b=>b.addEventListener("click",()=>{
  if(b.dataset.a==="SOURCES")openSources();
+ else if(["PLAY","PAUSE","FULLSCREEN","NEXT"].includes(b.dataset.a)&&!["STARTING","VIDEO","FULLSCREEN"].includes(mode))phoneNotice("Open a film player first.");
  else send("A "+b.dataset.a);
 }));
 function editBackspace(){
@@ -542,7 +570,7 @@ function sendText(submit){
  const bounded=value.slice(0,256);
  if(mode==="SEARCH"){
    // One atomic search message. The TV owns focus and performs Search.
-   send("Q "+bounded);submissionPending=true;
+   send("Q "+bounded);submissionPending=true;input.blur?.();
    phoneNotice("Searching GharTV…");return;
  }
  if(mode==="EDITOR"){
@@ -564,6 +592,14 @@ input.addEventListener("keydown",e=>{
    e.preventDefault();editBackspace();
  }
 });
+function updateKeyboardLayout(scroll){
+ const vv=window.visualViewport;
+ const layoutHeight=window.innerHeight||document.documentElement?.clientHeight||0;
+ const keyboard=!!vv&&layoutHeight-vv.height>110;
+ const compact=(mode==="SEARCH"||mode==="EDITOR")&&keyboard;
+ document.body.classList.toggle("typing-active",compact);
+ if(scroll&&compact)keepPhoneEditorVisible();
+}
 function keepPhoneEditorVisible(){
  // In landscape, SwiftKey can shrink the visual viewport to just ~83 CSS px.
  // Aligning the editor's bottom hid the actual input and Search button above
@@ -573,7 +609,7 @@ function keepPhoneEditorVisible(){
    input.scrollIntoView({block:"center",behavior:"instant"});
 }
 input.addEventListener("focus",()=>{
- document.body.classList.add("typing-active");
+ updateKeyboardLayout(false);
  // Do not schedule a late scroll after focus: it can shift the Search
  // button during a real touch. Only scroll when the IME resizes the view.
 });
@@ -584,7 +620,8 @@ input.addEventListener("blur",()=>{
  if(mode!=="SEARCH"&&mode!=="EDITOR")
    document.body.classList.remove("typing-active");
 });
-window.visualViewport?.addEventListener("resize",keepPhoneEditorVisible);
+window.visualViewport?.addEventListener("resize",()=>updateKeyboardLayout(true));
+window.addEventListener?.("resize",()=>updateKeyboardLayout(true));
 document.getElementById("mic").addEventListener("click",()=>{
  const Recognizer=window.SpeechRecognition||window.webkitSpeechRecognition;
  if(!Recognizer){

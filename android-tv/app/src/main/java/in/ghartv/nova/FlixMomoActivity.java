@@ -146,6 +146,19 @@ public class FlixMomoActivity extends Activity {
     private final FilmVisitCache visitCache=new FilmVisitCache();
     private boolean closingFullscreen;
     private long inputEpoch;
+    private int watchFocusTicket;
+    private String watchFocusPage="";
+    private void focusWatchPage(WebView page,String url,int ticket,int attempt){
+        handler.postDelayed(()->{
+            if(ticket!=watchFocusTicket||page!=browser||!java.util.Objects.equals(url,page.getUrl())||
+               !pointerPage||pageEditor||torWebMode||custom!=null||verifiedImmersive||isFinishing()||isDestroyed())return;
+            page.evaluateJavascript(FilmPlaybackProbe.reveal(),raw->{
+                if(ticket!=watchFocusTicket||page!=browser||!java.util.Objects.equals(url,page.getUrl()))return;
+                if(raw!=null&&raw.contains("PLAYER_IN_VIEW")){page.requestFocus();page.evaluateJavascript(FilmPlaybackProbe.focusVisiblePlayer(),null);}
+                else if(attempt<3)focusWatchPage(page,url,ticket,attempt+1);
+            });
+        },attempt==0?850L:1500L);
+    }
     private boolean backHeld,menuHeld,fullscreenKeyHeld,escapeHeld;
     private long keyEventSerial;
     private final FilmReviewJournal reviewJournal=new FilmReviewJournal();
@@ -154,6 +167,7 @@ public class FlixMomoActivity extends Activity {
             reviewJournal.save(this,performanceEvidence());
     };
     private void noteInput(String event){
+        if("PHONE_DIRECTION".equals(event)||"PHONE_SCROLL".equals(event)||"PHONE_TOUCH".equals(event)||"POINTER_CLICK".equals(event)||"PHONE_TRY_NEXT".equals(event)||"PHONE_SOURCE_SELECT".equals(event))watchFocusTicket++;
         if("POINTER_CLICK".equals(event)){
             lastPointerClick=android.os.SystemClock.elapsedRealtime();
             if(BuildConfig.DEBUG)android.util.Log.i("GharTV1Click","POINTER_CLICK pointerPage="+pointerPage);
@@ -271,9 +285,11 @@ public class FlixMomoActivity extends Activity {
             if(torWebMode&&browserBar!=null&&browserBar.showing()){
                 browserBar.movePhone(x,y);return;
             }
+            watchFocusTicket++;if(nativeControls!=null)nativeControls.cancelPlayerFocus();
             if(phoneCursorReady())cursor.moveRelative(x,y);
         });}
         @Override public void click(){runOnUiThread(()->{
+            if(nativeControls!=null)nativeControls.cancelPlayerFocus();
             noteInput("PHONE_TOUCH");
             if(torWebMode&&browserBar!=null&&browserBar.showing()){
                 browserBar.phoneClick();return;
@@ -301,6 +317,7 @@ public class FlixMomoActivity extends Activity {
             else if(code==KeyEvent.KEYCODE_DPAD_UP||code==KeyEvent.KEYCODE_DPAD_DOWN||
                     code==KeyEvent.KEYCODE_DPAD_LEFT||code==KeyEvent.KEYCODE_DPAD_RIGHT)
                 noteInput("PHONE_DIRECTION");
+            if(nativeControls!=null)nativeControls.cancelPlayerFocus();
             // On a website, paired-phone vertical arrows scroll, unlike the
             // physical D-pad, which continues to move the on-screen cursor.
             if((code==KeyEvent.KEYCODE_DPAD_UP||code==KeyEvent.KEYCODE_DPAD_DOWN)&&
@@ -312,6 +329,7 @@ public class FlixMomoActivity extends Activity {
             dispatchKeyEvent(new KeyEvent(t,t+65,KeyEvent.ACTION_UP,code,0));
         });}
         @Override public void scroll(int dx,int dy){runOnUiThread(()->{
+            if(nativeControls!=null)nativeControls.cancelPlayerFocus();
             noteInput("PHONE_SCROLL");phoneScroll(dx,dy);
         });}
         @Override public void action(String action){runOnUiThread(()->{
@@ -384,7 +402,7 @@ public class FlixMomoActivity extends Activity {
         @Override public void run(){
             if(isFinishing()||isDestroyed())return;
             if(phoneConnected)samplePhonePlayback();
-            handler.postDelayed(this,850L);
+            handler.postDelayed(this,phoneConnected?(phoneMediaObservable?850L:1700L):3000L);
         }
     };
     private static org.json.JSONObject decodePhonePlayback(String raw)throws Exception{
@@ -427,14 +445,32 @@ public class FlixMomoActivity extends Activity {
             ",\"seekStartMs\":0,\"seekEndMs\":"+(seekable?duration:0)+"}");
         return true;
     }
+    /** Search/catalogue pages must not inherit a previous movie's controls. */
+    private boolean phonePlayerPage(){
+        if(torWebMode||homeRequested||detailRequested)return false;
+        if(custom!=null||verifiedImmersive)return true;
+        if(browser==null||!pointerPage||loading||!pageReady||mainFrameError||
+           (chrome!=null&&chrome.isShown()&&query!=null&&query.hasFocus()))return false;
+        Uri uri=Uri.parse(browser.getUrl()==null?"":browser.getUrl());
+        return watchPage(uri)|| (allowedTop(uri)&&FilmProviderPolicy.detail(uri));
+    }
+    private boolean phonePlayerActionReady(){
+        return phonePlayerPage()&&(custom!=null||verifiedImmersive||phoneMediaObservable||
+            watchPage(Uri.parse(browser==null||browser.getUrl()==null?"":browser.getUrl())));
+    }
+    private void resetPhonePlayback(){
+        phonePlaybackEpoch++;phoneMediaObservable=false;phonePlaybackReading=false;phonePlaybackTicket++;
+        HouseholdPhoneSession.playback("{\"state\":\"unknown\",\"fullscreen\":false}");
+    }
     private void samplePhonePlayback(){
         if(sampleNativeFullscreen())return;
         final WebView page=browser;
-        if(page==null||homeRequested||detailRequested||torWebMode){
+        if(!phonePlayerPage()||page==null){
             // Phone movie controls must never read arbitrary Tor Web pages.
             phoneMediaObservable=false;
             HouseholdPhoneSession.playback("{\"state\":\"unknown\",\"fullscreen\":"+
                 (custom!=null||verifiedImmersive)+"}");
+            notifyPhoneMode();
             return;
         }
         long now=android.os.SystemClock.elapsedRealtime();
@@ -475,11 +511,12 @@ public class FlixMomoActivity extends Activity {
                     ",\"positionMs\":"+position+",\"durationMs\":"+duration+
                     ",\"seekable\":"+seekable+",\"seekStartMs\":"+start+
                     ",\"seekEndMs\":"+end+"}");
-                if(phoneMediaObservable)notifyPhoneMode();
+                notifyPhoneMode();
             }catch(Exception ignored){
                 phoneMediaObservable=false;
                 HouseholdPhoneSession.playback("{\"state\":\"unknown\",\"fullscreen\":"+
                     (custom!=null||verifiedImmersive)+"}");
+                notifyPhoneMode();
             }
         });
     }
@@ -491,6 +528,7 @@ public class FlixMomoActivity extends Activity {
     }
     private void phonePlaybackCommand(String operation,long positionMs){
         if(isFinishing()||isDestroyed()||positionMs<0||positionMs>86_400_000L)return;
+        if(!phonePlayerActionReady()){HouseholdPhoneSession.feedback("OPEN_PLAYER");return;}
         if(custom!=null){
             android.widget.VideoView video=phoneNativeVideo(custom);
             if(video!=null){
@@ -533,7 +571,7 @@ public class FlixMomoActivity extends Activity {
                 // their own player. Do not label this as verified playback.
                 phoneMediaKey("play".equals(operation)?
                     KeyEvent.KEYCODE_MEDIA_PLAY:KeyEvent.KEYCODE_MEDIA_PAUSE);
-                HouseholdPhoneSession.feedback("CONTROL_UNAVAILABLE");
+                HouseholdPhoneSession.feedback("play".equals(operation)?"PLAY_REQUESTED":"PAUSE_REQUESTED");
             }else if("play".equals(operation)&&nativeControls!=null&&
                      !verifiedImmersive&&
                      (startMonitor==null||!startMonitor.healthy())){
@@ -553,9 +591,9 @@ public class FlixMomoActivity extends Activity {
                 (query.hasFocus()||phoneSearchWanted&&!browserSearchSubmitted))
             HouseholdPhoneSession.mode("SEARCH");
         else if(pointerPage&&pageEditor)HouseholdPhoneSession.mode("EDITOR");
-        else if(phoneMediaObservable||startMonitor!=null&&startMonitor.healthy())
+        else if(phonePlayerPage()&&(phoneMediaObservable||startMonitor!=null&&startMonitor.healthy()))
             HouseholdPhoneSession.mode("VIDEO");
-        else if(startMonitor!=null&&startMonitor.running())HouseholdPhoneSession.mode("STARTING");
+        else if(phonePlayerActionReady()||phonePlayerPage()&&startMonitor!=null&&startMonitor.running())HouseholdPhoneSession.mode("STARTING");
         else HouseholdPhoneSession.mode("BROWSE");
     }
     private void phoneScroll(int dx,int dy){
@@ -570,18 +608,21 @@ public class FlixMomoActivity extends Activity {
         switch(action){
             case "BACK":onBackPressed();return;
             case "FULLSCREEN":
+                if(!phonePlayerActionReady()){HouseholdPhoneSession.feedback("OPEN_PLAYER");return;}
                 if(custom!=null){exitFullScreen();return;}
                 if(verifiedImmersive){leaveVerifiedFullscreen();return;}
                 if(pointerPage&&!torWebMode){requestPageFullscreen(true);return;}
                 HouseholdPhoneSession.feedback("FULLSCREEN_UNAVAILABLE");
                 return;
             case "SOURCES":
+                if(!phonePlayerActionReady()){HouseholdPhoneSession.feedback("OPEN_PLAYER");return;}
                 // Open the choice list on the phone; never obscure the TV video.
                 if(nativeControls!=null)nativeControls.requestPhoneSources();
                 HouseholdPhoneSession.refreshSources();
                 return;
             case "NEXT":
-                phonePlaybackEpoch++;phoneMediaObservable=false;
+                if(!phonePlayerActionReady()){HouseholdPhoneSession.feedback("OPEN_PLAYER");return;}
+                resetPhonePlayback();
                 if(verifiedImmersive)leaveVerifiedFullscreen();
                 if(custom!=null){phoneSwitchingSource=true;exitFullScreen();phoneSwitchingSource=false;}
                 // Phone Next is a deliberate manual choice, and must not
@@ -626,6 +667,7 @@ public class FlixMomoActivity extends Activity {
         search();
         hideTvSoftKeyboard();
         handler.postDelayed(this::hideTvSoftKeyboard,300L);
+        notifyPhoneMode();
         HouseholdPhoneSession.feedback("SEARCH_SENT");
     }
     private void phoneMediaKey(int code){
@@ -1055,9 +1097,7 @@ public class FlixMomoActivity extends Activity {
             @Override public void onPageStarted(WebView view,String url,Bitmap icon){
                 // A same-URL refresh is still a new document. Never let its
                 // previous playback observation or pending command cross over.
-                phonePlaybackEpoch++;phoneMediaObservable=false;
-                phonePlaybackReading=false;phonePlaybackTicket++;
-                HouseholdPhoneSession.playback("{\"state\":\"unknown\",\"fullscreen\":false}");
+                resetPhonePlayback();
                 if(verifiedImmersive&&!java.util.Objects.equals(verifiedImmersiveUrl,url))
                     leaveVerifiedFullscreen();
                 cursor.cancel();nativeControls.started();keepSubmittedSearchBrowserOnly();if("about:blank".equals(url))return;
@@ -1071,6 +1111,7 @@ public class FlixMomoActivity extends Activity {
                 connection.started(url);
                 if(detailRequested&&FilmProviderPolicy.detail(Uri.parse(url)))detailPanel.followNavigation(url);
                 else if(detailRequested&&allowedBrowserPage(Uri.parse(url))&&!FilmProviderPolicy.detail(Uri.parse(url)))usePage();mainFrameError=false;pageReady=false;loading=true;if(allowedBrowserPage(Uri.parse(url)))lastRequested=url;
+                notifyPhoneMode();
                 showPageLoadCover("Opening securely through Tor…");
                 status.setText("Opening FlixMomo…");if(pointerPage){if(!simplifiedDiscoverExperience()||chrome.getVisibility()!=View.VISIBLE)providerStatus("Opening the registered provider page… Menu and Back remain available.",false);nativeControls.pause();playNotice.setVisibility(View.GONE);networkNotice.setVisibility(View.GONE);}handler.removeCallbacks(slowLoad);handler.postDelayed(slowLoad,20000);
             }
@@ -1097,12 +1138,15 @@ public class FlixMomoActivity extends Activity {
                     if(!torWebMode&&!mouseActive&&!pointerPage)nativeControls.documentReady();
                     if(pointerPage&&!pageEditor&&(!simplifiedDiscoverExperience()||chrome.getVisibility()!=View.VISIBLE))resumePagePointer(false);
                     if(!torWebMode&&pointerPage&&oneClickPlay)nativeControls.resume();
+                    if(!torWebMode&&pointerPage&&watchPage(Uri.parse(url))&&!url.equals(watchFocusPage)){
+                        watchFocusPage=url;focusWatchPage(view,url,++watchFocusTicket,0);
+                    } else if(!watchPage(Uri.parse(url))){watchFocusPage="";watchFocusTicket++;}
+                    notifyPhoneMode();
                 }
             }
             @Override public void doUpdateVisitedHistory(WebView view,String url,boolean reload){
                 if(!loading&&allowedBrowserPage(Uri.parse(url))&&!java.util.Objects.equals(lastRequested,url)){
-                    phonePlaybackEpoch++;phoneMediaObservable=false;
-                    phonePlaybackReading=false;phonePlaybackTicket++;
+                    resetPhonePlayback();
                     lastRequested=url;if(torController!=null)torController.beginNavigation(url);nativeControls.started();if(!torWebMode)oneClickArrived(url);
                     if(detailRequested&&FilmProviderPolicy.detail(Uri.parse(url)))detailPanel.followNavigation(url);
                     else if(detailRequested)usePage();
@@ -1355,11 +1399,12 @@ public class FlixMomoActivity extends Activity {
             // Store event categories only. Never persist Tor relay details or URLs.
             if(message.startsWith("Connecting privately through Tor"))noteInput("TOR_START");
             else if(message.startsWith("Tor connected · opening page"))noteInput("TOR_PROXY_READY");
+            if(pageLoadCover!=null&&pageLoadCover.getVisibility()==View.VISIBLE)pageLoadMessage.setText(message);
             showTorStatus(message);
         }
         public void reload(String url){reloadForTorRoute(url);}
         public void routeChanged(boolean tor){credit.setText(FilmProviderPolicy.CREDIT+torRouteSuffix());}
-        public void failure(String message){noteInput("TOR_FAILED");showTorFailure(message);}
+        public void failure(String message){noteInput("TOR_FAILED");if(pageLoadCover!=null&&pageLoadCover.getVisibility()==View.VISIBLE)pageLoadMessage.setText("Tor connection unavailable · reopen or retry");showTorFailure(message);}
     });}
     private String torRouteSuffix(){return torController==null?" · Tor unavailable":torController.active()?" · Tor":" · Tor connecting";}
     private void showTorConsent(FilmTorController.ConsentResult callback){
@@ -1464,6 +1509,7 @@ public class FlixMomoActivity extends Activity {
         if(url==null||!allowedBrowserPage(Uri.parse(url))){status.setText("Address blocked. Use a public HTTPS website in Tor web.");return;}
         if(custom!=null)exitFullScreen();
         if(startMonitor!=null)startMonitor.leave();handler.removeCallbacks(detailWait);handler.removeCallbacks(playDeadline);playUntil=0;
+        resetPhonePlayback();pageReady=false;loading=true;
         pointerPage=true;pointerTitleOrigin=url;detailRequested=false;homeRequested=false;pageEditor=false;
         filmEvent("film_detail_open");detailPanel.setVisibility(View.GONE);homePanel.setVisibility(View.GONE);liveResults.setVisibility(View.GONE);
         nativeControls.pause();nativeControls.hideAll();chrome.setVisibility(View.GONE);credit.setVisibility(View.GONE);playNotice.setVisibility(View.GONE);networkNotice.setVisibility(View.GONE);
@@ -1663,6 +1709,7 @@ public class FlixMomoActivity extends Activity {
             cursor.target(browser);cursor.enter();return true;
         }
         if(!mouseActive)enterPagePointer();
+        else if(!cursor.enabled()){cursor.target(browser);cursor.enable(true);cursor.enter();}
         return cursor.enabled();
     }
     /** Live phone text replaces only the currently selected safe field. */
@@ -1714,7 +1761,8 @@ public class FlixMomoActivity extends Activity {
     /** Select only a currently observed, numbered source. */
     private void phoneChooseSource(int number){
         if(number<1||number>12||nativeControls==null)return;
-        phonePlaybackEpoch++;phoneMediaObservable=false;
+        if(!phonePlayerActionReady()){HouseholdPhoneSession.feedback("OPEN_PLAYER");return;}
+        resetPhonePlayback();
         if(custom!=null){phoneSwitchingSource=true;exitFullScreen();phoneSwitchingSource=false;}
         if(verifiedImmersive)leaveVerifiedFullscreen();
         if(!pointerPage||homeRequested||detailRequested)return;

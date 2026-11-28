@@ -129,7 +129,13 @@ public final class PhoneLinkSmoke {
             ok(http(port,"/ws?s="+sess,"Upgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\n").startsWith("HTTP/1.1 403"));   // still connected: no second socket
         }
         Thread.sleep(200);
-        // reconnect inside 60 s from the same address with the session value works; with a wrong value, not
+        // Simulate a 90-second phone lock (beyond old 60s limit) without waiting.
+        java.lang.reflect.Field dropped=PhoneLinkServer.class.getDeclaredField("dropped");
+        dropped.setAccessible(true);dropped.setLong(s,System.currentTimeMillis()-90_000L);
+        // Reload serves only the static remote UI; the old QR still cannot pair.
+        ok(http(port,"/remote","").startsWith("HTTP/1.1 200"));
+        ok(http(port,"/?k="+k,"").startsWith("HTTP/1.1 403"));
+        // Same-address reconnect must present the original session secret.
         try(Socket c=new Socket("127.0.0.1",port)){
             c.getOutputStream().write(("GET /ws?s=nope HTTP/1.1\r\nHost: "+hp+"\r\nUpgrade: websocket\r\nSec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\n\r\n").getBytes());
             ok(new String(c.getInputStream().readNBytes(12)).startsWith("HTTP/1.1 403"));}

@@ -39,7 +39,7 @@ import java.util.Locale;
 import java.util.Map;
 
 /** Public IPTV player. It never uses Jio credentials and only uses the shared app-local
- * Tor tunnel after direct and secure-DNS route failures. */
+ * Tor tunnel; no direct origin fallback. */
 @UnstableApi
 public class IptvPlayerActivity extends Activity {
     public static final String EXTRA_CHANNEL_JSON="iptv_channel_json";
@@ -110,7 +110,7 @@ public class IptvPlayerActivity extends Activity {
         });
         String stream=resolvedStreamUrl(channel);MediaItem.Builder item=new MediaItem.Builder().setUri(stream);String lower=stream.toLowerCase(Locale.ROOT);if(lower.contains(".m3u8"))item.setMimeType(MimeTypes.APPLICATION_M3U8);else if(lower.contains(".mpd"))item.setMimeType(MimeTypes.APPLICATION_MPD);
         player.setMediaItem(item.build());player.prepare();player.play();Telemetry.event(this,"iptv_play_request",Telemetry.data("protocol",protocol(stream)));
-        firstFrameDeadline=()->{if(!firstFrameObserved){if(tryAlternate("FIRST_FRAME_TIMEOUT"))return;releasePlayer();loading.setVisibility(View.GONE);retry.setVisibility(View.VISIBLE);source.setText("IPTV-org · "+channel.group+" · "+IptvNetwork.routeLabel());status.setText("No first picture arrived after direct, secure DNS and Tor recovery. This public stream may be offline, regional or slow.");Telemetry.event(this,"iptv_play_failed",Telemetry.data("reason","FIRST_FRAME_TIMEOUT","route",IptvNetwork.routeLabel()));}};main.postDelayed(firstFrameDeadline,alternates.isEmpty()?90_000L:StreamFallback.FIRST_FRAME_DEADLINE_MS);
+        firstFrameDeadline=()->{if(!firstFrameObserved){if(tryAlternate("FIRST_FRAME_TIMEOUT"))return;releasePlayer();loading.setVisibility(View.GONE);retry.setVisibility(View.VISIBLE);source.setText("IPTV-org · "+channel.group+" · "+IptvNetwork.routeLabel());status.setText("No first picture arrived through Tor. This public stream may be offline, regional or slow.");Telemetry.event(this,"iptv_play_failed",Telemetry.data("reason","FIRST_FRAME_TIMEOUT","route",IptvNetwork.routeLabel()));}};main.postDelayed(firstFrameDeadline,alternates.isEmpty()?90_000L:StreamFallback.FIRST_FRAME_DEADLINE_MS);
     }
     private void failed(Throwable error){if(firstFrameDeadline!=null)main.removeCallbacks(firstFrameDeadline);if(!firstFrameObserved&&tryAlternate(NetworkFailure.classify(error)))return;loading.setVisibility(View.GONE);retry.setVisibility(View.VISIBLE);String code=NetworkFailure.classify(error);status.setText(message(code));Telemetry.error(this,"iptv_play_failed",error,Telemetry.data("reason",code,"protocol",protocol(channel.streamUrl)));}
     private String message(String code){

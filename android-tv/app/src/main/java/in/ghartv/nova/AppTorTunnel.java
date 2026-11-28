@@ -27,6 +27,7 @@ final class AppTorTunnel {
     private volatile TorService service;
     private boolean bound;
     private boolean binding;
+    private long lastStartAttempt = -60_000L;
 
     private AppTorTunnel(Context context) { app = context; }
 
@@ -50,7 +51,7 @@ final class AppTorTunnel {
 
     int currentHttpPort() {
         TorService current = service;
-        if (current == null) return 0;
+        if (current == null || current.getTorControlConnection() == null) return 0;
         try {
             String circuit = current.getInfo("status/circuit-established");
             int port = current.getHttpTunnelPort();
@@ -66,6 +67,7 @@ final class AppTorTunnel {
         if (Looper.myLooper() == Looper.getMainLooper()) return 0;
         int ready = currentHttpPort();
         if (ready > 0) return ready;
+        ensureStarted();
         ensureBound();
         long deadline = SystemClock.elapsedRealtime() + Math.max(500L, timeoutMs);
         while (SystemClock.elapsedRealtime() < deadline) {
@@ -82,6 +84,20 @@ final class AppTorTunnel {
             }
         }
         return 0;
+    }
+
+    /** Match the foreground film transport: binding alone is not a start request. */
+    private void ensureStarted() {
+        synchronized (lock) {
+            long now = SystemClock.elapsedRealtime();
+            if (now - lastStartAttempt < 30_000L) return;
+            lastStartAttempt = now;
+        }
+        try {
+            app.startService(new Intent(app, TorService.class).setAction(TorService.ACTION_START));
+        } catch (RuntimeException ignored) {
+            // Android may refuse a background start; binding still remains available.
+        }
     }
 
     private void ensureBound() {

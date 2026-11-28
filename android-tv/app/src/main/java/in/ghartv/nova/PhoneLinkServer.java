@@ -62,13 +62,14 @@ public final class PhoneLinkServer {
     private volatile ServerSocket server;
     /** CSO R2007 MUST 1: only these key codes can be sent from a phone (d-pad, enter, back, home, delete, media, volume, channel). */
     static final Set<Integer> ALLOWED_KEYS = new HashSet<>(Arrays.asList(19, 20, 21, 22, 23, 66, 4, 3, 67, 112, 85, 126, 127, 90, 89, 87, 88, 24, 25, 164, 166, 167));
-    static final long RECONNECT_MS = 60_000L;
+    static final long RECONNECT_MS = 2 * 60 * 60_000L;
     private volatile String claimedBy;
     private volatile boolean keyUsed;
     private volatile long dropped;
     private volatile String hostPort = "";
     private volatile boolean stopped;
     private volatile OutputStream activeOutput;
+    private volatile Socket activeSocket;
     // Android StrictMode forbids socket writes on the main thread. All outbound
     // screen state uses this bounded single socket writer, not the UI looper.
     private final java.util.concurrent.ExecutorService outbound=
@@ -114,7 +115,7 @@ public final class PhoneLinkServer {
              "WEB_TEXT_SENT".equals(code)||"FIELD_REQUIRED".equals(code)||
              "FIELD_BLOCKED".equals(code)||"SEARCH_UNAVAILABLE".equals(code)||
              "EDIT_APPLIED".equals(code)||"EDIT_FIELD_REQUIRED".equals(code)||
-             "CONTROL_UNAVAILABLE".equals(code)||"SEEK_UNAVAILABLE".equals(code)||
+             "CONTROL_UNAVAILABLE".equals(code)||"OPEN_PLAYER".equals(code)||"SEEK_UNAVAILABLE".equals(code)||
              "SEEK_REQUESTED".equals(code)||"PLAY_REQUESTED".equals(code)||
              "PAUSE_REQUESTED".equals(code)||
              "FULLSCREEN_UNAVAILABLE".equals(code)||
@@ -187,6 +188,8 @@ public final class PhoneLinkServer {
 
     public void stop() {
         stopped = true;activeOutput=null;outbound.shutdownNow();
+        Socket socket=activeSocket;activeSocket=null;
+        if(socket!=null)try{socket.close();}catch(IOException ignored){}
         try { if (server != null) server.close(); } catch (IOException ignored) {}
         sink.connected(false);
     }
@@ -199,7 +202,7 @@ public final class PhoneLinkServer {
     private void idleLoop() {
         while (!stopped) {
             try { Thread.sleep(5_000); } catch (InterruptedException e) { return; }
-            if (System.currentTimeMillis() - lastActivity > IDLE_MS) { stop(); return; }
+            if (System.currentTimeMillis() - lastActivity > (keyUsed ? RECONNECT_MS : IDLE_MS)) { stop(); return; }
             synchronized (this) { if (keyUsed && !connected && dropped > 0 && System.currentTimeMillis() - dropped > RECONNECT_MS) { claimedBy = null; sess = ""; } }
         }
     }
@@ -258,8 +261,7 @@ public final class PhoneLinkServer {
             // MUST 5: the Host must be this TV's own address and port; an Origin, if sent, must be the same page.
             if (host == null || !host.equals(hostPort) || (origin != null && !origin.equals("http://" + hostPort))) { refuse(out); return; }
             if (!sessionOrKey(query(target, "k"), who, path)) { refuse(out); return; }
-            lastActivity = System.currentTimeMillis();
-            if (path.equals("/") && wsKey == null) { reply(out, 200, "text/html; charset=utf-8", page); return; }
+            if ((path.equals("/")||path.equals("/remote")) && wsKey == null) { reply(out, 200, "text/html; charset=utf-8", page); return; }
             if (path.equals("/ws") && wsKey != null) {
                 if (wsKey.length() != 24) { refuse(out); return; }
                 synchronized (this) {
@@ -267,12 +269,14 @@ public final class PhoneLinkServer {
                     boolean again = keyUsed && who.equals(claimedBy) && !connected && System.currentTimeMillis() - dropped <= RECONNECT_MS && sess.equals(query(target, "s"));
                     if (!fresh && !again) { refuse(out); return; }
                     if (fresh) { keyUsed = true; claimedBy = who; sess = newKey(); }
-                    connected = true;
+                    if(stopped){refuse(out);return;}
+                    connected = true;activeSocket=s;lastActivity=System.currentTimeMillis();
                 }
+                try {
                 String accept = Base64.getEncoder().encodeToString(MessageDigest.getInstance("SHA-1").digest((wsKey + GUID).getBytes(StandardCharsets.UTF_8)));
                 out.write(("HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Accept: " + accept + "\r\n\r\n").getBytes(StandardCharsets.UTF_8));
                 out.flush();
-                s.setSoTimeout(0);
+                s.setSoTimeout(25_000); // Detect suspended phone sockets; reconnect uses the same secret and address.
                 activeOutput=out;
                 // Always send the reconnect identity before notifying the
                 // foreground Activity. That callback can immediately queue a
@@ -286,10 +290,11 @@ public final class PhoneLinkServer {
                 sendAsync("V "+lastMode);
                 sendAsync("O "+lastSources);
                 sendAsync("H "+lastPlayback);
-                try { frames(in, out); } finally {
+                frames(in, out);
+                } finally {
                     activeOutput=null;
-                    synchronized (this) { connected = false; dropped = System.currentTimeMillis(); }
-                    sink.connected(false);
+                    synchronized (this) { activeSocket=null;connected = false; dropped = System.currentTimeMillis(); }
+                    if(!stopped)sink.connected(false);
                 }
                 return;
             }
@@ -301,9 +306,11 @@ public final class PhoneLinkServer {
     private volatile boolean connected;
     private volatile String sess = "";
 
-    /** The page needs the key until the first socket upgrade, then it is dead; the socket may come back with the session value for 60 s from the same address. */
+    /** The page needs the key until the first socket upgrade, then it is dead; the socket may come back with the session value for a bounded two-hour window from the same address. */
     private boolean sessionOrKey(String k, String who, String path) {
         if (path.equals("/ws") && keyUsed) return who.equals(claimedBy) && !sess.isEmpty();
+        // Static UI only. WebSocket still requires the private session secret.
+        if(path.equals("/remote"))return keyUsed&&who.equals(claimedBy)&&!sess.isEmpty();
         return !keyUsed && keyOk(k);
     }
 

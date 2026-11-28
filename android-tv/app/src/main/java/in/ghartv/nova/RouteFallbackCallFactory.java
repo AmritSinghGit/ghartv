@@ -242,7 +242,7 @@ final class RouteFallbackCallFactory implements Call.Factory {
         }
         @Override public Call.Factory open() throws IOException {
             int port = AppTorTunnel.get(app).awaitHttpPort(waitMs);
-            if (port < 1 || port > 65535) throw new IOException("App-local Tor route was not ready");
+            if (port < 1 || port > 65535) throw new java.net.SocketTimeoutException("App-local Tor route was not ready");
             return template.newBuilder()
                     .proxy(new Proxy(Proxy.Type.HTTP, new InetSocketAddress("127.0.0.1", port)))
                     .dns(Dns.SYSTEM)

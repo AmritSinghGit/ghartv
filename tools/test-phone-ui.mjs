@@ -10,7 +10,7 @@ const html=readFileSync(resolve(root,'android-tv/app/src/main/assets/phone/index
 const script=html.match(/<script>([\s\S]*?)<\/script>/)?.[1];
 assert.ok(script,'Phone remote script exists');
 
-function setup(){
+function setup(stored="",reload=false){
  const elements=new Map(),actions=new Map(),keys=new Map();
  const make=id=>{
    const listeners=new Map();
@@ -23,7 +23,7 @@ function setup(){
      addEventListener:(name,fn)=>listeners.set(name,fn),
      setAttribute(k,v){this[k]=v},
      replaceChildren(){},append(){},scrollIntoView(options){this.lastScroll=options},
-     focus(){this.focused=true;document.activeElement=this},getBoundingClientRect(){return {width:900,height:600}},
+     focus(){this.focused=true;document.activeElement=this},blur(){this.focused=false;if(document.activeElement===this)document.activeElement=null},getBoundingClientRect(){return {width:900,height:600}},
      querySelector(s){return actions.get(s.match(/data-a="([^"]+)"/)?.[1])},
    };
  };
@@ -36,11 +36,12 @@ function setup(){
  for(const action of ['PLAY','PAUSE','FULLSCREEN','SOURCES','NEXT','BACK']){
    const el=make('button-'+action);el.dataset.a=action;actions.set(action,el);
  }
- for(const code of ['19','20','21','22','23','85']){
+ for(const code of ['19','20','21','22','23','24','25']){
    const el=make('key-'+code);el.dataset.k=code;keys.set(code,el);
  }
  const allButtons=[...actions.values(),...keys.values()];
- const document={body:make('body'),
+ const events=new Map();
+ const document={body:make('body'),addEventListener:(name,fn)=>events.set(name,fn),
    getElementById:id=>{assert.ok(elements.has(id),id);return elements.get(id)},
    querySelectorAll:selector=>selector==='button'?allButtons:
      selector==='[data-a]'?[...actions.values()]:
@@ -49,13 +50,14 @@ function setup(){
  };
  let socket;
  class WS {
-   constructor(){socket=this;this.readyState=1;this.sent=[]}
+   constructor(url){socket=this;this.url=url;this.readyState=1;this.sent=[]}
    send(message){this.sent.push(message)}
  }
  const viewportHandlers=new Map();
- const mockWindow={visualViewport:{height:83,addEventListener:(event,fn)=>viewportHandlers.set(event,fn),listeners:viewportHandlers}};
+ const mockWindow={innerHeight:750,visualViewport:{height:83,addEventListener:(event,fn)=>viewportHandlers.set(event,fn),listeners:viewportHandlers}};
  const context=createContext({document,window:mockWindow,WebSocket:WS,
-   location:{search:'?k=review-key',host:'192.168.0.40:1945'},URLSearchParams,
+   location:{search:reload?'':'?k=review-key',host:'192.168.0.40:1945'},URLSearchParams,
+   sessionStorage:{getItem:()=>stored,setItem:(k,v)=>{stored=v}},history:{replaceState:()=>{}},
    requestAnimationFrame:()=>{},setInterval:()=>{},setTimeout:()=>0,
    clearTimeout:()=>{},Date,console});
  runInContext(script,context,{timeout:2000});
@@ -63,7 +65,7 @@ function setup(){
  const click=el=>{assert.ok(el.listeners.has('click'),el.id);el.listeners.get('click')()};
  const receive=s=>socket.onmessage({data:s});
  socket.onopen();
- return {get,socket,click,receive,actions,context};
+ return {get,socket,click,receive,actions,keys,context,events,currentSocket:()=>socket};
 }
 test('phone video buttons send play, pause and enter/exit fullscreen even before fullscreen',()=>{
  const ui=setup();
@@ -220,4 +222,41 @@ test('landscape SwiftKey resize centers the actual Search input rather than edit
  ui.receive('V VIDEO');resize();
  assert.equal(field.lastScroll,undefined,
    'Stale input must not be scrolled while video controls are displayed');
+});
+
+test('search submit dismisses keyboard and restores browser mode on acknowledgment',()=>{
+ const ui=setup();ui.receive('V SEARCH');const input=ui.get('typing');input.value='example film';input.focus();
+ ui.click(ui.get('send'));assert.equal(input.focused,false);assert.equal(ui.socket.sent.at(-1),'Q example film');
+ ui.receive('R SEARCH_SENT');assert.match(ui.get('mode').textContent,/BROWSER/);assert.equal(input.focused,false);
+});
+test('unlock resumes same in-memory pairing and restores current player mode',()=>{
+ const ui=setup();ui.receive('S session-token');ui.receive('V VIDEO');
+ ui.socket.readyState=3;ui.socket.onclose();ui.events.get('visibilitychange')();
+ const next=ui.currentSocket();assert.notEqual(next,ui.socket);assert.match(next.url,/s=session-token/);
+ next.onopen();ui.receive('V VIDEO');assert.equal(ui.get('video').hidden,false);
+});
+
+test('reloaded paired tab uses its session credential without scanning again',()=>{
+ const ui=setup('same-session-token',true);assert.match(ui.socket.url,/s=same-session-token/);
+ ui.receive('V VIDEO');assert.equal(ui.get('video').hidden,false);
+});
+
+ test('trackpad stays full size without keyboard and expands again when keyboard closes',()=>{
+ const ui=setup();const vv=ui.context.window.visualViewport;vv.height=750;
+ ui.receive('V SEARCH');ui.get('typing').listeners.get('focus')();
+ assert.equal(ui.context.document.body.classList.contains('typing-active'),false);
+ vv.height=420;vv.listeners.get('resize')();
+ assert.equal(ui.context.document.body.classList.contains('typing-active'),true);
+ vv.height=750;vv.listeners.get('resize')();
+ assert.equal(ui.context.document.body.classList.contains('typing-active'),false);
+ });
+
+test('search navigation never sends playback or source actions from an old movie',()=>{
+ const ui=setup();ui.receive('V VIDEO');ui.receive('H '+JSON.stringify({state:'playing',seekable:true,positionMs:3000,seekStartMs:0,seekEndMs:60000}));ui.click(ui.actions.get('SOURCES'));
+ assert.equal(ui.get('sources-panel').hidden,false);ui.receive('V SEARCH');
+ assert.equal(ui.get('sources-panel').hidden,true);assert.equal(ui.get('timeline').hidden,true);assert.equal(ui.get('video').hidden,true);
+ const n=ui.socket.sent.length;for(const a of ['PLAY','PAUSE','FULLSCREEN','NEXT','SOURCES'])ui.click(ui.actions.get(a));
+ assert.equal(ui.socket.sent.length,n);ui.click(ui.keys.get('25'));ui.click(ui.keys.get('24'));assert.deepEqual(ui.socket.sent.slice(-2),['K 25','K 24']);
+ ui.receive('R OPEN_PLAYER');assert.match(ui.get('input-hint').textContent,/trackpad and arrows are ready/);
+ ui.receive('V STARTING');assert.equal(ui.actions.get('PAUSE').disabled,true);assert.equal(ui.actions.get('PLAY').disabled,false);
 });

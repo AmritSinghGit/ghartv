@@ -128,7 +128,7 @@ try {
      parent:top,top,location:{protocol:'https:'}};
    const v=video();
    let tick;
-   const document={querySelectorAll:k=>k==='video'?[v]:[],
+   const document={querySelector:k=>k==='video'?v:null,querySelectorAll:k=>k==='video'?[v]:[],
      addEventListener:()=>{}};
    runInNewContext(bridge,{window:current,document,location:current.location,
      getComputedStyle:()=>({display:'block',visibility:'visible'}),

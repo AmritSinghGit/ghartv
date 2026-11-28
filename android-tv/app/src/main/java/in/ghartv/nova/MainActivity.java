@@ -233,7 +233,7 @@ public final class MainActivity extends Activity implements ChannelNavigator.Lis
               .action("Disconnect",false,d->{HouseholdPhoneSession.disconnect();
                   updateHomePhoneBadge();d.dismiss();})
               .action("Continue",true,android.app.Dialog::dismiss).show();
-        }else offerHomePhone(true);
+        }else startActivity(new Intent(this,FlixMomoActivity.class));
     }
     private void showUsageReport(){
         // A seven-day report can contain dozens of lines. Keep it INSIDE
@@ -311,8 +311,7 @@ public final class MainActivity extends Activity implements ChannelNavigator.Lis
         mainHandler.postDelayed(deferredTelemetryConsent,10000L);
         mainHandler.post(clockTicker);
         mainHandler.post(()->loadFromDisk(true));
-        if(!offeredHomePhoneInProcess)
-            mainHandler.postDelayed(this::offerHomePhone,1100L);
+        // Pairing QR is offered only inside FlixMomo.
         // Household channel: a non-blocking check when the owner opens GharTV.
         // Existing updater caches successful checks (12h), verifies package SHA
         // and requires Android installation confirmation; never silent installs.
@@ -339,11 +338,10 @@ public final class MainActivity extends Activity implements ChannelNavigator.Lis
         HouseholdPhoneSession.attach(homePhoneSink);
         HouseholdPhoneSession.mode("HOME");
         updateHomePhoneBadge();
-        if(!offeredHomePhoneInProcess)
-            mainHandler.postDelayed(this::offerHomePhone,650L);
+        // Keep a previously paired remote usable without a Home QR modal.
         // Jio playback remains direct. Warm the separate Tor service in the
         // background so the film/IPTV route is ready before first selection.
-        if(!torPrewarmRequested&&JioSession.load(this).isPresent()){
+        if(!torPrewarmRequested&&canPrewarmTor()&&JioSession.load(this).isPresent()){
             torPrewarmRequested=true;
             mainHandler.postDelayed(()->{
                 Thread warm=new Thread(()->AppTorTunnel.get(getApplicationContext()).awaitHttpPort(85_000L),
@@ -351,6 +349,14 @@ public final class MainActivity extends Activity implements ChannelNavigator.Lis
                 warm.setDaemon(true);warm.start();
             },1700L);
         }
+    }
+
+    private boolean canPrewarmTor(){
+        android.app.ActivityManager am=(android.app.ActivityManager)getSystemService(ACTIVITY_SERVICE);
+        if(am==null||PlaybackComfort.light(this))return false;
+        android.app.ActivityManager.MemoryInfo info=new android.app.ActivityManager.MemoryInfo();
+        am.getMemoryInfo(info);
+        return info.totalMem>2L*1024*1024*1024&&!info.lowMemory;
     }
 
     @Override protected void onPause() {

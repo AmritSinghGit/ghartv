@@ -429,17 +429,27 @@ final class FilmNativeControls {
                 // Keep focus on the single visible player, not the sources menu.
                 source.requestFocus();
                 final int chosenGeneration=generation;
-                handler.postDelayed(()->{
-                    if(active&&browser==source&&generation==chosenGeneration&&
-                       snapshotUrl.equals(source.getUrl())&&host.pageIsVisible())
-                        source.evaluateJavascript(FilmPlaybackProbe.reveal(),null);
-                    if(active&&browser==source&&generation==chosenGeneration)
-                        source.evaluateJavascript(FilmPlaybackProbe.focusVisiblePlayer(),null);
-                },850L);
+                focusSelectedPlayer(source,chosenGeneration,++playerFocusTicket,0);
                 host.playerSelected();probeCount=0;probeBegan=SystemClock.elapsedRealtime();
                 sendPhoneSources();finished();
             }catch(Exception e){state.setText("Selection not confirmed. Use page or refresh Players.");showTray(false);}
         });
+    }
+
+    private int playerFocusTicket;
+    void cancelPlayerFocus(){playerFocusTicket++;}
+    private void focusSelectedPlayer(WebView source,int token,int ticket,int attempt){
+        handler.postDelayed(()->{
+            if(!active||browser!=source||generation!=token||playerFocusTicket!=ticket||
+               !snapshotUrl.equals(source.getUrl())||!host.pageIsVisible())return;
+            source.evaluateJavascript(FilmPlaybackProbe.reveal(),raw->{
+                if(!active||browser!=source||generation!=token||playerFocusTicket!=ticket||
+                   !snapshotUrl.equals(source.getUrl())||!host.pageIsVisible())return;
+                if(raw!=null&&raw.contains("PLAYER_IN_VIEW")){
+                    source.requestFocus();source.evaluateJavascript(FilmPlaybackProbe.focusVisiblePlayer(),null);
+                }else if(attempt<3)focusSelectedPlayer(source,token,ticket,attempt+1);
+            });
+        },attempt==0?850L:1500L);
     }
 
     void pageAction(String action){
