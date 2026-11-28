@@ -1,17 +1,17 @@
 {
-  "versionCode": 88,
-  "versionName": "0.7.14-clean-load-owner-review",
-  "apkUrl": "https://github.com/AmritSinghGit/ghartv/releases/download/v0.7.14-clean-load-owner-review/GharTV-code88-household-update.apk",
-  "sha256": "d5d9f704ea071a7531f7989368dd971ffbd40dd1d37dcfb19e05214b5d328c2c",
-  "sourceCommit": "001b7cab486bfe91788bb69d28995ffe6fe434d8",
-  "artifactTag": "v0.7.14-clean-load-owner-review",
+  "versionCode": 91,
+  "versionName": "0.7.17-remote-state-review",
+  "apkUrl": "https://github.com/AmritSinghGit/ghartv/releases/download/v0.7.17-remote-state-review/GharTV-code91-household-update.apk",
+  "sha256": "b0dfe4028d2fe4ccc63bc65792b4adf0eab03662594eada673d8cc8d34f2fbfd",
+  "sourceCommit": "d85041ceb71330e2fdc787169edf930bcea73593",
+  "artifactTag": "v0.7.17-remote-state-review",
   "channel": "production",
-  "publishedAt": "2026-11-28T04:03:56Z",
-  "ownerDecision": "OWNER_APPROVED_HOUSEHOLD_PUBLISH_V88_20261128",
+  "publishedAt": "2026-11-28T06:03:24Z",
+  "ownerDecision": "OWNER_APPROVED_HOUSEHOLD_PUBLISH_V91_20261128",
   "distributionMode": "exact-tested-signed-apk-no-rebuild",
-  "notes": "GharTV v88: cleaner FlixMomo loading, compact phone remote, accurate playback/timeline state; diagnostics off. Android installation confirmation required. Later low-RAM and extended phone reconnect fixes are not included; third-party playback depends on provider.",
+  "notes": "Ghar TV v91: branded launcher, adaptive phone trackpad, reconnect and context-aware remote controls, volume buttons, memory-aware Tor prewarm and IPTV initialization. Diagnostics off. Android confirmation required; provider support varies.",
   "mandatoryUpdateSupported": false,
   "silentInstallSupported": false,
-  "previousVersionCode": 80,
-  "previousArtifactSha256": "678d20735863528f8cb98f64c3c3f61a7d883d85be0c51712ab1a23846785db8"
+  "previousVersionCode": 88,
+  "previousArtifactSha256": "d5d9f704ea071a7531f7989368dd971ffbd40dd1d37dcfb19e05214b5d328c2c"
 }
