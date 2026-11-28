@@ -26,10 +26,13 @@ final class FilmPhoneFrameBridge {
               const oneVideo = () => {
                 const videos = Array.from(document.querySelectorAll('video'))
                   .slice(0,24).filter(visible);
+                // Skip expensive iframe geometry/style reads when there is no
+                // single visible, unprotected video to control. On low-RAM
+                // TVs, provider pages often contain many unrelated iframes.
+                if (videos.length !== 1 || videos[0].mediaKeys) return null;
                 const frames = Array.from(document.querySelectorAll('iframe'))
                   .slice(0,32).filter(visible);
-                return videos.length === 1 && frames.length === 0 &&
-                  !videos[0].mediaKeys ? videos[0] : null;
+                return frames.length === 0 ? videos[0] : null;
               };
               const safeMs = value => Number.isFinite(value) && value >= 0 ?
                 Math.min(86400000, Math.round(value * 1000)) : 0;
@@ -66,6 +69,9 @@ final class FilmPhoneFrameBridge {
               };
               const report = () => {
                 if (window === window.top || location.protocol !== 'https:') return;
+                // Most provider frames have NO video. Avoid getBoundingClientRect
+                // and getComputedStyle on every idle 850 ms media heartbeat.
+                if (!document.querySelector('video')) return;
                 const video = oneVideo();
                 if (!video) return;
                 window.parent.postMessage({tag, kind:'report', state:sample(video)}, '*');
