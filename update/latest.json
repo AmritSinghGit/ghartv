@@ -1,17 +1,17 @@
 {
-  "versionCode": 80,
-  "versionName": "0.7.6-live-sources-review",
-  "apkUrl": "https://github.com/AmritSinghGit/ghartv/releases/download/v0.7.6-live-sources-review/GharTV-code80-owner-review.apk",
-  "sha256": "678d20735863528f8cb98f64c3c3f61a7d883d85be0c51712ab1a23846785db8",
-  "sourceCommit": "ece2f09f200de036583abc992dc9118dafd3bff1",
-  "artifactTag": "v0.7.6-live-sources-review",
+  "versionCode": 88,
+  "versionName": "0.7.14-clean-load-owner-review",
+  "apkUrl": "https://github.com/AmritSinghGit/ghartv/releases/download/v0.7.14-clean-load-owner-review/GharTV-code88-household-update.apk",
+  "sha256": "d5d9f704ea071a7531f7989368dd971ffbd40dd1d37dcfb19e05214b5d328c2c",
+  "sourceCommit": "001b7cab486bfe91788bb69d28995ffe6fe434d8",
+  "artifactTag": "v0.7.14-clean-load-owner-review",
   "channel": "production",
-  "publishedAt": "2026-11-23T18:54:51Z",
-  "ownerDecision": "OWNER_APPROVED_HOUSEHOLD_PUBLISH_V80_20261124",
+  "publishedAt": "2026-11-28T04:03:56Z",
+  "ownerDecision": "OWNER_APPROVED_HOUSEHOLD_PUBLISH_V88_20261128",
   "distributionMode": "exact-tested-signed-apk-no-rebuild",
-  "notes": "GharTV code80: phone live search typing, Backspace/Clear, up to twelve observed film source choices, pairing/recovery improvements. Same app package and original signing identity; in-place Android update preserving existing data. Android requires user confirmation. Video/fullscreen depend on third-party players. Newer source-only Play/Pause/seek fixes are not in this APK.",
+  "notes": "GharTV v88: cleaner FlixMomo loading, compact phone remote, accurate playback/timeline state; diagnostics off. Android installation confirmation required. Later low-RAM and extended phone reconnect fixes are not included; third-party playback depends on provider.",
   "mandatoryUpdateSupported": false,
   "silentInstallSupported": false,
-  "previousVersionCode": 78,
-  "previousArtifactSha256": "267aa4b5eee4f8a3ed9402d5689db0253abfb253e759c9e7201acb8e60c94866"
+  "previousVersionCode": 80,
+  "previousArtifactSha256": "678d20735863528f8cb98f64c3c3f61a7d883d85be0c51712ab1a23846785db8"
 }
